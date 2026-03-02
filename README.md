@@ -1,5 +1,5 @@
 # DSM1SAR
-Système Scalable de RAM Distribuée pour Clusters HPC
+Système Scalable de RAM Distribuée et Partagée pour Clusters HPC
 
 DSM1SAR est un intergiciel implémentant un système de Mémoire Partagée Répartie. \
 Reposant sur une architecture scalable, il offre la possibilité à des processus s'exécutant sur des machines distinctes au sein d'un réseau de partager un espace mémoire commun, comme s'ils s'exécutaient sur une seule et même machine physique.
