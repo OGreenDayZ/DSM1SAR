@@ -4,20 +4,21 @@ TARGET = DSM1SAR
 # Répertoires
 SRC_DIR = src
 LIB_DIR = lib
+TEST_DIR = test
 BUILD_DIR = build
 
 # Compilateur et options
 CC = clang # Utiliser clang si on veut détecter + de warnings, sinon gcc
-CFLAGS = -Wall -g
+CFLAGS = -Wall -g # -I$(SRC_DIR) -I$(LIB_DIR) # visibilité
 
 # Détection des OS
 # UNAME_S := $(shell uname -s)
+SRCS = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(LIB_DIR)/*.c) $(wildcard $(TEST_DIR)/*.c)
 
 # LIBS = 
+OBJS = $(addprefix $(BUILD_DIR)/, $(notdir $(SRCS:.c=.o)))
 
-# Sources et objets
-SRCS = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(LIB_DIR)/*.c)
-OBJS = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(patsubst $(LIB_DIR)/%.c, $(BUILD_DIR)/%.o, $(SRCS)))
+vpath %.c $(SRC_DIR) $(LIB_DIR) $(TEST_DIR)
 
 # Par défaut, définir LOG_LEVEL à DEBUG, et LOG_TRIGGER à LOG_UNIQ
 LOG_LEVEL ?= NO_LOG
@@ -30,11 +31,8 @@ all: $(TARGET)
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS) $(LIBS)
 
-# Compilation des fichiers .c en .o
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD_DIR)/%.o: $(LIB_DIR)/%.c | $(BUILD_DIR)
+# Règle générique pour compiler les .o à partir des .c trouvés via VPATH
+$(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Création du répertoire build/ si nécessaire
@@ -42,9 +40,7 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 # Mode débogage NOLOG & UNIQ
-debug: CFLAGS += -DDEBUG
-debug: CFLAGS += -DLOG_LEVEL=$(LOG_LEVEL)
-debug: CFLAGS += -DLOG_TRIGGER=$(LOG_TRIGGER)
+debug: CFLAGS += -DDEBUG -DLOG_LEVEL=$(LOG_LEVEL) -DLOG_TRIGGER=$(LOG_TRIGGER)
 debug: re
 
 # Mode INFO & UNIQ
@@ -81,3 +77,5 @@ clean:
 
 # Reconstruction complète
 re: clean all
+
+.PHONY: all clean re debug info warning error max_debug max_info max_warning max_error
