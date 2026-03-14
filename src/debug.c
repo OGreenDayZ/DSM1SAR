@@ -3,7 +3,7 @@
 #include <stdarg.h>
 #include <string.h>
 
-log_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void log_message(log_level_t level, const char *file, int line, const char *fmt, ...) {
 
@@ -65,7 +65,7 @@ void log_message(log_level_t level, const char *file, int line, const char *fmt,
     } else {
         buffer[len + msg_len] = '\n';
         buffer[len + msg_len + 1] = '\0';
-        printf(buffer);
+        printf("%s", buffer);
     }
     pthread_mutex_unlock(&log_mutex);
 }
