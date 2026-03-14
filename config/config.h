@@ -1,0 +1,12 @@
+
+#ifndef CONFIG_H
+#define CONFIG_H
+
+// NETWORK
+#define DEFAULT_SERVER_IP "127.0.0.1"
+#define DEFAULT_SERVER_PORT 8080
+
+// MEMORY
+#define PAGE_SIZE 4096
+
+#endif // CONFIG_H

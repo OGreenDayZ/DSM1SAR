@@ -53,3 +53,18 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+
+##
+.DS_Store
+*.vscode/
+
+# Dossier de compilation
+/build/
+bin/
+
+
+# Makefile auto-générés
+Makefile.in
+Makefile~
+
