@@ -1,7 +1,0 @@
-#ifndef NETWORK_H
-#define NETWORK_H
-
-#define DEFAULT_MULTICAST_IP "239.1.2.3"
-#define DEFAULT_MULTICAST_PORT 54321
-
-#endif // NETWORK_H

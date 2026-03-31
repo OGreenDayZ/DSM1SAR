@@ -1,5 +1,5 @@
-#ifndef DSM_H
-#define DSM_H
+#ifndef DSM_DSM_H
+#define DSM_DSM_H
 
 #include <arpa/inet.h>
 #include <stdio.h>
@@ -47,4 +47,4 @@ typedef struct {
 
 int dsm_init(const dsm_config_t *user_config);
 
-#endif // DSM_H
+#endif // DSM_DSM_H

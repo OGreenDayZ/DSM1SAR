@@ -1,5 +1,5 @@
-#ifndef DEBUG_H
-#define DEBUG_H
+#ifndef DSM_DEBUG_H
+#define DSM_DEBUG_H
 
 #include <pthread.h>
 #include <stdio.h>
@@ -69,4 +69,4 @@ extern pthread_mutex_t log_mutex; // Pour stdout thread-safe
 // Fonction de gestion des messages de log
 void log_message(log_level_t level, const char *file, int line, const char *fmt, ...);
 
-#endif
+#endif // DSM_DEBUG_H
