@@ -45,6 +45,8 @@ typedef struct {
     dsm_net_config_t net;
 } dsm_config_t;
 
-int dsm_init(const dsm_config_t *user_config);
+/* --- Fonctions --- */
+void dsm_get_default_config(dsm_config_t *config);
+int dsm_init(const dsm_config_t *config);
 
 #endif // DSM_DSM_H
