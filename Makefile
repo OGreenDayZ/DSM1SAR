@@ -1,7 +1,5 @@
-# Nom de l'exécutable
 TARGET = dsm1sar
 
-# Répertoires
 SRC_DIR = src
 LIB_DIR = lib
 TEST_DIR = test
@@ -9,10 +7,8 @@ BUILD_DIR = build
 
 # Compilateur et options
 CC = clang # Utiliser clang si on veut détecter + de warnings, sinon gcc
-CFLAGS = -Wall -g # -I$(SRC_DIR) -I$(LIB_DIR) # visibilité
+CFLAGS = -Wall -g -I$(SRC_DIR) -I$(LIB_DIR) # visibilité
 
-# Détection des OS
-# UNAME_S := $(shell uname -s)
 SRCS = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(LIB_DIR)/*.c) $(wildcard $(TEST_DIR)/*.c)
 
 # LIBS = 
@@ -24,7 +20,6 @@ vpath %.c $(SRC_DIR) $(LIB_DIR) $(TEST_DIR)
 LOG_LEVEL ?= NO_LOG
 LOG_TRIGGER ?= LOG_UNIQ
 
-# Règle par défaut
 all: $(TARGET)
 
 # Génération de l'exécutable

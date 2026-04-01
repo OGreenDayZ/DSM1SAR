@@ -8,8 +8,7 @@
 
 /* --- Memoire --- */
 typedef struct {
-    size_t page_size; // Taille personnalisée de page
-    size_t nb_pages;  // Nombre de pages
+    size_t nb_pages; // Nombre de pages
     //+
 } dsm_pager_config_t;
 
@@ -44,6 +43,11 @@ typedef struct {
     dsm_pager_config_t pager;
     dsm_net_config_t net;
 } dsm_config_t;
+
+/* --- Erreurs --- */
+typedef enum {
+    DSM_ERROR_SYSTEM_FULL
+} dsm_error_t;
 
 /* --- Fonctions --- */
 void dsm_get_default_config(dsm_config_t *config);

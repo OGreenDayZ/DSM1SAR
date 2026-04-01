@@ -1,4 +1,4 @@
-#include "../src/debug/debug.h"
+#include "debug/debug.h"
 
 int main(int argc, char const *argv[]) {
 
