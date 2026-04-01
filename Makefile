@@ -1,5 +1,5 @@
 # Nom de l'exécutable
-TARGET = DSM1SAR
+TARGET = dsm1sar
 
 # Répertoires
 SRC_DIR = src
