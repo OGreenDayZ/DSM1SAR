@@ -1,5 +1,5 @@
-#ifndef DSM_DSM_H
-#define DSM_DSM_H
+#ifndef DSM1SAR_H
+#define DSM1SAR_H
 
 #include <arpa/inet.h>
 #include <stdio.h>
@@ -53,4 +53,4 @@ typedef enum {
 void dsm_get_default_config(dsm_config_t *config);
 int dsm_init(const dsm_config_t *config);
 
-#endif // DSM_DSM_H
+#endif // DSM1SAR_H
