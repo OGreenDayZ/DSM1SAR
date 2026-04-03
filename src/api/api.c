@@ -12,18 +12,18 @@ dsm_context_t *dsm_ctx = NULL;
 
 static int dsm_validate_config(const dsm_config_t *config) {
     if (config->pager.nb_pages == 0) {
-        LOG_INFO("nb_pages doit être > 0");
+        LOG_ERROR("nb_pages doit être > 0");
         return DSM_ERROR_INIT_ARG_NB_PAGES;
     }
 
     if (config->net.system.nb_nodes == 0) {
-        LOG_INFO("nb_nodes doit être > 0");
+        LOG_ERROR("nb_nodes doit être > 0");
         return DSM_ERROR_INIT_ARG_NB_NODES;
     }
 
     if (config->net.system.nb_managers == 0 ||
         config->net.system.nb_managers >= config->net.system.nb_nodes) {
-        LOG_INFO("nb_managers doit être > 0 et < nb_nodes");
+        LOG_ERROR("nb_managers doit être > 0 et < nb_nodes");
         return DSM_ERROR_INIT_ARG_NB_MANAGERS;
     }
 
@@ -32,6 +32,7 @@ static int dsm_validate_config(const dsm_config_t *config) {
 
 static int dsm_context_init(const dsm_config_t *config) {
     if (dsm_ctx != NULL) {
+        LOG_ERROR("DSM déjà initialisé");
         return DSM_ERROR_ALREADY_INIT;
     }
 
@@ -42,6 +43,7 @@ static int dsm_context_init(const dsm_config_t *config) {
 
     dsm_ctx = malloc(sizeof(dsm_config_t));
     if (!dsm_ctx) {
+        LOG_ERROR("Erreur malloc : dsm_ctx");
         return DSM_ERROR_CONTEXT_ALLOC;
     }
     dsm_ctx->config = *config;
