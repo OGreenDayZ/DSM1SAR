@@ -2,23 +2,23 @@
 #define DSM1SAR_H
 
 #include <arpa/inet.h>
-#include <stdio.h>
+#include <stddef.h>
 
 // API Publique (seul fichier inclus par l'utilisateur)
 
 /* --- Memoire --- */
 typedef struct {
-    size_t nb_pages; // Nombre de pages
+    unsigned long nb_pages; // Nombre de pages
     //+
 } dsm_pager_config_t;
 
 /* --- Réseau --- */
 typedef struct {
-    int system_id;
-    int nb_managers;
-    int nb_nodes;
+    unsigned short system_id;
+    unsigned int nb_managers;
+    unsigned int nb_nodes;
     char multicast_ip[INET_ADDRSTRLEN];
-    int multicast_port;
+    unsigned int multicast_port;
 } dsm_system_config_t;
 
 typedef enum {
@@ -29,8 +29,8 @@ typedef enum {
 
 typedef struct {
     dsm_node_role_t role;
-    int tcp_port;
-    int udp_port;
+    unsigned int tcp_port;
+    unsigned int udp_port;
 } dsm_node_config_t;
 
 typedef struct {
@@ -46,9 +46,13 @@ typedef struct {
 
 /* --- Erreurs --- */
 typedef enum {
-    /* Init */
+    /* Init & Context */
+    DSM_ERROR_INIT_ARG_NB_PAGES,
+    DSM_ERROR_INIT_ARG_NB_NODES,
+    DSM_ERROR_INIT_ARG_NB_MANAGERS,
     DSM_ERROR_ALREADY_INIT,
     DSM_ERROR_CONTEXT_ALLOC,
+
     /* Discover */
     DSM_ERROR_SYSTEM_FULL
 
