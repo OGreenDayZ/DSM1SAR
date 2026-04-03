@@ -2,7 +2,6 @@
 #define DSM_DEBUG_H
 
 #include <pthread.h>
-#include <stdio.h>
 
 // Activer ou désactiver le mode débogage par défaut ici
 #ifndef DEBUG

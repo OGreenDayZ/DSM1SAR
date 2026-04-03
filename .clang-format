@@ -1,17 +1,20 @@
+Language: Cpp
 BasedOnStyle: LLVM
+
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
+ContinuationIndentWidth: 4
 ColumnLimit: 90
 
 BreakBeforeBraces: Attach
 
-# Structs et blocs : jamais sur une ligne
-AllowShortStruct: Never
-AllowShortEnumsOnASingleLine: false
 AllowShortBlocksOnASingleLine: false
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
-AllowShortFunctionsOnASingleLine: Inline
 AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+
+AllowShortFunctionsOnASingleLine: Inline
+
 IndentCaseLabels: true

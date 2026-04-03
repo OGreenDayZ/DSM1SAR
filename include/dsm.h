@@ -46,8 +46,14 @@ typedef struct {
 
 /* --- Erreurs --- */
 typedef enum {
+    /* Init */
+    DSM_ERROR_ALREADY_INIT,
+    DSM_ERROR_CONTEXT_ALLOC,
+    /* Discover */
     DSM_ERROR_SYSTEM_FULL
-} dsm_error_t;
+
+    /* ... */
+} dsm_error_code_t;
 
 /* --- Fonctions --- */
 void dsm_get_default_config(dsm_config_t *config);

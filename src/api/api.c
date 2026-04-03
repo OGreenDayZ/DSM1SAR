@@ -1,9 +1,25 @@
 #include "dsm.h"
 
-#include <string.h>
+#include <stdlib.h>
 
+#include "debug/debug.h"
+#include "internal.h"
 #include "network/network.h"
 #include "pager/pager.h"
+
+dsm_context_t *dsm_ctx = NULL;
+
+static int dsm_context_init(const dsm_config_t *config) {
+    if (dsm_ctx != NULL)
+        return DSM_ERROR_ALREADY_INIT;
+
+    dsm_ctx = malloc(sizeof(dsm_config_t));
+    if (!dsm_ctx) {
+        return DSM_ERROR_CONTEXT_ALLOC;
+    }
+    dsm_ctx->config = *config;
+    return 0;
+}
 
 void dsm_get_default_config(dsm_config_t *config) {
     // Pour certains champs, si 0 gardé => soulève erreur à l'init (ex:nb_nodes)
@@ -21,5 +37,10 @@ void dsm_get_default_config(dsm_config_t *config) {
 }
 
 int dsm_init(const dsm_config_t *config) {
-    return DSM_ERROR_SYSTEM_FULL;
+    LOG_INFO("Initialisation de DSM1SAR...");
+    int ret = dsm_context_init(config);
+    if (ret != 0) {
+        return ret;
+    }
+    return 0;
 }

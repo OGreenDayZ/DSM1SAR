@@ -69,3 +69,5 @@ Makefile.in
 Makefile~
 
 dsm1sar
+compile_commands.json
+.clangd

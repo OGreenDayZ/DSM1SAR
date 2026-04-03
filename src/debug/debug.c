@@ -1,6 +1,7 @@
 #include "debug.h"
 
 #include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 
 pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
