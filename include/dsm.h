@@ -18,7 +18,7 @@ typedef struct {
     unsigned int nb_managers;
     unsigned int nb_nodes;
     char multicast_ip[INET_ADDRSTRLEN];
-    unsigned int multicast_port;
+    unsigned short multicast_port;
 } dsm_system_config_t;
 
 typedef enum {
@@ -29,8 +29,8 @@ typedef enum {
 
 typedef struct {
     dsm_node_role_t role;
-    unsigned int tcp_port;
-    unsigned int udp_port;
+    unsigned short tcp_port;
+    unsigned short udp_port;
 } dsm_node_config_t;
 
 typedef struct {

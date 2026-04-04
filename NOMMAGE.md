@@ -14,7 +14,7 @@
 - Macros : DSM_NOM_DE_MACRO
 - Header Guards : DSM_NOM_DE_FICHIER_H
 
-Sinon static sur les fonctions uniques au fichier
+Sinon static sur les fonctions uniques au fichier et pas de dsm_*
 
 Pour les headers, pour automatiser, avec snippets globaux, inclure ça dans le json : 
 ```

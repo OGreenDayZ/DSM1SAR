@@ -10,7 +10,7 @@
 
 dsm_context_t *dsm_ctx = NULL;
 
-static int dsm_validate_config(const dsm_config_t *config) {
+static int validate_config(const dsm_config_t *config) {
     if (config->pager.nb_pages == 0) {
         LOG_ERROR("nb_pages doit être > 0");
         return DSM_ERROR_INIT_ARG_NB_PAGES;
@@ -30,13 +30,13 @@ static int dsm_validate_config(const dsm_config_t *config) {
     return 0;
 }
 
-static int dsm_context_init(const dsm_config_t *config) {
+static int context_init(const dsm_config_t *config) {
     if (dsm_ctx != NULL) {
         LOG_ERROR("DSM déjà initialisé");
         return DSM_ERROR_ALREADY_INIT;
     }
 
-    int ret = dsm_validate_config(config);
+    int ret = validate_config(config);
     if (ret != 0) {
         return ret;
     }
@@ -68,7 +68,7 @@ void dsm_get_default_config(dsm_config_t *config) {
 
 int dsm_init(const dsm_config_t *config) {
     LOG_INFO("Initialisation de DSM1SAR...");
-    int ret = dsm_context_init(config);
+    int ret = context_init(config);
     if (ret != 0) {
         return ret;
     }
