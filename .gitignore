@@ -71,3 +71,5 @@ Makefile~
 dsm1sar
 compile_commands.json
 .clangd
+
+*.cache/
