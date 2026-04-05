@@ -1,4 +1,4 @@
-// #ifdef DSM_HLIST_H 
+#ifndef DSM_HLIST_H 
 #define DSM_HLIST_H 
 
 #include "container_of.h"
@@ -147,4 +147,4 @@ static inline void dsm_hlist_add_head(struct dsm_hlist_node *n,
 	     pos;							\
 	     pos = dsm_hlist_entry_safe((pos)->member.next, typeof(*(pos)), member))	
 		 	 
-// #endif // DSM_HLIST_H
+#endif // DSM_HLIST_H
