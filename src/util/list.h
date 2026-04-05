@@ -2,18 +2,8 @@
 #define DSM_LIST_H
 
 #include <stddef.h>
+#include "container_of.h"
 
-/**
- * Récupère la structure parente à partir d'un membre
- * @ptr:    le pointeur vers le membre
- * @type:   le type de la structure parente
- * @member: le nom du membre dans la structure parente
- */
-#define dsm_list_container_of(ptr, type, member)                                         \
-    ({                                                                                   \
-        const typeof(((type *)0)->member) *__mptr = (ptr);                               \
-        (type *)((char *)__mptr - offsetof(type, member));                               \
-    })
 
 typedef struct dsm_list_head {
     struct dsm_list_head *next, *prev;
@@ -33,13 +23,13 @@ int dsm_list_empty(const dsm_list_head_t *head);
 size_t dsm_list_count(const dsm_list_head_t *head);
 
 #define dsm_list_for_each_entry(pos, head, member)                                       \
-    for (pos = container_of((head)->next, typeof(*pos), member); &pos->member != (head); \
-         pos = container_of(pos->member.next, typeof(*pos), member))
+    for (pos = dsm_container_of((head)->next, typeof(*pos), member); &pos->member != (head); \
+         pos = dsm_container_of(pos->member.next, typeof(*pos), member))
 
 #define dsm_list_for_each_entry_safe(pos, n, head, member)                               \
-    for (pos = container_of((head)->next, typeof(*pos), member),                         \
-        n = container_of(pos->member.next, typeof(*pos), member);                        \
+    for (pos = dsm_container_of((head)->next, typeof(*pos), member),                         \
+        n = dsm_container_of(pos->member.next, typeof(*pos), member);                        \
          &pos->member != (head);                                                         \
-         pos = n, n = container_of(n->member.next, typeof(*n), member))
+         pos = n, n = dsm_container_of(n->member.next, typeof(*n), member))
 
 #endif // DSM_LIST_H
