@@ -1,9 +1,11 @@
 #ifndef DSM_MESSAGE_H
 #define DSM_MESSAGE_H
 
+#include <stddef.h>
 #include <stdint.h>
+#include <sys/time.h>
 
-#include "network/discover/net_discover.h"
+#define DSM_MSG_RECV_TIMEOUT_SEC 5
 
 typedef enum {
     /* Discover */
@@ -96,15 +98,11 @@ typedef struct {
 
 #pragma pack(pop)
 
-int dsm_send_dscv_init(dsm_dscv_ctx_t *ctx);
-int dsm_send_dscv_spvs_data(dsm_dscv_ctx_t *ctx);
-int dsm_send_dscv_join_ack(dsm_dscv_ctx_t *ctx);
-int dsm_send_dscv_sys_full(dsm_dscv_ctx_t *ctx);
-int dsm_send_dscv_share_reg(dsm_dscv_ctx_t *ctx);
-int dsm_send_dscv_share_reg_ack(dsm_dscv_ctx_t *ctx);
-int dsm_send_dscv_mgr_ready(dsm_dscv_ctx_t *ctx);
-int dsm_send_dscv_wkr_config(dsm_dscv_ctx_t *ctx);
-int dsm_send_dscv_wkr_config_ack(dsm_dscv_ctx_t *ctx);
-int dsm_send_dscv_finalize(dsm_dscv_ctx_t *ctx);
+int dsm_tcp_send_all(int sock, const uint8_t *buf, size_t len);
+int dsm_tcp_recv_all(int sock, uint8_t *buf, size_t len, struct timeval *tv);
+int dsm_udp_sendto(int sock, const uint8_t *buf, size_t len, const char *dest_ip,
+                   int dest_port);
+int dsm_udp_recvfrom(int sock, uint8_t *buf, size_t len, char *src_ip, int *src_port,
+                     struct timeval *tv);
 
 #endif // DSM_MESSAGE_H
