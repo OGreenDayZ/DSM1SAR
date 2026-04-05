@@ -2,6 +2,7 @@
 #define DSM_NET_DISCOVER_H
 
 #include <netinet/in.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 
 typedef struct {
@@ -12,7 +13,7 @@ typedef struct {
 
     bool is_supervisor;
 
-    int id_count;
+    atomic_int id_count;
     // JOIN LIST ?
 } dsm_dscv_ctx_t;
 

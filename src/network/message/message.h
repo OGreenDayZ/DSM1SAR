@@ -1,8 +1,9 @@
 #ifndef DSM_MESSAGE_H
 #define DSM_MESSAGE_H
 
-#include "network/discover/net_discover.h"
 #include <stdint.h>
+
+#include "network/discover/net_discover.h"
 
 typedef enum {
     /* Discover */
@@ -44,7 +45,7 @@ typedef struct {
 
 /* CODE_DISCOVER_JOIN_ACK */
 typedef struct {
-    uint32_t assign_id;
+    uint32_t assigned_id;
 } dsm_msg_dscv_join_ack_t;
 
 /* CODE_DISCOVER_SYSTEM_FULL */
@@ -63,7 +64,8 @@ typedef struct {
 /* CODE_DISCOVER_SHARE_REGISTRY_MANAGER
 + CODE_DISCOVER_SHARE_REGISTRY_WORKER*/
 typedef struct {
-    uint32_t nb_nodes;
+    uint32_t sys_total_nodes; // la taille totale du système (manager + workers)
+    uint32_t nb_nodes; // le nombre de nodes envoyés dans ce message (< sys_total_nodes)
     dsm_reg_node_t nodes[];
 } dsm_msg_dscv_share_reg_t;
 

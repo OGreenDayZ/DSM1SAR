@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include "debug/debug.h"
+#include "network/discover/net_discover.h"
 
 int dsm_get_local_ip(char *buffer, size_t buflen) {
     struct ifaddrs *ifaddr, *ifa;
@@ -198,4 +199,6 @@ error_exit:
     return -1;
 }
 
-int dsm_network_init() {}
+int dsm_network_init() {
+    return dsm_discover();
+}

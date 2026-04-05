@@ -1,26 +1,226 @@
 #include "serializer.h"
-#include "network/message/message.h"
+
+#include <stdatomic.h>
 #include <string.h>
+
+#include "internal.h"
 
 int static serialize_header(dsm_msg_header_t *header, uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header_t)) {
         return -1;
     }
+
     int len = sizeof(dsm_msg_header_t);
     header->code = htonl(header->code);
     header->id = htonl(header->id);
     header->payload_len = htonl(header->payload_len);
     memcpy(buf, header, len);
+
     return len;
 }
 
-int dsm_srlze_dscv_init(dsm_dscv_ctx_t *dscv_ctx, uint8_t *buf, size_t buf_sz);
-int dsm_srlze_dscv_spvs_data(dsm_dscv_ctx_t *dscv_ctx, uint8_t *buf, size_t buf_sz);
-int dsm_srlze_dscv_join_ack(dsm_dscv_ctx_t *dscv_ctx, uint8_t *buf, size_t buf_sz);
-int dsm_srlze_dscv_sys_full(dsm_dscv_ctx_t *dscv_ctx, uint8_t *buf, size_t buf_sz);
-int dsm_srlze_dscv_share_reg(dsm_dscv_ctx_t *dscv_ctx, uint8_t *buf, size_t buf_sz);
-int dsm_srlze_dscv_share_reg_ack(dsm_dscv_ctx_t *dscv_ctx, uint8_t *buf, size_t buf_sz);
-int dsm_srlze_dscv_mgr_ready(dsm_dscv_ctx_t *dscv_ctx, uint8_t *buf, size_t buf_sz);
-int dsm_srlze_dscv_wkr_config(dsm_dscv_ctx_t *dscv_ctx, uint8_t *buf, size_t buf_sz);
-int dsm_srlze_dscv_wkr_config_ack(dsm_dscv_ctx_t *dscv_ctx, uint8_t *buf, size_t buf_sz);
-int dsm_srlze_dscv_finalize(dsm_dscv_ctx_t *dscv_ctx, uint8_t *buf, size_t buf_sz);
+int static serialize_no_payload_msg(uint32_t header_code, uint32_t header_id,
+                                    uint8_t *buf, size_t buf_sz) {
+    if (buf_sz < sizeof(dsm_msg_header_t)) {
+        return -1;
+    }
+
+    dsm_msg_header_t header = {
+        .code = header_code,
+        .id = header_id,
+        .payload_len = 0,
+    };
+
+    return serialize_header(&header, buf, buf_sz);
+}
+
+int dsm_srlze_dscv_init(uint8_t *buf, size_t buf_sz) {
+    if (buf_sz < sizeof(dsm_msg_header_t) + sizeof(dsm_msg_dscv_init_t)) {
+        return -1;
+    }
+
+    dsm_msg_header_t header = {
+        .code = CODE_DISCOVER_INIT,
+        .id = dsm_ctx->config.net.system.system_id,
+        .payload_len = sizeof(dsm_msg_dscv_init_t),
+    };
+
+    dsm_msg_dscv_init_t payload = {
+        .udp_port_uni = htons(dsm_ctx->config.net.node.udp_port),
+        .role = htonl(dsm_ctx->config.net.node.role),
+    };
+
+    int offset = serialize_header(&header, buf, buf_sz);
+    if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header_t)) {
+        return -1;
+    }
+    memcpy(buf + offset, &payload, sizeof(payload));
+
+    return offset + sizeof(payload);
+}
+
+int dsm_srlze_dscv_spvs_data(uint8_t *buf, size_t buf_sz) {
+    if (buf_sz < sizeof(dsm_msg_header_t) + sizeof(dsm_msg_dscv_spvs_data_t)) {
+        return -1;
+    }
+
+    dsm_msg_header_t header = {
+        .code = CODE_DISCOVER_SUPERVISOR_DATA,
+        .id = dsm_ctx->config.net.system.system_id,
+        .payload_len = sizeof(dsm_msg_dscv_spvs_data_t),
+    };
+
+    dsm_msg_dscv_spvs_data_t payload = {
+        .tcp_port_spvs = htons(dsm_ctx->config.net.node.tcp_port),
+    };
+
+    int offset = serialize_header(&header, buf, buf_sz);
+    if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header_t)) {
+        return -1;
+    }
+    memcpy(buf + offset, &payload, sizeof(payload));
+
+    return offset + sizeof(payload);
+}
+
+int dsm_srlze_dscv_join_ack(int assigned_id, uint8_t *buf, size_t buf_sz) {
+    if (buf_sz < sizeof(dsm_msg_header_t) + sizeof(dsm_msg_dscv_join_ack_t)) {
+        return -1;
+    }
+
+    dsm_msg_header_t header = {
+        .code = CODE_DISCOVER_JOIN_ACK,
+        .id = dsm_ctx->config.net.system.system_id,
+        .payload_len = sizeof(dsm_msg_dscv_join_ack_t),
+    };
+
+    // atomic_fetch_add(&dscv_ctx->id_count, 1); TODO autre part
+    dsm_msg_dscv_join_ack_t payload = {
+        .assigned_id = htonl(assigned_id),
+    };
+
+    int offset = serialize_header(&header, buf, buf_sz);
+    if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header_t)) {
+        return -1;
+    }
+    memcpy(buf + offset, &payload, sizeof(payload));
+
+    return offset + sizeof(payload);
+}
+
+int dsm_srlze_dscv_sys_full(uint8_t *buf, size_t buf_sz) {
+    return serialize_no_payload_msg(CODE_DISCOVER_SYSTEM_FULL,
+                                    dsm_ctx->config.net.system.system_id, buf, buf_sz);
+}
+
+static int serialize_reg_node(dsm_reg_node_t *node, uint8_t *buf, size_t buf_sz) {
+    if (buf_sz < sizeof(dsm_reg_node_t)) {
+        return -1;
+    }
+
+    dsm_reg_node_t net_node = {
+        .id = htonl(node->id),
+        .is_manager = node->is_manager, // 1 octet, pas besoin de hton
+        .ip = htonl(node->ip),
+        .manager_port = htons(node->manager_port),
+    };
+    memcpy(buf, &net_node, sizeof(net_node));
+
+    return sizeof(net_node);
+}
+
+int dsm_srlze_dscv_share_reg(uint32_t code, dsm_msg_dscv_share_reg_t *share, uint8_t *buf,
+                             size_t buf_sz) {
+    size_t needed_sz = sizeof(dsm_msg_header_t) + sizeof(dsm_msg_dscv_share_reg_t) +
+                       share->nb_nodes * sizeof(dsm_reg_node_t);
+    if (buf_sz < needed_sz) {
+        return -1;
+    }
+
+    dsm_msg_header_t header = {
+        .code = code,
+        .id = dsm_ctx->node_id,
+        .payload_len =
+            sizeof(dsm_msg_dscv_share_reg_t) + share->nb_nodes * sizeof(dsm_reg_node_t),
+    };
+
+    int offset = serialize_header(&header, buf, buf_sz);
+    if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header_t)) {
+        return -1;
+    }
+    memcpy(buf + offset, share, sizeof(dsm_msg_dscv_share_reg_t));
+    offset += sizeof(dsm_msg_dscv_share_reg_t);
+
+    for (uint32_t i = 0; i < share->nb_nodes; i++) {
+        int res = serialize_reg_node(&share->nodes[i], buf + offset, buf_sz - offset);
+        if (res < 0) {
+            return -1;
+        }
+        offset += res;
+    }
+
+    return offset;
+}
+
+int dsm_srlze_dscv_share_reg_ack(uint16_t listen_port, uint8_t *buf, size_t buf_sz) {
+    if (buf_sz < sizeof(dsm_msg_header_t) + sizeof(dsm_msg_dscv_share_reg_ack_t)) {
+        return -1;
+    }
+
+    dsm_msg_header_t header = {
+        .code = CODE_DISCOVER_SHARE_REGISTRY_MANAGER_ACK,
+        .id = dsm_ctx->node_id,
+        .payload_len = sizeof(dsm_msg_dscv_share_reg_ack_t),
+    };
+
+    dsm_msg_dscv_share_reg_ack_t payload = {
+        .listen_port = htons(listen_port),
+    };
+
+    int offset = serialize_header(&header, buf, buf_sz);
+    if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header_t)) {
+        return -1;
+    }
+    memcpy(buf + offset, &payload, sizeof(payload));
+
+    return offset + sizeof(payload);
+}
+
+int dsm_srlze_dscv_mgr_ready(uint8_t *buf, size_t buf_sz) {
+    return serialize_no_payload_msg(CODE_DISCOVER_MANAGER_READY, dsm_ctx->node_id, buf,
+                                    buf_sz);
+}
+
+int dsm_srlze_dscv_wkr_config(uint64_t nb_pages, uint8_t *buf, size_t buf_sz) {
+    if (buf_sz < sizeof(dsm_msg_header_t) + sizeof(dsm_msg_dscv_wkr_config_t)) {
+        return -1;
+    }
+
+    dsm_msg_header_t header = {
+        .code = CODE_DISCOVER_WORKER_CONFIG,
+        .id = dsm_ctx->node_id,
+        .payload_len = sizeof(dsm_msg_dscv_wkr_config_t),
+    };
+
+    dsm_msg_dscv_wkr_config_t payload = {
+        .nb_pages = htobe64(nb_pages),
+    };
+
+    int offset = serialize_header(&header, buf, buf_sz);
+    if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header_t)) {
+        return -1;
+    }
+    memcpy(buf + offset, &payload, sizeof(payload));
+
+    return offset + sizeof(payload);
+}
+
+int dsm_srlze_dscv_wkr_config_ack(uint8_t *buf, size_t buf_sz) {
+    return serialize_no_payload_msg(CODE_DISCOVER_WORKER_CONFIG_ACK, dsm_ctx->node_id,
+                                    buf, buf_sz);
+}
+
+int dsm_srlze_dscv_finalize(uint8_t *buf, size_t buf_sz) {
+    return serialize_no_payload_msg(CODE_DISCOVER_FINALIZE, dsm_ctx->node_id, buf,
+                                    buf_sz);
+}

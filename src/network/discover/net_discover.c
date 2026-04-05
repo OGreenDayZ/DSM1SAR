@@ -1,8 +1,9 @@
 #include "net_discover.h"
 
+#include <unistd.h>
+
 #include "internal.h"
 #include "network/network.h"
-#include <unistd.h>
 
 static dsm_dscv_ctx_t discover_ctx;
 
