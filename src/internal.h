@@ -4,7 +4,13 @@
 #include "dsm.h"
 
 typedef struct {
+    /* Une fois le discover fini, config devient READ-ONLY */
     dsm_config_t config;
+    unsigned int node_id;
+    // registry_nodes
+    // registry_pages
+
+    // à étendre...
 } dsm_context_t;
 
 extern dsm_context_t *dsm_ctx;

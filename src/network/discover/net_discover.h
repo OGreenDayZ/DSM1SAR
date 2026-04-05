@@ -11,8 +11,11 @@ typedef struct {
     int sock_mcast_udp;
 
     bool is_supervisor;
-} dsm_discover_ctx_t;
 
-int dsm_discover_start(void);
+    int id_count;
+    // JOIN LIST ?
+} dsm_dscv_ctx_t;
+
+int dsm_discover(void);
 
 #endif // DSM_NET_DISCOVER_H

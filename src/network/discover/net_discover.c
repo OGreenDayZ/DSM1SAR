@@ -4,7 +4,7 @@
 #include "network/network.h"
 #include <unistd.h>
 
-static dsm_discover_ctx_t discover_ctx;
+static dsm_dscv_ctx_t discover_ctx;
 
 static int discover_sockets_init() {
     int ret = dsm_get_local_ip(discover_ctx.my_ip, INET_ADDRSTRLEN);
@@ -30,8 +30,19 @@ static int discover_sockets_init() {
     return 0;
 }
 
-int dsm_discover_start() {
+static int discover_scan_network() {
+    return 0;
+}
+
+int dsm_discover() {
+
     if (discover_sockets_init() < 0) {
         return -1;
     }
+
+    if (discover_scan_network() < 0) {
+        return -1;
+    }
+
+    return 0;
 }

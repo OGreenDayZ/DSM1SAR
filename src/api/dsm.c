@@ -41,7 +41,7 @@ static int context_init(const dsm_config_t *config) {
         return ret;
     }
 
-    dsm_ctx = malloc(sizeof(dsm_config_t));
+    dsm_ctx = malloc(sizeof(dsm_context_t));
     if (!dsm_ctx) {
         LOG_ERROR("Erreur malloc : dsm_ctx");
         return DSM_ERROR_CONTEXT_ALLOC;

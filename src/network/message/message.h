@@ -1,6 +1,7 @@
 #ifndef DSM_MESSAGE_H
 #define DSM_MESSAGE_H
 
+#include "network/discover/net_discover.h"
 #include <stdint.h>
 
 typedef enum {
@@ -25,7 +26,7 @@ typedef enum {
 
 /* HEADER */
 typedef struct {
-    uint32_t type;
+    uint32_t code;
     uint32_t id; // SystemID au début et NodeID ensuite
     uint32_t payload_len;
 } dsm_msg_header_t;
@@ -92,5 +93,16 @@ typedef struct {
 // } dsm_msg_dscv_finalize_t;
 
 #pragma pack(pop)
+
+int dsm_send_dscv_init(dsm_dscv_ctx_t *ctx);
+int dsm_send_dscv_spvs_data(dsm_dscv_ctx_t *ctx);
+int dsm_send_dscv_join_ack(dsm_dscv_ctx_t *ctx);
+int dsm_send_dscv_sys_full(dsm_dscv_ctx_t *ctx);
+int dsm_send_dscv_share_reg(dsm_dscv_ctx_t *ctx);
+int dsm_send_dscv_share_reg_ack(dsm_dscv_ctx_t *ctx);
+int dsm_send_dscv_mgr_ready(dsm_dscv_ctx_t *ctx);
+int dsm_send_dscv_wkr_config(dsm_dscv_ctx_t *ctx);
+int dsm_send_dscv_wkr_config_ack(dsm_dscv_ctx_t *ctx);
+int dsm_send_dscv_finalize(dsm_dscv_ctx_t *ctx);
 
 #endif // DSM_MESSAGE_H
