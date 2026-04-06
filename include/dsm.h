@@ -46,7 +46,7 @@ typedef struct {
 
 /* --- Erreurs --- */
 typedef enum {
-    DSM_ERROR_NONE = 0, // Eviter de retourner 0 pour les erreurs, réserver pour succès
+    DSM_SUCCESS = 0, // Eviter de retourner 0 pour les erreurs, réserver pour succès
     /* Init & Context */
     DSM_ERROR_INIT_ARG_NB_PAGES,
     DSM_ERROR_INIT_ARG_NB_NODES,
@@ -58,7 +58,7 @@ typedef enum {
     DSM_ERROR_SYSTEM_FULL
 
     /* ... */
-} dsm_error_code;
+} dsm_exit_code;
 
 /* --- Fonctions --- */
 void dsm_get_default_config(dsm_config *config);

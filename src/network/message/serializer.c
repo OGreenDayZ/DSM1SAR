@@ -224,3 +224,116 @@ int dsm_srlze_dscv_finalize(uint8_t *buf, size_t buf_sz) {
     return serialize_no_payload_msg(CODE_DISCOVER_FINALIZE, dsm_ctx->node_id, buf,
                                     buf_sz);
 }
+
+int dsm_dsrlze_header(uint8_t *buf, size_t buf_sz, dsm_msg_header *header) {
+    if (buf_sz < sizeof(dsm_msg_header)) {
+        return -1;
+    }
+
+    dsm_msg_header net_header;
+    memcpy(&net_header, buf, sizeof(net_header));
+    header->code = ntohl(net_header.code);
+    header->id = ntohl(net_header.id);
+    header->payload_len = ntohl(net_header.payload_len);
+
+    return sizeof(dsm_msg_header);
+}
+
+int dsm_dsrlze_dscv_init(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_init *msg) {
+    if (buf_sz < sizeof(dsm_msg_dscv_init)) {
+        return -1;
+    }
+
+    dsm_msg_dscv_init net_msg;
+    memcpy(&net_msg, buf, sizeof(net_msg));
+    msg->udp_port_uni = ntohs(net_msg.udp_port_uni);
+    msg->role = ntohl(net_msg.role);
+
+    return sizeof(dsm_msg_dscv_init);
+}
+
+int dsm_dsrlze_dscv_spvs_data(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_spvs_data *msg) {
+    if (buf_sz < sizeof(dsm_msg_dscv_spvs_data)) {
+        return -1;
+    }
+
+    dsm_msg_dscv_spvs_data net_msg;
+    memcpy(&net_msg, buf, sizeof(net_msg));
+    msg->tcp_port_spvs = ntohs(net_msg.tcp_port_spvs);
+
+    return sizeof(dsm_msg_dscv_spvs_data);
+}
+
+int dsm_dsrlze_dscv_join_ack(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_join_ack *msg) {
+    if (buf_sz < sizeof(dsm_msg_dscv_join_ack)) {
+        return -1;
+    }
+
+    dsm_msg_dscv_join_ack net_msg;
+    memcpy(&net_msg, buf, sizeof(net_msg));
+    msg->assigned_id = ntohl(net_msg.assigned_id);
+
+    return sizeof(dsm_msg_dscv_join_ack);
+}
+
+int static deserialize_reg_node(uint8_t *buf, size_t buf_sz, dsm_reg_node *node) {
+    if (buf_sz < sizeof(dsm_reg_node)) {
+        return -1;
+    }
+
+    dsm_reg_node net_node;
+    memcpy(&net_node, buf, sizeof(net_node));
+    node->id = ntohl(net_node.id);
+    node->is_manager = net_node.is_manager; // 1 octet, pas besoin de ntoh
+    node->ip = ntohl(net_node.ip);
+    node->manager_port = ntohs(net_node.manager_port);
+
+    return sizeof(net_node);
+}
+
+int dsm_dsrlze_dscv_share_reg(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_share_reg *msg) {
+    if (buf_sz < sizeof(dsm_msg_dscv_share_reg)) {
+        return -1;
+    }
+
+    dsm_msg_dscv_share_reg net_msg;
+    memcpy(&net_msg, buf, sizeof(net_msg));
+    msg->sys_total_nodes = ntohl(net_msg.sys_total_nodes);
+    msg->nb_nodes = ntohl(net_msg.nb_nodes);
+
+    size_t offset = sizeof(dsm_msg_dscv_share_reg);
+    for (uint32_t i = 0; i < msg->nb_nodes; i++) {
+        int res = deserialize_reg_node(buf + offset, buf_sz - offset, &msg->nodes[i]);
+        if (res < 0) {
+            return -1;
+        }
+        offset += res;
+    }
+
+    return offset;
+}
+int dsm_dsrlze_dscv_share_reg_ack(uint8_t *buf, size_t buf_sz,
+                                  dsm_msg_dscv_share_reg_ack *msg) {
+    if (buf_sz < sizeof(dsm_msg_dscv_share_reg_ack)) {
+        return -1;
+    }
+
+    dsm_msg_dscv_share_reg_ack net_msg;
+    memcpy(&net_msg, buf, sizeof(net_msg));
+    msg->listen_port = ntohs(net_msg.listen_port);
+
+    return sizeof(dsm_msg_dscv_share_reg_ack);
+}
+
+int dsm_dsrlze_dscv_wkr_config(uint8_t *buf, size_t buf_sz,
+                               dsm_msg_dscv_wkr_config *msg) {
+    if (buf_sz < sizeof(dsm_msg_dscv_wkr_config)) {
+        return -1;
+    }
+
+    dsm_msg_dscv_wkr_config net_msg;
+    memcpy(&net_msg, buf, sizeof(net_msg));
+    msg->nb_pages = be64toh(net_msg.nb_pages);
+
+    return sizeof(dsm_msg_dscv_wkr_config);
+}

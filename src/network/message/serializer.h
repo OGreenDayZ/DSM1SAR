@@ -4,6 +4,11 @@
 #include "network/message/message.h"
 #include <stdint.h>
 
+/* Lexique
+@srlze: serialize
+@dsrlze: deserialize
+*/
+
 int dsm_srlze_dscv_init(uint8_t *buf, size_t buf_sz);
 int dsm_srlze_dscv_spvs_data(uint8_t *buf, size_t buf_sz);
 int dsm_srlze_dscv_join_ack(int assigned_id, uint8_t *buf, size_t buf_sz);
@@ -16,6 +21,17 @@ int dsm_srlze_dscv_wkr_config(uint64_t nb_pages, uint8_t *buf, size_t buf_sz);
 int dsm_srlze_dscv_wkr_config_ack(uint8_t *buf, size_t buf_sz);
 int dsm_srlze_dscv_finalize(uint8_t *buf, size_t buf_sz);
 
-int dsm_recv_and_dispatch(/* TODO */);
+/*
+@note : Pas de fonction de désérialisation pour les messages sans payload,
+        le dsm_dsrlze_header suffit
+*/
+int dsm_dsrlze_header(uint8_t *buf, size_t buf_sz, dsm_msg_header *header);
+int dsm_dsrlze_dscv_init(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_init *msg);
+int dsm_dsrlze_dscv_spvs_data(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_spvs_data *msg);
+int dsm_dsrlze_dscv_join_ack(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_join_ack *msg);
+int dsm_dsrlze_dscv_share_reg(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_share_reg *msg);
+int dsm_dsrlze_dscv_share_reg_ack(uint8_t *buf, size_t buf_sz,
+                                  dsm_msg_dscv_share_reg_ack *msg);
+int dsm_dsrlze_dscv_wkr_config(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_wkr_config *msg);
 
 #endif // DSM_SERIALIZER_H
