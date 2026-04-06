@@ -46,6 +46,7 @@ typedef struct {
 
 /* --- Erreurs --- */
 typedef enum {
+    DSM_ERROR_NONE = 0, // Eviter de retourner 0 pour les erreurs, réserver pour succès
     /* Init & Context */
     DSM_ERROR_INIT_ARG_NB_PAGES,
     DSM_ERROR_INIT_ARG_NB_NODES,
