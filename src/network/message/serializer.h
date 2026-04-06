@@ -8,7 +8,7 @@ int dsm_srlze_dscv_init(uint8_t *buf, size_t buf_sz);
 int dsm_srlze_dscv_spvs_data(uint8_t *buf, size_t buf_sz);
 int dsm_srlze_dscv_join_ack(int assigned_id, uint8_t *buf, size_t buf_sz);
 int dsm_srlze_dscv_sys_full(uint8_t *buf, size_t buf_sz);
-int dsm_srlze_dscv_share_reg(uint32_t code, dsm_msg_dscv_share_reg_t *share, uint8_t *buf,
+int dsm_srlze_dscv_share_reg(uint32_t code, dsm_msg_dscv_share_reg *share, uint8_t *buf,
                              size_t buf_sz);
 int dsm_srlze_dscv_share_reg_ack(uint16_t listen_port, uint8_t *buf, size_t buf_sz);
 int dsm_srlze_dscv_mgr_ready(uint8_t *buf, size_t buf_sz);

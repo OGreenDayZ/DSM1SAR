@@ -5,7 +5,7 @@
 #include "internal.h"
 #include "network/network.h"
 
-static dsm_dscv_ctx_t discover_ctx;
+static dsm_dscv_ctx discover_ctx;
 
 static int discover_sockets_init() {
     int ret = dsm_get_local_ip(discover_ctx.my_ip, INET_ADDRSTRLEN);
