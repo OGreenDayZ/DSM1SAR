@@ -5,8 +5,8 @@
 #include <stdatomic.h>
 #include <stdbool.h>
 
-#define DSM_DISCOVER_UDP_MAX_RETRIES 3
-#define DSM_DISCOVER_UDP_RESEND_INTERVAL_SEC 2
+#define DSM_DSCV_MAX_RETRIES 3
+#define DSM_DSCV_RESEND_INTERVAL_SEC 2
 
 typedef struct {
     char my_ip[INET_ADDRSTRLEN];
@@ -18,18 +18,9 @@ typedef struct {
 
     atomic_int id_count;
     // JOIN LIST ?
+    int tcp_port_connect_spvs; // Le port que le worker utilise pour se connecter au
+                               // superviseur, à communiquer dans le message d'init
 } dsm_dscv_ctx;
-
-// int dsm_send_dscv_init(dsm_dscv_ctx *ctx);
-// int dsm_send_dscv_spvs_data(dsm_dscv_ctx *ctx);
-// int dsm_send_dscv_join_ack(dsm_dscv_ctx *ctx);
-// int dsm_send_dscv_sys_full(dsm_dscv_ctx *ctx);
-// int dsm_send_dscv_share_reg(dsm_dscv_ctx *ctx);
-// int dsm_send_dscv_share_reg_ack(dsm_dscv_ctx *ctx);
-// int dsm_send_dscv_mgr_ready(dsm_dscv_ctx *ctx);
-// int dsm_send_dscv_wkr_config(dsm_dscv_ctx *ctx);
-// int dsm_send_dscv_wkr_config_ack(dsm_dscv_ctx *ctx);
-// int dsm_send_dscv_finalize(dsm_dscv_ctx *ctx);
 
 int dsm_discover(void);
 

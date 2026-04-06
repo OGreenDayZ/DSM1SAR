@@ -1,21 +1,20 @@
 TARGET = dsm1sar
 
 SRC_DIR = src
-LIB_DIR = lib
 TEST_DIR = test
 INCLUDE_DIR = include
 BUILD_DIR = build
 
 # Compilateur et options
 CC = clang # Utiliser clang si on veut détecter + de warnings, sinon gcc
-CFLAGS = -Wall -g -I$(INCLUDE_DIR) -I$(SRC_DIR) -I$(LIB_DIR)
+CFLAGS = -Wall -g -I$(INCLUDE_DIR) -I$(SRC_DIR)
 
-SRCS = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(LIB_DIR)/*.c) $(wildcard $(TEST_DIR)/*.c)
+SRCS = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(TEST_DIR)/*.c)
 
 # LIBS = 
 OBJS = $(addprefix $(BUILD_DIR)/, $(notdir $(SRCS:.c=.o)))
 
-vpath %.c $(SRC_DIR) $(LIB_DIR) $(TEST_DIR)
+vpath %.c $(SRC_DIR) $(TEST_DIR)
 
 # Par défaut, définir LOG_LEVEL à DEBUG, et LOG_TRIGGER à LOG_UNIQ
 LOG_LEVEL ?= NO_LOG

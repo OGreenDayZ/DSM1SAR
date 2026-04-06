@@ -91,10 +91,14 @@ int dsm_udp_recvfrom(int sock, uint8_t *buf, size_t len, char *src_ip, int *src_
         LOG_ERROR("recvfrom: reçus:%zd | attendus:%zu", recv_len, len);
         return -1;
     }
-    if (inet_ntop(AF_INET, &src_addr.sin_addr, src_ip, INET_ADDRSTRLEN) == NULL) {
+
+    if (src_ip &&
+        inet_ntop(AF_INET, &src_addr.sin_addr, src_ip, INET_ADDRSTRLEN) == NULL) {
         LOG_ERROR("inet_ntop");
         return -1;
     }
-    *src_port = ntohs(src_addr.sin_port);
+    if (src_port) {
+        *src_port = ntohs(src_addr.sin_port);
+    }
     return recv_len;
 }

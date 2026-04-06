@@ -27,6 +27,7 @@ typedef enum {
     DSM_ROLE_MANAGER
 } dsm_node_role;
 
+/* Les ports concernent uniquement les ports de réception*/
 typedef struct {
     dsm_node_role role;
     unsigned short tcp_port;
