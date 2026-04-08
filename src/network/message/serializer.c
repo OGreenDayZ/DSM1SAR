@@ -5,7 +5,7 @@
 
 #include "internal.h"
 
-int static serialize_header(dsm_msg_header *header, uint8_t *buf, size_t buf_sz) {
+static int serialize_header(dsm_msg_header *header, uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header)) {
         return -1;
     }
@@ -19,7 +19,7 @@ int static serialize_header(dsm_msg_header *header, uint8_t *buf, size_t buf_sz)
     return len;
 }
 
-int static serialize_no_payload_msg(uint32_t header_code, uint32_t header_id,
+static int serialize_no_payload_msg(uint32_t header_code, uint32_t header_id,
                                     uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header)) {
         return -1;
@@ -276,7 +276,7 @@ int dsm_dsrlze_dscv_join_ack(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_join_ack 
     return sizeof(dsm_msg_dscv_join_ack);
 }
 
-int static deserialize_reg_node(uint8_t *buf, size_t buf_sz, dsm_reg_node *node) {
+static int deserialize_reg_node(uint8_t *buf, size_t buf_sz, dsm_reg_node *node) {
     if (buf_sz < sizeof(dsm_reg_node)) {
         return -1;
     }

@@ -16,10 +16,12 @@ typedef struct {
 
     bool is_supervisor;
 
+    char supervisor_ip[INET_ADDRSTRLEN];
+    uint16_t supervisor_tcp_port;
+
     atomic_int id_count;
     // JOIN LIST ?
-    int tcp_port_connect_spvs; // Le port que le worker utilise pour se connecter au
-                               // superviseur, à communiquer dans le message d'init
+
 } dsm_dscv_ctx;
 
 int dsm_discover(void);

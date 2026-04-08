@@ -74,5 +74,5 @@ int dsm_init(const dsm_config *config) {
     }
 
     ret = dsm_network_init();
-    return 0;
+    return ret;
 }

@@ -1,6 +1,9 @@
-#include "debug/debug.h"
+#include "dsm.h"
 
 int main(int argc, char const *argv[]) {
 
-    return 0;
+    dsm_config config;
+    dsm_get_default_config(&config);
+
+    return dsm_init(&config);
 }

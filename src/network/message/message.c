@@ -76,7 +76,7 @@ int dsm_udp_recvfrom(int sock, uint8_t *buf, size_t len, char *src_ip, int *src_
         LOG_ERROR("select");
         return -1;
     } else if (res == 0) {
-        LOG_ERROR("recvfrom timeout");
+        LOG_WARNING("recvfrom timeout");
         return -1;
     }
 
