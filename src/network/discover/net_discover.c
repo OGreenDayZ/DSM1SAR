@@ -121,6 +121,60 @@ exit:
     return ret;
 }
 
+static int connect_to_supervisor() {
+    discover_ctx.supervisor_tcp_sock = dsm_tcp_connect_sock(
+        discover_ctx.supervisor_ip, discover_ctx.supervisor_tcp_port);
+
+    if (discover_ctx.supervisor_tcp_sock < 0) {
+        LOG_ERROR("Connexion au superviseur échouée");
+        return -1;
+    }
+    return 0;
+}
+
+static int recv_dscv_join_ack() {
+    struct timeval timeout = {.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC, .tv_usec = 0};
+    size_t buf_size = sizeof(dsm_msg_header);
+    uint8_t hbuf[buf_size];
+
+    if (dsm_tcp_recv_all(discover_ctx.supervisor_tcp_sock, hbuf, buf_size, &timeout) <
+        0) {
+        return -1;
+    }
+
+    dsm_msg_header header;
+    if (dsm_dsrlze_header(hbuf, buf_size, &header) < 0) {
+        return -1;
+    }
+
+    if (header.code != CODE_DISCOVER_JOIN_ACK) {
+        buf_size = sizeof(dsm_msg_dscv_join_ack);
+        uint8_t pbuf[buf_size];
+        timeout.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC;
+        timeout.tv_usec = 0;
+        if (dsm_tcp_recv_all(discover_ctx.supervisor_tcp_sock, pbuf, buf_size, &timeout) <
+            0) {
+            return -1;
+        }
+        dsm_msg_dscv_join_ack payload;
+        if (dsm_dsrlze_dscv_join_ack(pbuf, buf_size, &payload) < 0) {
+            return -1;
+        }
+        dsm_ctx->node_id = payload.assigned_id;
+        LOG_INFO("Le superviseur a accepté l'entrée avec l'ID assigné: %u",
+                 payload.assigned_id);
+        return 0;
+
+    } else if (header.code == CODE_DISCOVER_SYSTEM_FULL) {
+        LOG_ERROR("Le superviseur a rejeté l'entrée : système complet");
+        return -1;
+
+    } else {
+        LOG_ERROR("Code inconnu : %d", header.code);
+        return -1;
+    }
+}
+
 int dsm_discover() {
 
     if (discover_sockets_init() < 0) {
@@ -133,8 +187,20 @@ int dsm_discover() {
     }
 
     if (!discover_ctx.is_supervisor) {
+        if (connect_to_supervisor() < 0) {
+            return -1;
+        }
+
+        LOG_INFO("Connecté au superviseur %s:%d", discover_ctx.supervisor_ip,
+                 discover_ctx.supervisor_tcp_port);
+
+        if (recv_dscv_join_ack() < 0) {
+            return -1;
+        }
+
     } else {
         LOG_INFO("Elu en tant que superviseur du système");
+        dsm_ctx->node_id = 0;
     }
 
     return 0;

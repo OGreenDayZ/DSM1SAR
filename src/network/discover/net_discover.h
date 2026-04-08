@@ -8,6 +8,7 @@
 #define DSM_DSCV_MAX_RETRIES 3
 #define DSM_DSCV_RESEND_INTERVAL_SEC 2
 
+/* Uniquemement utile jusqu'à la fin du discover */
 typedef struct {
     char my_ip[INET_ADDRSTRLEN];
     int sock_tcp_listen;
@@ -18,6 +19,7 @@ typedef struct {
 
     char supervisor_ip[INET_ADDRSTRLEN];
     uint16_t supervisor_tcp_port;
+    int supervisor_tcp_sock;
 
     atomic_int id_count;
     // JOIN LIST ?
