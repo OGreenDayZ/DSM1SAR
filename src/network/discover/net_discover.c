@@ -147,7 +147,7 @@ static int recv_dscv_join_ack() {
         return -1;
     }
 
-    if (header.code != CODE_DISCOVER_JOIN_ACK) {
+    if (header.code == CODE_DISCOVER_JOIN_ACK) {
         buf_size = sizeof(dsm_msg_dscv_join_ack);
         uint8_t pbuf[buf_size];
         timeout.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC;
@@ -172,6 +172,27 @@ static int recv_dscv_join_ack() {
     } else {
         LOG_ERROR("Code inconnu : %d", header.code);
         return -1;
+    }
+}
+
+static int recv_dscv_share_reg() {
+    struct timeval timeout = {.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC, .tv_usec = 0};
+    size_t buf_size = sizeof(dsm_msg_header);
+    uint8_t hbuf[buf_size];
+
+    if (dsm_tcp_recv_all(discover_ctx.supervisor_tcp_sock, hbuf, buf_size, &timeout) <
+        0) {
+        return -1;
+    }
+
+    dsm_msg_header header;
+    if (dsm_dsrlze_header(hbuf, buf_size, &header) < 0) {
+        return -1;
+    }
+
+    if (header.code == CODE_DISCOVER_SHARE_REGISTRY_MANAGER) {
+        buf_size = sizeof(header.dsm_msg_dscv_share_reg);
+        // TODO recevoir payload liste
     }
 }
 
