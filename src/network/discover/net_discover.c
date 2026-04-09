@@ -46,7 +46,7 @@ static int recv_dscv_spvs_data() {
     char src_ip[INET_ADDRSTRLEN];
     int src_port;
 
-    if (dsm_udp_recvfrom(discover_ctx.sock_mcast_udp, buf, buf_size, src_ip, &src_port,
+    if (dsm_udp_recvfrom(discover_ctx.sock_udp_recv, buf, buf_size, src_ip, &src_port,
                          &timeout) < 0) {
         return -1;
     }
