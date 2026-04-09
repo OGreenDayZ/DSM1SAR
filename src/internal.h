@@ -11,7 +11,8 @@ typedef struct {
     // registry_pages
 
     // à étendre...
-} dsm_context;
+} dsm_context_t;
+// annuaire des pages -> hashmap
 
 extern dsm_context *dsm_ctx;
 

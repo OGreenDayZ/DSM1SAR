@@ -61,9 +61,9 @@ typedef struct {
 /* CODE_DISCOVER_SYSTEM_FULL */
 // typedef struct {
 //     // struct vide
-// } dsm_msg_dscv_sys_full;
+// } dsm_msg_dscv_sys_full_t;
 
-/* Composant de dsm_msg_dscv_share_reg */
+/* Composant de dsm_msg_dscv_share_reg_t */
 typedef struct {
     uint32_t id;
     uint8_t is_manager;

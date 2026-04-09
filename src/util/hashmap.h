@@ -1,4 +1,4 @@
-// #ifdef DSM_HASHMAP_H 
+#ifndef DSM_HASHMAP_H 
 #define DSM_HASHMAP_H 
 
 #include "hlist.h"
@@ -142,4 +142,4 @@ static inline bool __dsm_hash_empty(struct dsm_hlist_head *ht, unsigned int sz)
     dsm_hlist_for_each_entry_safe(obj, tmp,                          \
         &(name)[dsm_hash_min(key, DSM_HASH_BITS(name))], member)
 
-// #endif // DSM_HASHMAP_H 
+#endif // DSM_HASHMAP_H 

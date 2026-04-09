@@ -9,12 +9,13 @@ BUILD_DIR = build
 CC = clang # Utiliser clang si on veut détecter + de warnings, sinon gcc
 CFLAGS = -Wall -g -I$(INCLUDE_DIR) -I$(SRC_DIR)
 
-SRCS = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(TEST_DIR)/*.c)
+SRCS     = $(shell find $(SRC_DIR) $(LIB_DIR) $(TEST_DIR) -name "*.c" 2>/dev/null)
 
 # LIBS = 
-OBJS = $(addprefix $(BUILD_DIR)/, $(notdir $(SRCS:.c=.o)))
+OBJS     = $(addprefix $(BUILD_DIR)/, $(notdir $(SRCS:.c=.o)))
 
-vpath %.c $(SRC_DIR) $(TEST_DIR)
+SRC_DIRS = $(shell find $(SRC_DIR) $(LIB_DIR) $(TEST_DIR) -type d 2>/dev/null)
+vpath %.c $(SRC_DIRS)
 
 # Par défaut, définir LOG_LEVEL à DEBUG, et LOG_TRIGGER à LOG_UNIQ
 LOG_LEVEL ?= NO_LOG
