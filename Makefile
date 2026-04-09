@@ -6,7 +6,7 @@ INCLUDE_DIR = include
 BUILD_DIR = build
 
 # Compilateur et options
-CC = clang # Utiliser clang si on veut détecter + de warnings, sinon gcc
+CC = gcc # Utiliser clang si on veut détecter + de warnings, sinon gcc
 CFLAGS = -Wall -g -I$(INCLUDE_DIR) -I$(SRC_DIR)
 
 SRCS     = $(shell find $(SRC_DIR) $(LIB_DIR) $(TEST_DIR) -name "*.c" 2>/dev/null)

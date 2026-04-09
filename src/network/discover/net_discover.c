@@ -96,7 +96,7 @@ static int send_dscv_init() {
     int ret = 0;
 
     for (int attempt = 1; attempt <= DSM_DSCV_MAX_RETRIES; attempt++) {
-        LOG_INFO("\nTentative [%d/%d] — Demande de connexion en cours...\n", attempt,
+        LOG_INFO("\nTentative [%d/%d] — Demande de connexion en cours...", attempt,
                  DSM_DSCV_MAX_RETRIES);
 
         ssize_t sent_bytes = sendto(send_sock, msg_buf, msg_len, 0,
