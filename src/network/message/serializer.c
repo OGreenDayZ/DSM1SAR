@@ -191,6 +191,9 @@ int dsm_srlze_dscv_mgr_ready(uint8_t *buf, size_t buf_sz) {
                                     buf_sz);
 }
 
+// dsm_srlze_dscv_mgr_ready
+// srlze_dscv_mgr_ready
+
 int dsm_srlze_dscv_wkr_config(uint64_t nb_pages, uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header_t) + sizeof(dsm_msg_dscv_wkr_config_t)) {
         return -1;

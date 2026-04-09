@@ -12,6 +12,7 @@ typedef struct {
 
     // à étendre...
 } dsm_context_t;
+// annuaire des pages -> hashmap
 
 extern dsm_context_t *dsm_ctx;
 
