@@ -191,9 +191,11 @@ static int recv_dscv_share_reg() {
     }
 
     if (header.code == CODE_DISCOVER_SHARE_REGISTRY_MANAGER) {
-        buf_size = sizeof(header.dsm_msg_dscv_share_reg);
+        // buf_size = sizeof(header.dsm_msg_dscv_share_reg);
         // TODO recevoir payload liste
     }
+
+    return 0;
 }
 
 int dsm_discover() {

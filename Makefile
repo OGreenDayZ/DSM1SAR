@@ -9,10 +9,14 @@ BUILD_DIR = build
 CC = gcc # Utiliser clang si on veut détecter + de warnings, sinon gcc
 CFLAGS = -Wall -g -I$(INCLUDE_DIR) -I$(SRC_DIR)
 
-SRCS     = $(shell find $(SRC_DIR) $(LIB_DIR) $(TEST_DIR) -name "*.c" 2>/dev/null)
+SRC_SRCS = $(shell find $(SRC_DIR) $(LIB_DIR) -name "*.c" 2>/dev/null)
+SRC_OBJS = $(addprefix $(BUILD_DIR)/, $(notdir $(SRC_SRCS:.c=.o)))
 
-# LIBS = 
-OBJS     = $(addprefix $(BUILD_DIR)/, $(notdir $(SRCS:.c=.o)))
+TEST_SRCS = $(shell find $(TEST_DIR) -name "*.c" 2>/dev/null)
+TEST_OBJS = $(addprefix $(BUILD_DIR)/, $(notdir $(TEST_SRCS:.c=.o)))
+
+# Générer la liste des exécutables de test (on retire build/main pour éviter les doublons avec dsm1sar)
+TEST_BINS = $(filter-out $(BUILD_DIR)/main, $(TEST_OBJS:.o=))
 
 SRC_DIRS = $(shell find $(SRC_DIR) $(LIB_DIR) $(TEST_DIR) -type d 2>/dev/null)
 vpath %.c $(SRC_DIRS)
@@ -23,9 +27,13 @@ LOG_TRIGGER ?= LOG_UNIQ
 
 all: $(TARGET)
 
-# Génération de l'exécutable
-$(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS) $(LIBS)
+$(TARGET): $(SRC_OBJS) $(BUILD_DIR)/main.o
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
+
+$(BUILD_DIR)/%: $(BUILD_DIR)/%.o $(SRC_OBJS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
+
+tests: $(TEST_BINS)
 
 # Règle générique pour compiler les .o à partir des .c trouvés via VPATH
 $(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
@@ -74,4 +82,4 @@ clean:
 # Reconstruction complète
 re: clean all
 
-.PHONY: all clean re debug info warning error max_debug max_info max_warning max_error
+.PHONY: all clean re debug info warning error max_debug max_info max_warning max_error tests
