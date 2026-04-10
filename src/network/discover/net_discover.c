@@ -294,6 +294,13 @@ static int recv_dscv_share_reg() {
 
 static int send_dscv_share_reg_ack() {
     LOG_INFO("Envoi d'un ACK de partage de registre au superviseur ...");
+
+    if (dsm_tcp_bind_listen(dsm_ctx->config.net.node.tcp_port) < 0) {
+        LOG_ERROR(
+            "Erreur lors de la liaison du socket TCP pour les connexions entrantes");
+        return -1;
+    }
+
     uint8_t buf[sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_share_reg_ack)];
     int msg_len =
         dsm_srlze_dscv_share_reg_ack(dsm_ctx->config.net.node.tcp_port, buf, sizeof(buf));
@@ -307,6 +314,14 @@ static int send_dscv_share_reg_ack() {
         return -1;
     }
 
+    return 0;
+}
+
+static int wait_workers_connect() {
+    LOG_INFO("En attente de connexions des workers ...");
+
+    while () {
+    }
     return 0;
 }
 
