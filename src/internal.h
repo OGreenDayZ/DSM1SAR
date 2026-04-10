@@ -13,6 +13,7 @@
 typedef struct {
     unsigned int id;            // key : node_id
     int tcp_sock;               // socket de communication avec ce node
+    uint32_t ip;                // adresse IP du node (format binaire)
     struct dsm_hlist_node node; // "node" pour la liste de la hashmap
 } dsm_node_content;
 

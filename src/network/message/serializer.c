@@ -120,7 +120,6 @@ static int serialize_reg_node(dsm_reg_node *node, uint8_t *buf, size_t buf_sz) {
 
     dsm_reg_node net_node = {
         .id = htonl(node->id),
-        .is_manager = node->is_manager, // 1 octet, pas besoin de hton
         .ip = htonl(node->ip),
         .manager_port = htons(node->manager_port),
     };
@@ -287,7 +286,6 @@ static int deserialize_reg_node(uint8_t *buf, size_t buf_sz, dsm_reg_node *node)
     dsm_reg_node net_node;
     memcpy(&net_node, buf, sizeof(net_node));
     node->id = ntohl(net_node.id);
-    node->is_manager = net_node.is_manager; // 1 octet, pas besoin de ntoh
     node->ip = ntohl(net_node.ip);
     node->manager_port = ntohs(net_node.manager_port);
 

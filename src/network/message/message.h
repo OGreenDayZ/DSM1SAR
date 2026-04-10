@@ -66,7 +66,6 @@ typedef struct {
 /* Composant de dsm_msg_dscv_share_reg_t */
 typedef struct {
     uint32_t id;
-    uint8_t is_manager;
     uint32_t ip;
     uint16_t manager_port;
 } dsm_reg_node;
@@ -108,9 +107,9 @@ typedef struct {
 
 int dsm_tcp_send_all(int sock, const uint8_t *buf, size_t len);
 int dsm_tcp_recv_all(int sock, uint8_t *buf, size_t len, struct timeval *tv);
-int dsm_udp_sendto(int sock, const uint8_t *buf, size_t len, const char *dest_ip,
-                   int dest_port);
-int dsm_udp_recvfrom(int sock, uint8_t *buf, size_t len, char *src_ip, int *src_port,
-                     struct timeval *tv);
+int dsm_udp_sendto(int sock, const uint8_t *buf, size_t len, uint32_t dest_ip,
+                   uint16_t dest_port);
+int dsm_udp_recvfrom(int sock, uint8_t *buf, size_t len, uint32_t *src_ip,
+                     uint16_t *src_port, struct timeval *tv);
 
 #endif // DSM_MESSAGE_H
