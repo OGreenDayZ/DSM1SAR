@@ -215,10 +215,15 @@ static int connect_to_managers(const dsm_msg_dscv_share_reg *share) {
     for (uint32_t i = 0; i < share->nb_nodes; i++) {
         int manager_sock =
             dsm_tcp_connect_sock(share->nodes[i].ip, share->nodes[i].manager_port);
+        if (manager_sock < 0) {
+            LOG_ERROR("Connexion au manager %u échouée", share->nodes[i].id);
+            return -1;
+        }
+
         const dsm_reg_node *reg_node = &share->nodes[i];
         dsm_node_content node_content = {
             .id = reg_node->id,
-            .tcp_sock = -1,
+            .tcp_sock = manager_sock,
             .ip = reg_node->ip,
         };
         dsm_hash_add(dsm_ctx->nodes_reg, &node_content.node, node_content.id);
@@ -271,11 +276,17 @@ static int recv_dscv_share_reg() {
         if (header.code == CODE_DISCOVER_SHARE_REGISTRY_MANAGER) {
             LOG_INFO("Rôle assigné : MANAGER");
             dsm_ctx->config.net.system.nb_managers = share.nb_nodes;
+            if (prepare_nodes_reg(&share) < 0) {
+                return -1;
+            }
 
         } else { // CODE_DISCOVER_SHARE_REGISTRY_WORKER
             LOG_INFO("Rôle assigné : WORKER");
             dsm_ctx->config.net.system.nb_managers =
                 share.sys_total_nodes - share.nb_nodes;
+            if (connect_to_managers(&share) < 0) {
+                return -1;
+            }
         }
     }
     return 0;
@@ -330,6 +341,12 @@ int dsm_discover() {
             if (send_dscv_share_reg_ack() < 0) {
                 return -1;
             }
+
+        } else if (dsm_ctx->config.net.node.role == DSM_ROLE_WORKER) {
+
+        } else {
+            LOG_ERROR("Rôle non attribué ?");
+            return -1;
         }
 
     } else {
