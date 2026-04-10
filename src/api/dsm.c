@@ -8,9 +8,9 @@
 #include "network/network.h"
 #include "pager/pager.h"
 
-dsm_context_t *dsm_ctx = NULL;
+dsm_context *dsm_ctx = NULL;
 
-static int validate_config(const dsm_config_t *config) {
+static int validate_config(const dsm_config *config) {
     if (config->pager.nb_pages == 0) {
         LOG_ERROR("nb_pages doit être > 0");
         return DSM_ERROR_INIT_ARG_NB_PAGES;
@@ -30,7 +30,7 @@ static int validate_config(const dsm_config_t *config) {
     return 0;
 }
 
-static int context_init(const dsm_config_t *config) {
+static int context_init(const dsm_config *config) {
     if (dsm_ctx != NULL) {
         LOG_ERROR("DSM déjà initialisé");
         return DSM_ERROR_ALREADY_INIT;
@@ -41,7 +41,7 @@ static int context_init(const dsm_config_t *config) {
         return ret;
     }
 
-    dsm_ctx = malloc(sizeof(dsm_context_t));
+    dsm_ctx = malloc(sizeof(dsm_context));
     if (!dsm_ctx) {
         LOG_ERROR("Erreur malloc : dsm_ctx");
         return DSM_ERROR_CONTEXT_ALLOC;
@@ -50,7 +50,7 @@ static int context_init(const dsm_config_t *config) {
     return 0;
 }
 
-void dsm_get_default_config(dsm_config_t *config) {
+void dsm_get_default_config(dsm_config *config) {
     // Pour certains champs, si 0 gardé => soulève erreur à l'init (ex:nb_nodes)
     // et #accept si la valeur sera redéfinie en interne si non spécifiée par l'user
     config->pager.nb_pages = DSM_NB_PAGES;
@@ -66,7 +66,7 @@ void dsm_get_default_config(dsm_config_t *config) {
     config->net.node.udp_port = 0;              // #accept
 }
 
-int dsm_init(const dsm_config_t *config) {
+int dsm_init(const dsm_config *config) {
     LOG_INFO("Initialisation de DSM1SAR...");
     int ret = context_init(config);
     if (ret != 0) {
@@ -74,5 +74,5 @@ int dsm_init(const dsm_config_t *config) {
     }
 
     ret = dsm_network_init();
-    return 0;
+    return ret;
 }

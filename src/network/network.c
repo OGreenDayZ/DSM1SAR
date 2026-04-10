@@ -44,7 +44,7 @@ int dsm_get_local_ip(char *buffer, size_t buflen) {
     freeifaddrs(ifaddr);
 
     if (success != 0) {
-        LOG_ERROR("Aucune interface IPv4 locale valide trouvée.\n");
+        LOG_ERROR("Aucune interface IPv4 locale valide trouvée.");
     }
 
     return success;

@@ -22,7 +22,15 @@ typedef enum {
     CODE_DISCOVER_FINALIZE = 11,
 
     /* +... */
-} dsm_msg_code_t;
+} dsm_msg_code;
+
+/* Lexique
+@dscv : discover
+@spvs : supervisor
+@reg : registry
+@mgr : manager
+@wkr : worker
+*/
 
 #pragma pack(push, 1)
 // Au lieu de __attribute__((packed)) chaque struct
@@ -32,69 +40,69 @@ typedef struct {
     uint32_t code;
     uint32_t id; // SystemID au début et NodeID ensuite
     uint32_t payload_len;
-} dsm_msg_header_t;
+} dsm_msg_header;
 
 /* CODE_DISCOVER_INIT */
 typedef struct {
     uint16_t udp_port_uni;
     uint32_t role;
-} dsm_msg_dscv_init_t;
+} dsm_msg_dscv_init;
 
 /* CODE_DISCOVER_SUPERVISOR_DATA */
 typedef struct {
     uint16_t tcp_port_spvs;
-} dsm_msg_dscv_spvs_data_t;
+} dsm_msg_dscv_spvs_data;
 
 /* CODE_DISCOVER_JOIN_ACK */
 typedef struct {
     uint32_t assigned_id;
-} dsm_msg_dscv_join_ack_t;
+} dsm_msg_dscv_join_ack;
 
 /* CODE_DISCOVER_SYSTEM_FULL */
 // typedef struct {
 //     // struct vide
 // } dsm_msg_dscv_sys_full_t;
- 
+
 /* Composant de dsm_msg_dscv_share_reg_t */
 typedef struct {
     uint32_t id;
     uint8_t is_manager;
     uint32_t ip;
     uint16_t manager_port;
-} dsm_reg_node_t;
+} dsm_reg_node;
 
 /* CODE_DISCOVER_SHARE_REGISTRY_MANAGER
 + CODE_DISCOVER_SHARE_REGISTRY_WORKER*/
 typedef struct {
     uint32_t sys_total_nodes; // la taille totale du système (manager + workers)
     uint32_t nb_nodes; // le nombre de nodes envoyés dans ce message (< sys_total_nodes)
-    dsm_reg_node_t nodes[];
-} dsm_msg_dscv_share_reg_t;
+    dsm_reg_node nodes[];
+} dsm_msg_dscv_share_reg;
 
 /* CODE_DISCOVER_SHARE_REGISTRY_MANAGER_ACK */
 typedef struct {
     uint16_t listen_port;
-} dsm_msg_dscv_share_reg_ack_t;
+} dsm_msg_dscv_share_reg_ack;
 
 /* CODE_DISCOVER_MANAGER_READY */
 // typedef struct {
 //     // struct vide
-// } dsm_msg_dscv_mgr_ready_t;
+// } dsm_msg_dscv_mgr_ready;
 
 /* CODE_DISCOVER_WORKER_CONFIG */
 typedef struct {
     uint64_t nb_pages;
-} dsm_msg_dscv_wkr_config_t;
+} dsm_msg_dscv_wkr_config;
 
 /* CODE_DISCOVER_WORKER_CONFIG_ACK */
 // typedef struct {
 //     // struct vide
-// } dsm_msg_dscv_wkr_config_ack_t;
+// } dsm_msg_dscv_wkr_config_ack;
 
 /* CODE_DISCOVER_FINALIZE */
 // typedef struct {
 //     // struct vide
-// } dsm_msg_dscv_finalize_t;
+// } dsm_msg_dscv_finalize;
 
 #pragma pack(pop)
 
