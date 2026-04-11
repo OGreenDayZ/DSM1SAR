@@ -137,17 +137,18 @@ static inline bool __dsm_hash_empty(struct dsm_hlist_head *ht, unsigned int sz) 
     dsm_hlist_for_each_entry_safe(                                                       \
         obj, tmp, &(name)[dsm_hash_min(key, DSM_HASH_BITS(name))], member)
 
-#define dsm_hash_count(name)                                                             \
+#define DSM_HASH_COUNT(name)                                                             \
     ({                                                                                   \
-        size_t _count = 0;                                                               \
-        int _bkt;                                                                        \
-        struct dsm_hlist_node *_n;                                                       \
-        for (_bkt = 0; _bkt < DSM_HASH_SIZE(name); _bkt++) {                             \
-            dsm_hlist_for_each(_n, &(name)[_bkt]) {                                      \
-                _count++;                                                                \
-            }                                                                            \
+        size_t __total = 0;                                                              \
+        unsigned int __bkt;                                                              \
+        struct dsm_hlist_node *__node;                                                   \
+        /* Parcours de chaque bucket de la table */                                      \
+        for (__bkt = 0; __bkt < DSM_HASH_SIZE(name); __bkt++) {                          \
+            /* Parcours manuel de la liste chaînée pour compter */                       \
+            for (__node = (name)[__bkt].first; __node; __node = __node->next)            \
+                __total++;                                                               \
         }                                                                                \
-        _count;                                                                          \
+        __total;                                                                         \
     })
 
 #endif // DSM_HASHMAP_H

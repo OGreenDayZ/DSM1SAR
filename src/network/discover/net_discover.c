@@ -3,6 +3,7 @@
 #include <netinet/in.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -197,36 +198,63 @@ static int recv_dscv_join_ack() {
     }
 }
 
+/* TODO FACTO AVEC connect_to_managers ? */
 static int prepare_nodes_reg(const dsm_msg_dscv_share_reg *share) {
 
     for (uint32_t i = 0; i < share->nb_nodes; i++) {
+
         const dsm_reg_node *reg_node = &share->nodes[i];
-        dsm_node_content node_content = {
-            .id = reg_node->id,
-            .tcp_sock = -1,
-            .ip = reg_node->ip,
-        };
-        dsm_hash_add(dsm_ctx->nodes_reg, &node_content.node, node_content.id);
+
+        dsm_node_content *node_content = malloc(sizeof(dsm_node_content));
+        if (!node_content) {
+            LOG_ERROR("Erreur malloc : node_content");
+            return -1;
+        }
+
+        node_content->id = reg_node->id;
+        node_content->ip = reg_node->ip;
+
+        if (reg_node->id == 0) {
+            discover_ctx.supervisor_role = DSM_ROLE_WORKER;
+            node_content->tcp_sock = discover_ctx.supervisor_tcp_sock;
+        } else {
+            node_content->tcp_sock = -1;
+        }
+
+        dsm_hash_add(dsm_ctx->nodes_reg, &node_content->node, node_content->id);
     }
     return 0;
 }
 
 static int connect_to_managers(const dsm_msg_dscv_share_reg *share) {
+
     for (uint32_t i = 0; i < share->nb_nodes; i++) {
-        int manager_sock =
-            dsm_tcp_connect_sock(share->nodes[i].ip, share->nodes[i].manager_port);
-        if (manager_sock < 0) {
-            LOG_ERROR("Connexion au manager %u échouée", share->nodes[i].id);
+
+        const dsm_reg_node *reg_node = &share->nodes[i];
+
+        dsm_node_content *node_content = malloc(sizeof(dsm_node_content));
+        if (!node_content) {
+            LOG_ERROR("Erreur malloc : node_content");
             return -1;
         }
 
-        const dsm_reg_node *reg_node = &share->nodes[i];
-        dsm_node_content node_content = {
-            .id = reg_node->id,
-            .tcp_sock = manager_sock,
-            .ip = reg_node->ip,
-        };
-        dsm_hash_add(dsm_ctx->nodes_reg, &node_content.node, node_content.id);
+        node_content->id = reg_node->id;
+        node_content->ip = reg_node->ip;
+
+        if (reg_node->id != 0) {
+            discover_ctx.supervisor_role = DSM_ROLE_MANAGER;
+            node_content->tcp_sock = discover_ctx.supervisor_tcp_sock;
+
+        } else {
+            int manager_sock = dsm_tcp_connect_sock(reg_node->ip, reg_node->manager_port);
+            if (manager_sock < 0) {
+                LOG_ERROR("Connexion au manager %u échouée", reg_node.id);
+                return -1;
+            }
+            node_content->tcp_sock = manager_sock;
+        }
+
+        dsm_hash_add(dsm_ctx->nodes_reg, &node_content->node, node_content->id);
     }
     return 0;
 }
@@ -319,9 +347,9 @@ static int send_dscv_share_reg_ack() {
 
 static int wait_workers_connect() {
     LOG_INFO("En attente de connexions des workers ...");
+    int connected_workers = 0;
+    int expected_workers = DSM_HASH_COUNT(dsm_ctx->nodes_reg); // TODO EXCLUDE SUPERVISOR;
 
-    while () {
-    }
     return 0;
 }
 

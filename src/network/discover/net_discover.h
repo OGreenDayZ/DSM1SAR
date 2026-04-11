@@ -1,6 +1,7 @@
 #ifndef DSM_NET_DISCOVER_H
 #define DSM_NET_DISCOVER_H
 
+#include "dsm.h"
 #include <netinet/in.h>
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -22,6 +23,7 @@ typedef struct {
     uint32_t supervisor_ip;
     uint16_t supervisor_tcp_port;
     int supervisor_tcp_sock;
+    dsm_node_role supervisor_role;
 
     atomic_int id_count;
     // JOIN LIST ?
