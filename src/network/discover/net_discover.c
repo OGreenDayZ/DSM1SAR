@@ -1,17 +1,11 @@
 #include "net_discover.h"
 
-#include <netinet/in.h>
-#include <stddef.h>
-#include <stdint.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
 #include <unistd.h>
 
 #include "debug/debug.h"
-#include "dsm.h"
 #include "internal.h"
-#include "network/message/message.h"
+#include "network/discover/supervisor.h"
 #include "network/message/serializer.h"
 #include "network/network.h"
 #include "util/hashmap.h"
@@ -508,6 +502,10 @@ int dsm_discover() {
     if (is_supervisor) {
         LOG_INFO("Elu en tant que superviseur du système");
         dsm_ctx->node_id = 0;
+
+        if (dsm_supervisor_loop(&discover_ctx) < 0) {
+            return -1;
+        }
 
     } else {
 

@@ -2,7 +2,6 @@
 #define DSM_SERIALIZER_H
 
 #include "network/message/message.h"
-#include <stdint.h>
 
 /* Lexique
 @srlze: serialize

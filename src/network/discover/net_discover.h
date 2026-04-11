@@ -2,9 +2,6 @@
 #define DSM_NET_DISCOVER_H
 
 #include "dsm.h"
-#include <netinet/in.h>
-#include <stdatomic.h>
-#include <stdint.h>
 
 #define DSM_DSCV_MAX_RETRIES 3
 #define DSM_DSCV_RESEND_INTERVAL_SEC 2

@@ -2,8 +2,6 @@
 
 #include "debug/debug.h"
 #include "network/network.h"
-#include <arpa/inet.h>
-#include <unistd.h>
 
 int dsm_tcp_send_all(int sock, const uint8_t *buf, size_t len) {
     size_t total_sent = 0;

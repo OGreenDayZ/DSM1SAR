@@ -1,11 +1,8 @@
 #include "network.h"
 
-#include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <net/if.h>
-#include <stdint.h>
 #include <string.h>
-#include <sys/socket.h>
 #include <unistd.h>
 
 #include "debug/debug.h"

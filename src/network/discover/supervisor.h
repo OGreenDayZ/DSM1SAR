@@ -1,8 +1,8 @@
 #ifndef DSM_SUPERVISOR_H
 #define DSM_SUPERVISOR_H
 
+#include "network/discover/net_discover.h"
 #include <stdatomic.h>
-#include <stdbool.h>
 
 typedef struct {
     // mutex id_count&reg
@@ -13,6 +13,6 @@ typedef struct {
 
 } dsm_supervisor_ctx;
 
-int dsm_supervisor_loop(void);
+int dsm_supervisor_loop(dsm_dscv_ctx *dscv_ctx);
 
 #endif // DSM_SUPERVISOR_H

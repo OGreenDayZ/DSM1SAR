@@ -1,7 +1,5 @@
 #include "serializer.h"
 
-#include <stdatomic.h>
-#include <stdint.h>
 #include <string.h>
 
 #include "internal.h"
