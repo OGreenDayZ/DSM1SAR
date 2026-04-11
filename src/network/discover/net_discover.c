@@ -94,6 +94,7 @@ static int recv_dscv_spvs_data() {
 
 static int send_dscv_init() {
     LOG_INFO("Recherche d'un Superviseur ...");
+
     struct sockaddr_in addr;
     dsm_make_addr(discover_ctx.multicast_ip, dsm_ctx->config.net.system.multicast_port,
                   &addr);
@@ -114,11 +115,10 @@ static int send_dscv_init() {
     for (int attempt = 1; attempt <= DSM_DSCV_MAX_RETRIES; attempt++) {
         LOG_INFO("\nTentative [%d/%d] — Demande de connexion en cours...", attempt,
                  DSM_DSCV_MAX_RETRIES);
-
+        LOG_INFO("Envoi d'un CODE=%d ...", CODE_DISCOVER_INIT);
         ssize_t sent_bytes = sendto(send_sock, msg_buf, msg_len, 0,
                                     (struct sockaddr *)&addr, sizeof(addr));
         if (sent_bytes < 0) {
-            LOG_ERROR("sendto");
             ret = -1;
             goto exit;
         }
@@ -260,6 +260,8 @@ static int connect_to_managers(const dsm_msg_dscv_share_reg *share) {
 }
 
 static int recv_dscv_share_reg() {
+    LOG_INFO("En attente d'un CODE=%d || CODE=%d ...",
+             CODE_DISCOVER_SHARE_REGISTRY_MANAGER, CODE_DISCOVER_SHARE_REGISTRY_WORKER);
     struct timeval timeout = {.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC, .tv_usec = 0};
     size_t buf_size = sizeof(dsm_msg_header);
     uint8_t hbuf[buf_size];
@@ -295,7 +297,6 @@ static int recv_dscv_share_reg() {
         }
 
         dsm_ctx->config.net.system.nb_nodes = share.sys_total_nodes;
-        // TODO ADD HASHTABLE
 
         LOG_INFO("Registre de nœuds reçu du superviseur : %u nœuds dans un système de %u "
                  "nœuds",
@@ -321,9 +322,10 @@ static int recv_dscv_share_reg() {
 }
 
 static int send_dscv_share_reg_ack() {
-    LOG_INFO("Envoi d'un ACK de partage de registre au superviseur ...");
+    LOG_INFO("Envoi d'un CODE=%d ...", CODE_DISCOVER_SHARE_REG_ACK);
 
-    if (dsm_tcp_bind_listen(dsm_ctx->config.net.node.tcp_port) < 0) {
+    discover_ctx.sock_tcp_listen = dsm_tcp_bind_listen(dsm_ctx->config.net.node.tcp_port);
+    if (discover_ctx.sock_tcp_listen < 0) {
         LOG_ERROR(
             "Erreur lors de la liaison du socket TCP pour les connexions entrantes");
         return -1;
@@ -336,9 +338,8 @@ static int send_dscv_share_reg_ack() {
         return -1;
     }
 
-    ssize_t sent_bytes = send(discover_ctx.supervisor_tcp_sock, buf, msg_len, 0);
+    int sent_bytes = dsm_tcp_send_all(discover_ctx.supervisor_tcp_sock, buf, msg_len);
     if (sent_bytes < 0) {
-        LOG_ERROR("send");
         return -1;
     }
 
@@ -347,12 +348,63 @@ static int send_dscv_share_reg_ack() {
 
 static int wait_workers_connect() {
     LOG_INFO("En attente de connexions des workers ...");
-    int connected_workers = 0;
-    int expected_workers = DSM_HASH_COUNT(dsm_ctx->nodes_reg); // TODO EXCLUDE SUPERVISOR;
+    int connected_workers = discover_ctx.supervisor_role == DSM_ROLE_WORKER ? 1 : 0;
+    int expected_workers = DSM_HASH_COUNT(dsm_ctx->nodes_reg);
+
+    while (connected_workers != expected_workers) {
+        struct sockaddr_in client_addr;
+        socklen_t addr_len = sizeof(client_addr);
+        int client_sock = accept(discover_ctx.sock_tcp_listen,
+                                 (struct sockaddr *)&client_addr, &addr_len);
+        if (client_sock < 0) {
+            LOG_ERROR("accept");
+            return -1;
+        }
+        // Comparer ID et IP
+        uint32_t client_ip = ntohl(client_addr.sin_addr.s_addr);
+        dsm_node_content *node_content;
+        /* @note : dsm_hash_for_each_possible pour la sécurité,
+         * même si ID est normalement unique */
+        dsm_hash_for_each_possible(dsm_ctx->nodes_reg, node_content, node, client_ip) {
+            if (node_content->ip == client_ip) {
+                node_content->tcp_sock = client_sock;
+                connected_workers++;
+                LOG_INFO("Worker %u connecté", node_content->id);
+                goto continue_accept;
+            }
+        }
+        close(client_sock);
+        LOG_ERROR("Connexion d'un client inconnu : IP %u", client_ip);
+        return -1;
+
+    continue_accept:;
+    }
 
     return 0;
 }
 
+static int send_dscv_mgr_ready() {
+    LOG_INFO("Envoi d'un CODE=%d ...", CODE_DISCOVER_MANAGER_READY);
+
+    uint8_t buf[sizeof(dsm_msg_header)];
+    int msg_len = dsm_srlze_dscv_mgr_ready(buf, sizeof(buf));
+    if (msg_len < 0) {
+        return -1;
+    }
+
+    int sent_bytes = dsm_tcp_send_all(discover_ctx.supervisor_tcp_sock, buf, msg_len);
+    if (sent_bytes < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+static int recv_dscv_wkr_config() {
+    LOG_INFO("En attente d'un CODE=%d ...", CODE_DISCOVER_WORKER_CONFIG);
+}
+
+// TODO FACTO
 int dsm_discover() {
 
     if (discover_sockets_init() < 0) {
@@ -382,6 +434,12 @@ int dsm_discover() {
 
         if (dsm_ctx->config.net.node.role == DSM_ROLE_MANAGER) {
             if (send_dscv_share_reg_ack() < 0) {
+                return -1;
+            }
+            if (wait_workers_connect() < 0) {
+                return -1;
+            }
+            if (send_dscv_mgr_ready() < 0) {
                 return -1;
             }
 

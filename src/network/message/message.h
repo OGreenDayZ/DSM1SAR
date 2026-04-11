@@ -91,6 +91,7 @@ typedef struct {
 /* CODE_DISCOVER_WORKER_CONFIG */
 typedef struct {
     uint64_t nb_pages;
+    uint32_t page_size;
 } dsm_msg_dscv_wkr_config;
 
 /* CODE_DISCOVER_WORKER_CONFIG_ACK */

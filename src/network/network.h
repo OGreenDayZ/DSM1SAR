@@ -5,8 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define DSM_MULTICAST_IP "239.1.2.3"
-#define DSM_MULTICAST_PORT 54321
+#define DSM_DEFAULT_MULTICAST_IP "239.1.2.3"
+#define DSM_DEFAULT_MULTICAST_PORT 54321
 
 int dsm_get_local_ip(uint32_t *ip);
 int dsm_make_addr(uint32_t ip, uint16_t port, struct sockaddr_in *addr);
