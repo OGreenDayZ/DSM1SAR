@@ -402,6 +402,85 @@ static int send_dscv_mgr_ready() {
 
 static int recv_dscv_wkr_config() {
     LOG_INFO("En attente d'un CODE=%d ...", CODE_DISCOVER_WORKER_CONFIG);
+    struct timeval timeout = {.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC, .tv_usec = 0};
+    size_t buf_size = sizeof(dsm_msg_header);
+    uint8_t hbuf[buf_size];
+
+    if (dsm_tcp_recv_all(discover_ctx.supervisor_tcp_sock, hbuf, buf_size, &timeout) <
+        0) {
+        return -1;
+    }
+
+    dsm_msg_header header;
+    if (dsm_dsrlze_header(hbuf, buf_size, &header) < 0) {
+        return -1;
+    }
+    if (header.code != CODE_DISCOVER_WORKER_CONFIG) {
+        LOG_ERROR("Code inconnu : %d", header.code);
+        return -1;
+    }
+
+    buf_size = sizeof(header.payload_len);
+    uint8_t pbuf[buf_size];
+    timeout.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC;
+    timeout.tv_usec = 0;
+    if (dsm_tcp_recv_all(discover_ctx.supervisor_tcp_sock, pbuf, buf_size, &timeout) <
+        0) {
+        return -1;
+    }
+    dsm_msg_dscv_wkr_config config;
+    if (dsm_dsrlze_dscv_wkr_config(pbuf, buf_size, &config) < 0) {
+        return -1;
+    }
+
+    dsm_ctx->config.pager.nb_pages = config.nb_pages;
+    dsm_ctx->config.pager.page_size = config.page_size;
+
+    LOG_INFO("Configuration de la mémoire partagée reçue du superviseur : %u pages de "
+             "%u octets chacune",
+             config.nb_pages, config.page_size);
+    return 0;
+}
+
+static int send_dscv_wkr_config_ack() {
+    LOG_INFO("Envoi d'un CODE=%d ...", CODE_DISCOVER_WORKER_CONFIG_ACK);
+
+    uint8_t buf[sizeof(dsm_msg_header)];
+    int msg_len = dsm_srlze_dscv_wkr_config_ack(buf, sizeof(buf));
+    if (msg_len < 0) {
+        return -1;
+    }
+
+    int sent_bytes = dsm_tcp_send_all(discover_ctx.supervisor_tcp_sock, buf, msg_len);
+    if (sent_bytes < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+static int recv_dscv_finalize() {
+    LOG_INFO("En attente d'un CODE=%d ...", CODE_DISCOVER_FINALIZE);
+    struct timeval timeout = {.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC, .tv_usec = 0};
+    size_t buf_size = sizeof(dsm_msg_header);
+    uint8_t hbuf[buf_size];
+
+    if (dsm_tcp_recv_all(discover_ctx.supervisor_tcp_sock, hbuf, buf_size, &timeout) <
+        0) {
+        return -1;
+    }
+
+    dsm_msg_header header;
+    if (dsm_dsrlze_header(hbuf, buf_size, &header) < 0) {
+        return -1;
+    }
+    if (header.code != CODE_DISCOVER_FINALIZE) {
+        LOG_ERROR("Code inconnu : %d", header.code);
+        return -1;
+    }
+
+    LOG_INFO("Finalisation de la phase de découverte par le superviseur");
+    return 0;
 }
 
 // TODO FACTO
@@ -444,9 +523,19 @@ int dsm_discover() {
             }
 
         } else if (dsm_ctx->config.net.node.role == DSM_ROLE_WORKER) {
+            if (recv_dscv_wkr_config() < 0) {
+                return -1;
+            }
+            if (send_dscv_wkr_config_ack() < 0) {
+                return -1;
+            }
 
         } else {
             LOG_ERROR("Rôle non attribué ?");
+            return -1;
+        }
+
+        if (recv_dscv_finalize() < 0) {
             return -1;
         }
 
