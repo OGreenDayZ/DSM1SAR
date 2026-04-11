@@ -18,10 +18,13 @@
 
 static dsm_dscv_ctx discover_ctx;
 
-static int discover_sockets_init() {
-    LOG_INFO("Initialisation des sockets UDP de découverte ...");
-    int ret = dsm_get_local_ip(&discover_ctx.my_ip);
-    if (ret < 0) {
+static int discover_ctx_init() {
+    LOG_INFO("Initialisation du contexte de découverte ...");
+
+    discover_ctx.sock_tcp_listen = -1;
+    discover_ctx.supervisor_tcp_sock = -1;
+
+    if (dsm_get_local_ip(&discover_ctx.my_ip) < 0) {
         return -1;
     }
 
@@ -53,6 +56,7 @@ exit_udp_error:
     return -1;
 }
 
+/* @return : -1 erreur, 0 trouvé, 1 non trouvé */
 static int recv_dscv_spvs_data() {
     LOG_INFO("En attente d'un CODE=%d ...", CODE_DISCOVER_SUPERVISOR_DATA);
     struct timeval timeout = {.tv_sec = DSM_DSCV_RESEND_INTERVAL_SEC, .tv_usec = 0};
@@ -64,7 +68,7 @@ static int recv_dscv_spvs_data() {
     if (dsm_udp_recvfrom(discover_ctx.sock_udp_recv, buf, buf_size, &src_ip, &src_port,
                          &timeout) < 0) {
         LOG_INFO("Aucun superviseur trouvé lors de cette tentative");
-        return -1;
+        return 1;
     }
 
     dsm_msg_header header;
@@ -92,6 +96,7 @@ static int recv_dscv_spvs_data() {
     return 0;
 }
 
+/* @return : -1 erreur, 0 noeud normal, 1 superviseur */
 static int send_dscv_init() {
     LOG_INFO("Recherche d'un Superviseur ...");
 
@@ -123,14 +128,16 @@ static int send_dscv_init() {
             goto exit;
         }
 
-        if (recv_dscv_spvs_data() < 0) {
-            continue;
-        } else {
+        ret = recv_dscv_spvs_data();
+        if (ret < 0) {
             goto exit;
+        } else if (ret == 0) { // Superviseur trouvé
+            break;
+        } else {
+            LOG_INFO("Aucun superviseur trouvé lors de cette tentative");
         }
     }
-
-    discover_ctx.is_supervisor = true;
+    // assert ret == 1 => aucun superviseur trouvé après toutes les tentatives
 
 exit:
     close(send_sock);
@@ -152,7 +159,7 @@ static int connect_to_supervisor() {
 }
 
 /*
-@note : Gérer retour -> 0 = succès, 1 = système complet, -1 = erreur
+@return : -1 erreur, 0 succès, 1 système complet
 */
 static int recv_dscv_join_ack() {
     LOG_INFO("En attente d'un CODE=%d ...", CODE_DISCOVER_JOIN_ACK);
@@ -248,7 +255,7 @@ static int connect_to_managers(const dsm_msg_dscv_share_reg *share) {
         } else {
             int manager_sock = dsm_tcp_connect_sock(reg_node->ip, reg_node->manager_port);
             if (manager_sock < 0) {
-                LOG_ERROR("Connexion au manager %u échouée", reg_node.id);
+                LOG_ERROR("Connexion au manager %u échouée", reg_node->id);
                 return -1;
             }
             node_content->tcp_sock = manager_sock;
@@ -322,7 +329,7 @@ static int recv_dscv_share_reg() {
 }
 
 static int send_dscv_share_reg_ack() {
-    LOG_INFO("Envoi d'un CODE=%d ...", CODE_DISCOVER_SHARE_REG_ACK);
+    LOG_INFO("Envoi d'un CODE=%d ...", CODE_DISCOVER_SHARE_REGISTRY_MANAGER_ACK);
 
     discover_ctx.sock_tcp_listen = dsm_tcp_bind_listen(dsm_ctx->config.net.node.tcp_port);
     if (discover_ctx.sock_tcp_listen < 0) {
@@ -486,16 +493,27 @@ static int recv_dscv_finalize() {
 // TODO FACTO
 int dsm_discover() {
 
-    if (discover_sockets_init() < 0) {
+    if (discover_ctx_init() < 0) {
         return -1;
     }
 
-    if (send_dscv_init() < 0) {
+    int is_supervisor = send_dscv_init();
+    close(discover_ctx.sock_udp_recv);
+    discover_ctx.sock_udp_recv = -1;
+    if (is_supervisor < 0) {
         LOG_ERROR("Erreur lors de la découverte du superviseur");
         return -1;
     }
 
-    if (!discover_ctx.is_supervisor) {
+    if (is_supervisor) {
+        LOG_INFO("Elu en tant que superviseur du système");
+        dsm_ctx->node_id = 0;
+
+    } else {
+
+        close(discover_ctx.sock_udp_mcast);
+        discover_ctx.sock_udp_mcast = -1;
+
         if (connect_to_supervisor() < 0) {
             return -1;
         }
@@ -515,9 +533,13 @@ int dsm_discover() {
             if (send_dscv_share_reg_ack() < 0) {
                 return -1;
             }
+
             if (wait_workers_connect() < 0) {
                 return -1;
             }
+            close(discover_ctx.sock_tcp_listen);
+            discover_ctx.sock_tcp_listen = -1;
+
             if (send_dscv_mgr_ready() < 0) {
                 return -1;
             }
@@ -539,9 +561,10 @@ int dsm_discover() {
             return -1;
         }
 
-    } else {
-        LOG_INFO("Elu en tant que superviseur du système");
-        dsm_ctx->node_id = 0;
+        if (discover_ctx.supervisor_role == dsm_ctx->config.net.node.role) {
+            close(discover_ctx.supervisor_tcp_sock);
+            discover_ctx.supervisor_tcp_sock = -1;
+        }
     }
 
     return 0;

@@ -4,7 +4,6 @@
 #include "dsm.h"
 #include <netinet/in.h>
 #include <stdatomic.h>
-#include <stdbool.h>
 #include <stdint.h>
 
 #define DSM_DSCV_MAX_RETRIES 3
@@ -13,20 +12,16 @@
 /* Uniquemement utile jusqu'à la fin du discover */
 typedef struct {
     uint32_t my_ip;
+
     int sock_tcp_listen;
     int sock_udp_recv;
     int sock_udp_mcast;
     uint32_t multicast_ip;
 
-    bool is_supervisor;
-
     uint32_t supervisor_ip;
     uint16_t supervisor_tcp_port;
     int supervisor_tcp_sock;
     dsm_node_role supervisor_role;
-
-    atomic_int id_count;
-    // JOIN LIST ?
 
 } dsm_dscv_ctx;
 

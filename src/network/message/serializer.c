@@ -95,7 +95,6 @@ int dsm_srlze_dscv_join_ack(int assigned_id, uint8_t *buf, size_t buf_sz) {
         .payload_len = sizeof(dsm_msg_dscv_join_ack),
     };
 
-    // atomic_fetch_add(&dscv_ctx->id_count, 1); TODO autre part
     dsm_msg_dscv_join_ack payload = {
         .assigned_id = htonl(assigned_id),
     };
