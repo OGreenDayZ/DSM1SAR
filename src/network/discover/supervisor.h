@@ -5,8 +5,10 @@
 #include <stdbool.h>
 
 #include "network/discover/net_discover.h"
+#include "util/list.h"
+#include "util/thread_pool.h"
 
-#define DSM_SPVS_POLL_MAX_FDS 2
+#define DSM_SPVS_POLL_FDS_SERVER 2
 #define DSM_SPVS_POLL_TIMEOUT_MS 3000
 
 typedef enum {
@@ -19,15 +21,28 @@ typedef enum {
 } dsm_supervising_state;
 
 typedef struct {
-    bool finalized;
+    int id_node;
+    int fd;
+    struct dsm_list_head node;
+} dsm_poll_update_entry;
+
+typedef struct {
+    dsm_supervising_state state;
 
     atomic_int id_count;
     pthread_mutex_t id_count_mutex;
 
-    // JOIN LIST ?
-    // reg temp
-    // pool threads
+    dsm_list_head eligible_ip; // ou map
+    pthread_mutex_t eligible_mutex;
 
+    // TODO + map reg temp
+
+    dsm_list_head poll_fds_update;
+    pthread_mutex_t poll_update_mutex;
+
+    dsm_thread_pool *pool;
+
+    // TODO ACK + COUNT vars
 } dsm_supervisor_ctx;
 
 int dsm_supervisor_loop(dsm_dscv_ctx *dscv_ctx);

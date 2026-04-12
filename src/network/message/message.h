@@ -1,6 +1,7 @@
 #ifndef DSM_MESSAGE_H
 #define DSM_MESSAGE_H
 
+#include <netinet/in.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/time.h>
@@ -105,6 +106,12 @@ typedef struct {
 // } dsm_msg_dscv_finalize;
 
 #pragma pack(pop)
+
+typedef struct {
+    struct sockaddr_in src_addr;
+    dsm_msg_header header;
+    uint8_t *payload;
+} dsm_msg_thread_ctx;
 
 int dsm_tcp_send_all(int sock, const uint8_t *buf, size_t len);
 int dsm_tcp_recv_all(int sock, uint8_t *buf, size_t len, struct timeval *tv);
