@@ -1,6 +1,5 @@
 #include "dsm.h"
 #include "pager/pager.h"
-#include <stdlib.h>
 
 int main(int argc, char const *argv[]) {
     dsm_config dsm_config;

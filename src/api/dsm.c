@@ -7,6 +7,7 @@
 #include "internal.h"
 #include "network/network.h"
 #include "pager/pager.h"
+#include "util/hashmap.h"
 
 dsm_context *dsm_ctx = NULL;
 
@@ -30,7 +31,7 @@ static int validate_config(const dsm_config *config) {
     return 0;
 }
 
-static int context_init(const dsm_config *config) {
+static int dsm_ctx_init(const dsm_config *config) {
     if (dsm_ctx != NULL) {
         LOG_ERROR("DSM déjà initialisé");
         return DSM_ERROR_ALREADY_INIT;
@@ -47,6 +48,16 @@ static int context_init(const dsm_config *config) {
         return DSM_ERROR_CONTEXT_ALLOC;
     }
     dsm_ctx->config = *config;
+    dsm_ctx->node_id = 0;
+
+    for (size_t i = 0; i < DSM_HASH_SIZE(dsm_ctx->nodes_reg); i++) {
+        dsm_ctx->nodes_reg[i].first = NULL;
+    }
+
+    for (size_t i = 0; i < DSM_HASH_SIZE(dsm_ctx->pages_reg); i++) {
+        dsm_ctx->pages_reg[i].first = NULL;
+    }
+
     return 0;
 }
 
@@ -68,11 +79,13 @@ void dsm_get_default_config(dsm_config *config) {
 
 int dsm_init(const dsm_config *config) {
     LOG_INFO("Initialisation de DSM1SAR...");
-    int ret = context_init(config);
+    int ret = dsm_ctx_init(config);
     if (ret != 0) {
         return ret;
     }
 
     ret = dsm_network_init();
+
+    // TODO SPLIT THREAD AVANT RETURN
     return ret;
 }
