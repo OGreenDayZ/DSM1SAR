@@ -1,21 +1,23 @@
 // #include "debug/debug.h"
 
-#include <stdio.h>
-#include <assert.h>
 #include "util/hashmap.h"
+#include <assert.h>
+#include <stdio.h>
 struct item {
-    int                   id;
+    int id;
     struct dsm_hlist_node node;
 };
 
-DSM_DEFINE_HASHTABLE(table, 4); /* 16 buckets */
+// DSM_DEFINE_HASHTABLE(table, 4); /* 16 buckets */
 
 int main(int argc, char const *argv[]) {
 
-    struct item a = { .id = 1 };
-    struct item b = { .id = 2 };
-    struct item c = { .id = 1 }; /* collision volontaire avec a */
+    struct item a = {.id = 1};
+    struct item b = {.id = 2};
+    struct item c = {.id = 1}; /* collision volontaire avec a */
 
+    struct dsm_hlist_head table[16];
+    dsm_hash_init(table);
     /* ── Insertion ── */
     dsm_hash_add(table, &a.node, a.id);
     dsm_hash_add(table, &b.node, b.id);

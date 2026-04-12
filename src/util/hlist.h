@@ -26,6 +26,7 @@ struct dsm_hlist_node {
  * @param node noeud à initialiser 
  */
 #define DSM_HLIST_HEAD_INIT    { .first = NULL }
+#define DSM_INIT_HLIST_HEAD(ptr)  ((ptr)->first = NULL )
 #define DSM_HLIST_HEAD(name)   struct dsm_hlist_head name = DSM_HLIST_HEAD_INIT
 
 static inline void dsm_init_hlist_node(struct dsm_hlist_node *node)
