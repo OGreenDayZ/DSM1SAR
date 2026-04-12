@@ -5,8 +5,9 @@
 #ifndef DSM_THREAD_POOL_H
 #define DSM_THREAD_POOL_H
 #include <pthread.h>
+#include <sys/sysinfo.h>
 
-#define NB_THREADS 12
+#define DEFAULT_NB_THREADS get_nprocs()
 
 /**
  * @brief Structure des types d'erreurs possibles sur les fonctions lié au pool de threads
