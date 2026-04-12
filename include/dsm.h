@@ -9,6 +9,7 @@
 /* --- Memoire --- */
 typedef struct {
     unsigned long nb_pages; // Nombre de pages
+    unsigned int page_size; // Taille d'une page en octets
     //+
 } dsm_pager_config;
 
@@ -47,9 +48,10 @@ typedef struct {
 
 /* --- Erreurs --- */
 typedef enum {
-    DSM_SUCCESS = 0, // Eviter de retourner 0 pour les erreurs, réserver pour succès
+    DSM_SUCCESS = 0, // Eviter de retourner 0 pour les erreurs, réservé pour succès
     /* Init & Context */
     DSM_ERROR_INIT_ARG_NB_PAGES,
+    DSM_ERROR_INIT_ARG_PAGE_SIZE,
     DSM_ERROR_INIT_ARG_NB_NODES,
     DSM_ERROR_INIT_ARG_NB_MANAGERS,
     DSM_ERROR_ALREADY_INIT,

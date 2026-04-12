@@ -1,6 +1,5 @@
 #include "serializer.h"
 
-#include <stdatomic.h>
 #include <string.h>
 
 #include "internal.h"
@@ -94,7 +93,6 @@ int dsm_srlze_dscv_join_ack(int assigned_id, uint8_t *buf, size_t buf_sz) {
         .payload_len = sizeof(dsm_msg_dscv_join_ack),
     };
 
-    // atomic_fetch_add(&dscv_ctx->id_count, 1); TODO autre part
     dsm_msg_dscv_join_ack payload = {
         .assigned_id = htonl(assigned_id),
     };
@@ -120,7 +118,6 @@ static int serialize_reg_node(dsm_reg_node *node, uint8_t *buf, size_t buf_sz) {
 
     dsm_reg_node net_node = {
         .id = htonl(node->id),
-        .is_manager = node->is_manager, // 1 octet, pas besoin de hton
         .ip = htonl(node->ip),
         .manager_port = htons(node->manager_port),
     };
@@ -194,7 +191,8 @@ int dsm_srlze_dscv_mgr_ready(uint8_t *buf, size_t buf_sz) {
 // dsm_srlze_dscv_mgr_ready
 // srlze_dscv_mgr_ready
 
-int dsm_srlze_dscv_wkr_config(uint64_t nb_pages, uint8_t *buf, size_t buf_sz) {
+int dsm_srlze_dscv_wkr_config(uint64_t nb_pages, uint32_t page_size, uint8_t *buf,
+                              size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_wkr_config)) {
         return -1;
     }
@@ -207,6 +205,7 @@ int dsm_srlze_dscv_wkr_config(uint64_t nb_pages, uint8_t *buf, size_t buf_sz) {
 
     dsm_msg_dscv_wkr_config payload = {
         .nb_pages = htobe64(nb_pages),
+        .page_size = htonl(page_size),
     };
 
     int offset = serialize_header(&header, buf, buf_sz);
@@ -287,7 +286,6 @@ static int deserialize_reg_node(uint8_t *buf, size_t buf_sz, dsm_reg_node *node)
     dsm_reg_node net_node;
     memcpy(&net_node, buf, sizeof(net_node));
     node->id = ntohl(net_node.id);
-    node->is_manager = net_node.is_manager; // 1 octet, pas besoin de ntoh
     node->ip = ntohl(net_node.ip);
     node->manager_port = ntohs(net_node.manager_port);
 
@@ -337,6 +335,7 @@ int dsm_dsrlze_dscv_wkr_config(uint8_t *buf, size_t buf_sz,
     dsm_msg_dscv_wkr_config net_msg;
     memcpy(&net_msg, buf, sizeof(net_msg));
     msg->nb_pages = be64toh(net_msg.nb_pages);
+    msg->page_size = ntohl(net_msg.page_size);
 
     return sizeof(dsm_msg_dscv_wkr_config);
 }

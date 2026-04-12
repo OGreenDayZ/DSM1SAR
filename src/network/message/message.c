@@ -2,8 +2,6 @@
 
 #include "debug/debug.h"
 #include "network/network.h"
-#include <arpa/inet.h>
-#include <unistd.h>
 
 int dsm_tcp_send_all(int sock, const uint8_t *buf, size_t len) {
     size_t total_sent = 0;
@@ -47,8 +45,8 @@ int dsm_tcp_recv_all(int sock, uint8_t *buf, size_t len, struct timeval *tv) {
     return 0;
 }
 
-int dsm_udp_sendto(int sock, const uint8_t *buf, size_t len, const char *dest_ip,
-                   int dest_port) {
+int dsm_udp_sendto(int sock, const uint8_t *buf, size_t len, uint32_t dest_ip,
+                   uint16_t dest_port) {
     struct sockaddr_in dest_addr;
     if (dsm_make_addr(dest_ip, dest_port, &dest_addr) < 0) {
         return -1;
@@ -65,8 +63,9 @@ int dsm_udp_sendto(int sock, const uint8_t *buf, size_t len, const char *dest_ip
     return 0;
 }
 
-int dsm_udp_recvfrom(int sock, uint8_t *buf, size_t len, char *src_ip, int *src_port,
-                     struct timeval *tv) {
+/* @note : src_ip & src_port -> Host byte order */
+int dsm_udp_recvfrom(int sock, uint8_t *buf, size_t len, uint32_t *src_ip,
+                     uint16_t *src_port, struct timeval *tv) {
     fd_set read_fds;
     FD_ZERO(&read_fds);
     FD_SET(sock, &read_fds);
@@ -92,10 +91,8 @@ int dsm_udp_recvfrom(int sock, uint8_t *buf, size_t len, char *src_ip, int *src_
         return -1;
     }
 
-    if (src_ip &&
-        inet_ntop(AF_INET, &src_addr.sin_addr, src_ip, INET_ADDRSTRLEN) == NULL) {
-        LOG_ERROR("inet_ntop");
-        return -1;
+    if (src_ip) {
+        *src_ip = ntohl(src_addr.sin_addr.s_addr);
     }
     if (src_port) {
         *src_port = ntohs(src_addr.sin_port);
