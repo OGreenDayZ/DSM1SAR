@@ -8,7 +8,7 @@ struct item {
     struct dsm_hlist_node node;
 };
 
-DSM_DEFINE_HASHTABLE(table, 4); /* 16 buckets */
+// DSM_DEFINE_HASHTABLE(table, 4); /* 16 buckets */
 
 int main(int argc, char const *argv[]) {
 
@@ -16,6 +16,8 @@ int main(int argc, char const *argv[]) {
     struct item b = {.id = 2};
     struct item c = {.id = 1}; /* collision volontaire avec a */
 
+    struct dsm_hlist_head table[16];
+    dsm_hash_init(table);
     /* ── Insertion ── */
     dsm_hash_add(table, &a.node, a.id);
     dsm_hash_add(table, &b.node, b.id);
