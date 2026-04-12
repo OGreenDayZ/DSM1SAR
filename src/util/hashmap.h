@@ -59,12 +59,6 @@ static inline uint32_t dsm_hash_64(uint64_t val, unsigned int bits) {
     struct dsm_hlist_head name[1 << (bits)] = {[0 ...((1 << (bits)) - 1)] =              \
                                                    DSM_HLIST_HEAD_INIT}
 
-/** Retirer une element de la table */
-/**
- * @node : le noeud a supprimer de la liste
- *
- * Supprime le noeud n de la map
- */
 
 /**
  * @brief Supprime le node de la map

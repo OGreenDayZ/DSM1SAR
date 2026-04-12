@@ -64,7 +64,7 @@ void dsm_thread_pager(int *fd) {
         }
 
         switch (fault_msg.event) {
-            case UFFD_EVENT_PAGEFAULT: // && fault_msg. == UFFD_PAGEFAULT_FLAG_WP:
+            case UFFD_EVENT_PAGEFAULT: //&& fault_msg. == UFFD_PAGEFAULT_FLAG_WP:
                 break;
             case UFFD_EVENT_REMOVE: // lors de l'invocation de madvise
                 break;
