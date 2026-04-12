@@ -1,19 +1,15 @@
 #include "network.h"
 
-#include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <net/if.h>
-#include <stdio.h>
 #include <string.h>
-#include <sys/socket.h>
 #include <unistd.h>
 
 #include "debug/debug.h"
 #include "network/discover/net_discover.h"
 
-int dsm_get_local_ip(char *buffer, size_t buflen) {
+int dsm_get_local_ip(uint32_t *ip) {
     struct ifaddrs *ifaddr, *ifa;
-    int success = -1;
 
     if (getifaddrs(&ifaddr) == -1) {
         LOG_ERROR("getifaddrs");
@@ -34,35 +30,30 @@ int dsm_get_local_ip(char *buffer, size_t buflen) {
         }
 
         struct sockaddr_in *addr = (struct sockaddr_in *)ifa->ifa_addr;
-
-        if (inet_ntop(AF_INET, &(addr->sin_addr), buffer, buflen) != NULL) {
-            success = 0;
-            break;
-        }
+        *ip = ntohl(addr->sin_addr.s_addr);
+        break;
     }
 
     freeifaddrs(ifaddr);
 
-    if (success != 0) {
+    if (ifa == NULL) {
         LOG_ERROR("Aucune interface IPv4 locale valide trouvée.");
+        return -1;
     }
-
-    return success;
+    return 0;
 }
 
-int dsm_make_addr(const char *ip, int port, struct sockaddr_in *addr) {
+int dsm_make_addr(uint32_t ip, uint16_t port, struct sockaddr_in *addr) {
     memset(addr, 0, sizeof(struct sockaddr_in));
     addr->sin_family = AF_INET;
     addr->sin_port = htons(port);
 
-    if (ip == NULL || strlen(ip) == 0) {
+    if (ip == 0) {
         addr->sin_addr.s_addr = INADDR_ANY;
     } else {
-        if (inet_pton(AF_INET, ip, &addr->sin_addr) <= 0) {
-            LOG_ERROR("IP invalide: %s", ip);
-            return -1;
-        }
+        addr->sin_addr.s_addr = htonl(ip);
     }
+
     return 0;
 }
 
@@ -84,7 +75,7 @@ int dsm_tcp_sock() {
     return sock;
 }
 
-int dsm_tcp_connect_sock(const char *ip, int port) {
+int dsm_tcp_connect_sock(uint32_t ip, uint16_t port) {
     int sock = dsm_tcp_sock();
     if (sock < 0)
         return -1;
@@ -106,13 +97,13 @@ error_exit:
     return -1;
 }
 
-int dsm_tcp_bind_listen(const char *ip, int port) {
+int dsm_tcp_bind_listen(uint16_t port) {
     int sock = dsm_tcp_sock();
     if (sock < 0)
         return -1;
 
     struct sockaddr_in addr;
-    if (dsm_make_addr(ip, port, &addr) < 0) {
+    if (dsm_make_addr(0, port, &addr) < 0) {
         goto error_exit;
     }
 
@@ -151,13 +142,13 @@ int dsm_udp_sock() {
     return sock;
 }
 
-int dsm_udp_bind_unicast(const char *ip, int port) {
+int dsm_udp_bind_unicast(uint16_t port) {
     int sock = dsm_udp_sock();
     if (sock < 0)
         return -1;
 
     struct sockaddr_in addr;
-    if (dsm_make_addr(ip, port, &addr) < 0) {
+    if (dsm_make_addr(0, port, &addr) < 0) {
         goto error_exit;
     }
 
@@ -173,18 +164,14 @@ error_exit:
     return -1;
 }
 
-int dsm_udp_bind_multicast(const char *mcast_addr, int port) {
-    int sock = dsm_udp_bind_unicast(NULL, port);
+int dsm_udp_bind_multicast(uint32_t mcast_ip, uint16_t port) {
+    int sock = dsm_udp_bind_unicast(port);
     if (sock < 0)
         return -1;
 
     struct ip_mreq group;
     memset(&group, 0, sizeof(group));
-    if (inet_pton(AF_INET, mcast_addr, &group.imr_multiaddr) <= 0) {
-        LOG_ERROR("IP multicast invalide: %s", mcast_addr);
-        goto error_exit;
-    }
-
+    group.imr_multiaddr.s_addr = htonl(mcast_ip);
     group.imr_interface.s_addr = INADDR_ANY;
 
     if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &group, sizeof(group)) < 0) {

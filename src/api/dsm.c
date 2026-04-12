@@ -11,10 +11,19 @@
 
 dsm_context *dsm_ctx = NULL;
 
+static int is_power_of_two(size_t x) {
+    return (x != 0) && ((x & (x - 1)) == 0);
+}
+
 static int validate_config(const dsm_config *config) {
     if (config->pager.nb_pages == 0) {
         LOG_ERROR("nb_pages doit être > 0");
         return DSM_ERROR_INIT_ARG_NB_PAGES;
+    }
+
+    if (!is_power_of_two(config->pager.page_size)) {
+        LOG_ERROR("page_size doit être une puissance de 2 > 0");
+        return DSM_ERROR_INIT_ARG_PAGE_SIZE;
     }
 
     if (config->net.system.nb_nodes == 0) {
@@ -62,19 +71,21 @@ static int dsm_ctx_init(const dsm_config *config) {
 }
 
 void dsm_get_default_config(dsm_config *config) {
-    // Pour certains champs, si 0 gardé => soulève erreur à l'init (ex:nb_nodes)
+    // Pour certains champs, si 0 => soulève erreur à l'init (ex:nb_nodes)
     // et #accept si la valeur sera redéfinie en interne si non spécifiée par l'user
-    config->pager.nb_pages = DSM_NB_PAGES;
+    config->pager.nb_pages = DSM_DEFAULT_NB_PAGES;
+    config->pager.page_size = DSM_DEFAULT_PAGESIZE;
 
     config->net.system.system_id = 0;
     config->net.system.nb_managers = 0;
     config->net.system.nb_nodes = 0;
-    snprintf(config->net.system.multicast_ip, INET_ADDRSTRLEN, "%s", DSM_MULTICAST_IP);
-    config->net.system.multicast_port = DSM_MULTICAST_PORT;
+    snprintf(config->net.system.multicast_ip, INET_ADDRSTRLEN, "%s",
+             DSM_DEFAULT_MULTICAST_IP);
+    config->net.system.multicast_port = DSM_DEFAULT_MULTICAST_PORT;
 
-    config->net.node.role = DSM_ROLE_UNDEFINED; // #accept
-    config->net.node.tcp_port = 0;              // #accept
-    config->net.node.udp_port = 0;              // #accept
+    config->net.node.role = DSM_ROLE_UNDEFINED;
+    config->net.node.tcp_port = 0; // #accept
+    config->net.node.udp_port = 0; // #accept
 }
 
 int dsm_init(const dsm_config *config) {
