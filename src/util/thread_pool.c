@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 dsm_thread_pool *pool_create(int nb_threads, int size_q) {
     dsm_thread_pool *pool = malloc(sizeof(dsm_thread_pool));
@@ -26,11 +27,11 @@ dsm_thread_pool *pool_create(int nb_threads, int size_q) {
         perror("malloc queue");
         goto error;
     }
-
+    // initialse le mutex et la var cond ect a 0
+    // pour éviter le cas, on free le mutex et var_cond alors qu'ils n'existent pas,
+    // comportement indéfini par POSIX
+    memset(pool->queue, 0, sizeof(dsm_task_queue));
     pool->queue->capacity = size_q;
-    pool->queue->count = 0;
-    pool->queue->head = 0;
-    pool->queue->tail = 0;
 
     if (pthread_mutex_init(&(pool->queue->mutex), NULL)) {
         perror("init mutex");
@@ -47,8 +48,8 @@ dsm_thread_pool *pool_create(int nb_threads, int size_q) {
         perror("malloc tasks");
         goto error;
     }
-    // Initialiser les threads :
 
+    // Initialiser les threads :
     for (i = 0; i < nb_threads; i++) {
         res = pthread_create(&pool->threads[i], NULL, pool_slave_routine, (void *)pool);
         if (res) {
@@ -86,7 +87,8 @@ void *pool_slave_routine(void *threadpool) {
         task.func = queue->tasks[queue->head].func;
         task.args = queue->tasks[queue->head].args;
         queue->count--;
-        queue->head = (queue->head + 1) % queue->capacity; // liste circulaire
+        queue->head = (queue->head + 1) %
+                      queue->capacity; // liste circulaire - nouvelle tête de liste
         pthread_mutex_unlock(&pool->queue->mutex);
         (*(task.func))(task.args);
     }
@@ -96,7 +98,6 @@ void *pool_slave_routine(void *threadpool) {
     return NULL;
 }
 
-// ajoute une tache dans la queue
 int pool_add_task(dsm_thread_pool *pool, void (*func)(void *), void *arg) {
     if (pool == NULL || func == NULL) {
         perror("invalid arguments add_task");
@@ -115,7 +116,9 @@ int pool_add_task(dsm_thread_pool *pool, void (*func)(void *), void *arg) {
         return THREAD_SHUTING_DOWN;
     }
 
-    // Queue rempli, les consommateurs doivent consommer
+    // Queue rempli, on peut pas ajouter de tâche
+    // On reveille pas les threads, car si la queue est remplie, les threads sont
+    // forcément réveiller
     if (queue->count == queue->capacity) {
         if (pthread_mutex_unlock(&queue->mutex) != 0)
             goto error_mutex;
@@ -147,7 +150,7 @@ error_mutex:
 
 int pool_destroy(dsm_thread_pool *pool, dsm_pool_shutdown shutdown) {
     dsm_task_queue *queue = pool->queue;
-    int i, to_join;
+    int i;
     if (pthread_mutex_lock(&queue->mutex)) {
         perror("lock destroy");
         return THREAD_MUTEX_ERR;
@@ -163,19 +166,20 @@ int pool_destroy(dsm_thread_pool *pool, dsm_pool_shutdown shutdown) {
         return THREAD_COND_ERR;
     }
 
-    to_join = pool->thread_started;
+    // on recupere thread_started sous mutex, car il est modifié en concurrence (dans
+    // pool_slave_routine)
     if (pthread_mutex_unlock(&queue->mutex) != 0) {
         perror("unlock destroy");
         return THREAD_MUTEX_ERR;
     }
-
-    for (i = 0; i < to_join; i++) {
+    // On attends la fin tout les threads
+    for (i = 0; i < pool->thread_count; i++) {
         if (pthread_join(pool->threads[i], NULL) != 0) {
             perror("join destroy");
             return THREAD_JOIN_ERR;
         }
     }
-
+    // On free les ressources
     pool_free(pool);
     return 0;
 }
