@@ -1,21 +1,13 @@
-#include <stdio.h>
-#include <sys/mman.h>
-#ifdef __linux__
-#include <linux/userfaultfd.h>
-// ... code utilisant userfaultfd ...
-#elif defined(__APPLE__)
-// Alternative macOS ou erreur explicite
-#warning                                                                                 \
-    "userfaultfd n'est pas supporté sur macOS. Certaines fonctionnalités seront limitées."
-#endif
+#include "pager.h"
 #include <fcntl.h>
 #include <internal.h>
+#include <linux/userfaultfd.h>
 #include <poll.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <sys/syscall.h>
-
-#include "pager.h"
 
 static int userfaultfd(int flags) {
     // UFFD_USER_MODE_ONLY -> rattrape que les fautes user et non kernel
