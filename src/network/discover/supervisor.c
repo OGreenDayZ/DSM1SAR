@@ -11,6 +11,7 @@
 #include "network/message/message.h"
 #include "network/message/serializer.h"
 #include "network/network.h"
+#include "util/list.h"
 
 static dsm_supervisor_ctx spvs_ctx;
 
@@ -21,9 +22,15 @@ static int supervisor_config(dsm_dscv_ctx *dscv_ctx) {
         return -1;
     }
 
-    if (pthread_mutex_init(&spvs_ctx.id_count_mutex, NULL) != 0) {
+    if (pthread_mutex_init(&spvs_ctx.id_count_mutex, NULL) != 0 ||
+        pthread_mutex_init(&spvs_ctx.eligible_mutex, NULL) != 0 ||
+        pthread_mutex_init(&spvs_ctx.poll_update_mutex, NULL) != 0 ||
+        pthread_mutex_init(&spvs_ctx.ack_count_mutex, NULL) != 0) {
         return -1;
     }
+
+    dsm_list_init(&spvs_ctx.eligible_ip);
+    dsm_list_init(&spvs_ctx.poll_fds_update);
 
     spvs_ctx.pool = pool_create(dsm_ctx->config.net.node.pool_nb_threads,
                                 dsm_ctx->config.net.node.pool_queue_size);

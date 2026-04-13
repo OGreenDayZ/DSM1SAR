@@ -21,6 +21,11 @@ typedef enum {
 } dsm_supervising_state;
 
 typedef struct {
+    int ip;
+    struct dsm_list_head node;
+} dsm_eligible_entry;
+
+typedef struct {
     int id_node;
     int fd;
     struct dsm_list_head node;
@@ -32,7 +37,7 @@ typedef struct {
     atomic_int id_count;
     pthread_mutex_t id_count_mutex;
 
-    dsm_list_head eligible_ip; // ou map
+    dsm_list_head eligible_ip;
     pthread_mutex_t eligible_mutex;
 
     // TODO + map reg temp
@@ -42,7 +47,9 @@ typedef struct {
 
     dsm_thread_pool *pool;
 
-    // TODO ACK + COUNT vars
+    atomic_int ack_count;
+    pthread_mutex_t ack_count_mutex;
+
 } dsm_supervisor_ctx;
 
 int dsm_supervisor_loop(dsm_dscv_ctx *dscv_ctx);
