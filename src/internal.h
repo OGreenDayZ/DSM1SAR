@@ -31,6 +31,7 @@ typedef struct {
 
     struct dsm_hlist_head nodes_reg[1 << DSM_NODE_HASH_BITS];
     struct dsm_hlist_head pages_reg[1 << DSM_PAGE_HASH_BITS];
+    // + mutex ?
 
     // à étendre...
 } dsm_context;

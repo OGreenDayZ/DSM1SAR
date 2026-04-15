@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include "debug/debug.h"
 #include "dsm.h"
@@ -12,9 +13,11 @@
 #include "network/message/message.h"
 #include "network/message/serializer.h"
 #include "network/network.h"
+#include "util/atomicity.h"
+#include "util/hashmap.h"
 #include "util/list.h"
 
-static dsm_supervisor_ctx spvs_ctx;
+static dsm_supervisor_ctx spvs_ctx; // TODO MALLOC
 
 static int supervisor_config(dsm_dscv_ctx *dscv_ctx) {
 
@@ -33,6 +36,10 @@ static int supervisor_config(dsm_dscv_ctx *dscv_ctx) {
 
     spvs_ctx.pool = pool_create(dsm_ctx->config.net.node.pool_nb_threads,
                                 dsm_ctx->config.net.node.pool_queue_size);
+
+    for (size_t i = 0; i < DSM_HASH_SIZE(spvs_ctx.spvs_reg); i++) {
+        spvs_ctx.spvs_reg[i].first = NULL;
+    }
 
     return 0;
 }
@@ -96,12 +103,77 @@ exit_err_ctx:
 }
 
 static int handle_tcp_listen(dsm_dscv_ctx *dscv_ctx) {
+    LOG_INFO("Message reçu sur la socket TCP d'écoute");
 
+    struct sockaddr_in client_addr;
+    socklen_t addr_len = sizeof(client_addr);
+
+    int client_sock =
+        accept(dscv_ctx->sock_tcp_listen, (struct sockaddr *)&client_addr, &addr_len);
+
+    if (client_sock < 0) {
+        LOG_ERROR("Erreur accept : %d", client_sock);
+        return -1;
+    }
+
+    uint32_t client_ip = client_addr.sin_addr.s_addr;
+    dsm_eligible_entry *pos, *n;
+    pthread_mutex_lock(&spvs_ctx.eligible_mutex);
+    dsm_list_for_each_entry_safe(pos, n, &spvs_ctx.eligible_ip, node) {
+        if (pos->ip == client_ip) {
+            dsm_list_del(&pos->node);
+            free(pos);
+            pthread_mutex_unlock(&spvs_ctx.eligible_mutex);
+            LOG_INFO("Client éligible connecté");
+            goto found;
+        }
+    }
+    pthread_mutex_unlock(&spvs_ctx.eligible_mutex);
+    close(client_sock);
+    LOG_ERROR("Connexion d'un client non éligible");
     return -1;
+
+    dsm_poll_update_entry *update_entry;
+    unsigned int id_node;
+found:
+
+    bool added = increment_if_less_ext(&spvs_ctx.id_count,
+                                       dsm_ctx->config.net.system.nb_nodes - 1, &id_node);
+
+    if (!added) {
+        close(client_sock);
+        // send system full
+        return 0;
+    }
+
+    update_entry = malloc(sizeof(dsm_poll_update_entry));
+    if (!update_entry) {
+        LOG_ERROR("Erreur malloc : update_entry");
+        return -1;
+    }
+
+    update_entry->id_node = id_node;
+    update_entry->fd = client_sock;
+    pthread_mutex_lock(&spvs_ctx.poll_update_mutex);
+    dsm_list_add_tail(&update_entry->node, &spvs_ctx.poll_fds_update);
+    pthread_mutex_unlock(&spvs_ctx.poll_update_mutex);
+
+    return 0;
 }
 
-static int handle_tcp_recv(dsm_msg_thread_ctx *msg_ctx, int poll_index) {
+static int handle_tcp_recv(dsm_dscv_ctx *dscv_ctx, int poll_index) {
     int id_node = poll_index - DSM_SPVS_POLL_FDS_SERVER;
+    LOG_INFO("Message reçu sur une socket TCP (ID_Node=%d)", id_node);
+
+    dsm_msg_thread_ctx *msg_ctx = malloc(sizeof(dsm_msg_thread_ctx));
+    if (!msg_ctx) {
+        LOG_ERROR("Erreur malloc : msg_ctx");
+        return -1;
+    }
+    struct timeval tv = {.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC, .tv_usec = 0};
+    uint8_t hbuf[sizeof(dsm_msg_header)];
+
+    int *recv_sock;
 
     return 0;
 }
@@ -115,12 +187,20 @@ static void update_spvs_state() {
         case DSM_SPVS_STATE_SCANNING:
             expected = dsm_ctx->config.net.system.nb_nodes - 1;
             if (atomic_load(&spvs_ctx.join_count) == expected) {
-                atomic_store(&spvs_ctx.state, DSM_SPVS_STATE_SHARING);
-                // TODO sharing send
+                atomic_store(&spvs_ctx.state, DSM_SPVS_STATE_ROLE_COLLECTING);
+                // TODO send id / system full
             }
             return;
 
-        case DSM_SPVS_STATE_SHARING:
+        case DSM_SPVS_STATE_ROLE_COLLECTING:
+            expected = dsm_ctx->config.net.system.nb_nodes - 1;
+            if (atomic_load(&spvs_ctx.join_count) == expected) {
+                atomic_store(&spvs_ctx.state, DSM_SPVS_STATE_MGR_SHARING);
+                // TODO share registry send
+            }
+            return;
+
+        case DSM_SPVS_STATE_MGR_SHARING:
             expected = dsm_ctx->config.net.system.nb_managers - (is_manager ? 1 : 0);
             if (atomic_load(&spvs_ctx.share_mgr_count) == expected) {
                 atomic_store(&spvs_ctx.state, DSM_SPVS_STATE_MGR_WAITING);
@@ -208,7 +288,7 @@ int dsm_supervisor_loop(dsm_dscv_ctx *dscv_ctx) {
                         goto exit;
                     }
                 } else {
-                    if (handle_tcp_recv(NULL, i) < 0) {
+                    if (handle_tcp_recv(dscv_ctx, i) < 0) {
                         goto exit;
                     }
                 }

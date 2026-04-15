@@ -218,6 +218,23 @@ static int recv_dscv_join_ack() {
     }
 }
 
+static int send_dscv_role_wish() {
+    LOG_INFO("Envoi d'un CODE=%d ...", CODE_DISCOVER_ROLE_WISH);
+
+    uint8_t buf[sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_role_wish)];
+    int msg_len = dsm_srlze_dscv_role_wish(buf, sizeof(buf));
+    if (msg_len < 0) {
+        return -1;
+    }
+
+    int sent_bytes = dsm_tcp_send_all(discover_ctx.supervisor_tcp_sock, buf, msg_len);
+    if (sent_bytes < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
 /* TODO FACTO AVEC connect_to_managers ? */
 static int prepare_nodes_reg(const dsm_msg_dscv_share_reg *share) {
 
@@ -540,6 +557,10 @@ int dsm_discover() {
             return -1;
         } else if (ret == 1) {
             return DSM_ERROR_SYSTEM_FULL;
+        }
+
+        if (send_dscv_role_wish() < 0) {
+            return -1;
         }
 
         if (recv_dscv_share_reg() < 0) {

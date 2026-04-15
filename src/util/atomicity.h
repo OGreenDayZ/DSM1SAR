@@ -20,4 +20,21 @@ static inline bool increment_if_less(atomic_uint *counter, unsigned int limit) {
     return false;
 }
 
+/*
+ * @note : La valeur retournée est après l'incrémentation (res == ++counter)
+ */
+static inline bool increment_if_less_ext(atomic_uint *counter, unsigned int limit,
+                                         unsigned int *result) {
+    unsigned int current = atomic_load(counter);
+    while (current < limit) {
+        unsigned int next = current + 1;
+        if (atomic_compare_exchange_weak(counter, &current, next)) {
+            if (result)
+                *result = next;
+            return true;
+        }
+    }
+    return false;
+}
+
 #endif // DSM_ATOMICITY_H
