@@ -46,7 +46,6 @@ int dsm_srlze_dscv_init(uint8_t *buf, size_t buf_sz) {
 
     dsm_msg_dscv_init payload = {
         .udp_port_uni = htons(dsm_ctx->config.net.node.udp_port),
-        .role = htonl(dsm_ctx->config.net.node.role),
     };
 
     int offset = serialize_header(&header, buf, buf_sz);
@@ -89,7 +88,7 @@ int dsm_srlze_dscv_join_ack(int assigned_id, uint8_t *buf, size_t buf_sz) {
 
     dsm_msg_header header = {
         .code = CODE_DISCOVER_JOIN_ACK,
-        .id = dsm_ctx->config.net.system.system_id,
+        .id = dsm_ctx->node_id,
         .payload_len = sizeof(dsm_msg_dscv_join_ack),
     };
 
@@ -107,8 +106,32 @@ int dsm_srlze_dscv_join_ack(int assigned_id, uint8_t *buf, size_t buf_sz) {
 }
 
 int dsm_srlze_dscv_sys_full(uint8_t *buf, size_t buf_sz) {
-    return serialize_no_payload_msg(CODE_DISCOVER_SYSTEM_FULL,
-                                    dsm_ctx->config.net.system.system_id, buf, buf_sz);
+    return serialize_no_payload_msg(CODE_DISCOVER_SYSTEM_FULL, dsm_ctx->node_id, buf,
+                                    buf_sz);
+}
+
+int dsm_srlze_dscv_role_wish(uint8_t *buf, size_t buf_sz) {
+    if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_role_wish)) {
+        return -1;
+    }
+
+    dsm_msg_header header = {
+        .code = CODE_DISCOVER_ROLE_WISH,
+        .id = dsm_ctx->node_id,
+        .payload_len = sizeof(dsm_msg_dscv_role_wish),
+    };
+
+    dsm_msg_dscv_role_wish payload = {
+        .role = htonl(dsm_ctx->config.net.node.role),
+    };
+
+    int offset = serialize_header(&header, buf, buf_sz);
+    if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header)) {
+        return -1;
+    }
+    memcpy(buf + offset, &payload, sizeof(payload));
+
+    return offset + sizeof(payload);
 }
 
 static int serialize_reg_node(dsm_reg_node *node, uint8_t *buf, size_t buf_sz) {
@@ -249,7 +272,6 @@ int dsm_dsrlze_dscv_init(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_init *msg) {
     dsm_msg_dscv_init net_msg;
     memcpy(&net_msg, buf, sizeof(net_msg));
     msg->udp_port_uni = ntohs(net_msg.udp_port_uni);
-    msg->role = ntohl(net_msg.role);
 
     return sizeof(dsm_msg_dscv_init);
 }
@@ -276,6 +298,18 @@ int dsm_dsrlze_dscv_join_ack(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_join_ack 
     msg->assigned_id = ntohl(net_msg.assigned_id);
 
     return sizeof(dsm_msg_dscv_join_ack);
+}
+
+int dsm_dsrlze_dscv_role_wish(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_role_wish *msg) {
+    if (buf_sz < sizeof(dsm_msg_dscv_role_wish)) {
+        return -1;
+    }
+
+    dsm_msg_dscv_role_wish net_msg;
+    memcpy(&net_msg, buf, sizeof(net_msg));
+    msg->role = ntohl(net_msg.role);
+
+    return sizeof(dsm_msg_dscv_role_wish);
 }
 
 static int deserialize_reg_node(uint8_t *buf, size_t buf_sz, dsm_reg_node *node) {

@@ -7,6 +7,7 @@
 #include <sys/types.h>
 
 #include "debug/debug.h"
+#include "dsm.h"
 #include "internal.h"
 #include "network/message/message.h"
 #include "network/message/serializer.h"
@@ -22,10 +23,8 @@ static int supervisor_config(dsm_dscv_ctx *dscv_ctx) {
         return -1;
     }
 
-    if (pthread_mutex_init(&spvs_ctx.id_count_mutex, NULL) != 0 ||
-        pthread_mutex_init(&spvs_ctx.eligible_mutex, NULL) != 0 ||
-        pthread_mutex_init(&spvs_ctx.poll_update_mutex, NULL) != 0 ||
-        pthread_mutex_init(&spvs_ctx.ack_count_mutex, NULL) != 0) {
+    if (pthread_mutex_init(&spvs_ctx.eligible_mutex, NULL) != 0 ||
+        pthread_mutex_init(&spvs_ctx.poll_update_mutex, NULL) != 0) {
         return -1;
     }
 
@@ -98,7 +97,7 @@ exit_err_ctx:
 
 static int handle_tcp_listen(dsm_dscv_ctx *dscv_ctx) {
 
-    return 0;
+    return -1;
 }
 
 static int handle_tcp_recv(dsm_msg_thread_ctx *msg_ctx, int poll_index) {
@@ -107,12 +106,63 @@ static int handle_tcp_recv(dsm_msg_thread_ctx *msg_ctx, int poll_index) {
     return 0;
 }
 
-static int update_ctx_state() {
-    return 0;
+static void update_spvs_state() {
+    dsm_supervising_state state = atomic_load(&spvs_ctx.state);
+    unsigned int expected;
+    bool is_manager = dsm_ctx->config.net.node.role == DSM_ROLE_MANAGER;
+
+    switch (state) {
+        case DSM_SPVS_STATE_SCANNING:
+            expected = dsm_ctx->config.net.system.nb_nodes - 1;
+            if (atomic_load(&spvs_ctx.join_count) == expected) {
+                atomic_store(&spvs_ctx.state, DSM_SPVS_STATE_SHARING);
+                // TODO sharing send
+            }
+            return;
+
+        case DSM_SPVS_STATE_SHARING:
+            expected = dsm_ctx->config.net.system.nb_managers - (is_manager ? 1 : 0);
+            if (atomic_load(&spvs_ctx.share_mgr_count) == expected) {
+                atomic_store(&spvs_ctx.state, DSM_SPVS_STATE_MGR_WAITING);
+                // TODO mgr_ready send
+            }
+            return;
+
+        case DSM_SPVS_STATE_MGR_WAITING:
+            expected = dsm_ctx->config.net.system.nb_managers - (is_manager ? 1 : 0);
+            if (atomic_load(&spvs_ctx.mgr_ready_count) == expected) {
+                atomic_store(&spvs_ctx.state, DSM_SPVS_STATE_WKR_CONFIGURING);
+                // TODO wkr_config send
+            }
+            return;
+
+        case DSM_SPVS_STATE_WKR_CONFIGURING:
+            expected = dsm_ctx->config.net.system.nb_nodes -
+                       dsm_ctx->config.net.system.nb_managers - (is_manager ? 1 : 0);
+            if (atomic_load(&spvs_ctx.wkr_config_count) == expected) {
+                atomic_store(&spvs_ctx.state, DSM_SPVS_STATE_FINALIZING);
+                // TODO finalize send
+            }
+            return;
+
+        default:
+            return;
+    }
 }
 
-static int update_poll_fds() {
-    return 0;
+static void update_poll_fds(struct pollfd *fds, int max_fds, int skip_fds) {
+    int index;
+    dsm_poll_update_entry *pos, *n;
+    pthread_mutex_lock(&spvs_ctx.poll_update_mutex);
+    dsm_list_for_each_entry_safe(pos, n, &spvs_ctx.poll_fds_update, node) {
+        index = pos->id_node + skip_fds;
+        if (index >= 0 && index < max_fds) {
+            fds[index].fd = pos->fd;
+        }
+        dsm_list_del(&pos->node);
+        free(pos);
+    }
+    pthread_mutex_unlock(&spvs_ctx.poll_update_mutex);
 }
 
 int dsm_supervisor_loop(dsm_dscv_ctx *dscv_ctx) {
@@ -132,15 +182,10 @@ int dsm_supervisor_loop(dsm_dscv_ctx *dscv_ctx) {
     fds[0].fd = dscv_ctx->sock_udp_mcast;
     fds[1].fd = dscv_ctx->sock_tcp_listen;
     // TODO poll update queue
-    while (spvs_ctx.state != DSM_SPVS_STATE_FINALIZING) {
+    while (atomic_load(&spvs_ctx.state) != DSM_SPVS_STATE_FINALIZING) {
 
-        if (update_ctx_state() < 0) {
-            goto exit;
-        }
-
-        if (update_poll_fds() < 0) {
-            goto exit;
-        }
+        update_spvs_state();
+        update_poll_fds(fds, max_fds, DSM_SPVS_POLL_FDS_SERVER);
 
         int ret = poll(fds, max_fds, DSM_SPVS_POLL_TIMEOUT_MS);
         if (ret < 0) {
