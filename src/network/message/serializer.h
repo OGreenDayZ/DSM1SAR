@@ -12,6 +12,7 @@ int dsm_srlze_dscv_init(uint8_t *buf, size_t buf_sz);
 int dsm_srlze_dscv_spvs_data(uint8_t *buf, size_t buf_sz);
 int dsm_srlze_dscv_join_ack(int assigned_id, uint8_t *buf, size_t buf_sz);
 int dsm_srlze_dscv_sys_full(uint8_t *buf, size_t buf_sz);
+int dsm_srlze_dscv_role_wish(uint8_t *buf, size_t buf_sz);
 int dsm_srlze_dscv_share_reg(uint32_t code, dsm_msg_dscv_share_reg *share, uint8_t *buf,
                              size_t buf_sz);
 int dsm_srlze_dscv_share_reg_ack(uint16_t listen_port, uint8_t *buf, size_t buf_sz);
@@ -29,6 +30,7 @@ int dsm_dsrlze_header(uint8_t *buf, size_t buf_sz, dsm_msg_header *header);
 int dsm_dsrlze_dscv_init(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_init *msg);
 int dsm_dsrlze_dscv_spvs_data(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_spvs_data *msg);
 int dsm_dsrlze_dscv_join_ack(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_join_ack *msg);
+int dsm_dsrlze_dscv_role_wish(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_role_wish *msg);
 int dsm_dsrlze_dscv_share_reg(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_share_reg *msg);
 int dsm_dsrlze_dscv_share_reg_ack(uint8_t *buf, size_t buf_sz,
                                   dsm_msg_dscv_share_reg_ack *msg);

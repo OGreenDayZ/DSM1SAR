@@ -53,41 +53,60 @@ exit_udp_error:
 /* @return : -1 erreur, 0 trouvé, 1 non trouvé */
 static int recv_dscv_spvs_data() {
     LOG_INFO("En attente d'un CODE=%d ...", CODE_DISCOVER_SUPERVISOR_DATA);
-    struct timeval timeout = {.tv_sec = DSM_DSCV_RESEND_INTERVAL_SEC, .tv_usec = 0};
+    struct timeval start, current, timeout;
+    gettimeofday(&start, NULL);
+
     size_t buf_size = sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_spvs_data);
     uint8_t buf[buf_size];
     uint32_t src_ip;
     uint16_t src_port;
 
-    if (dsm_udp_recvfrom(discover_ctx.sock_udp_recv, buf, buf_size, &src_ip, &src_port,
-                         &timeout) < 0) {
-        LOG_INFO("Aucun superviseur trouvé lors de cette tentative");
-        return 1;
+    while (1) {
+        gettimeofday(&current, NULL);
+        long elapsed_us = (current.tv_sec - start.tv_sec) * 1000000L +
+                          (current.tv_usec - start.tv_usec);
+        long remaining_us = (DSM_DSCV_RESEND_INTERVAL_SEC * 1000000L) - elapsed_us;
+
+        if (remaining_us <= 0) {
+            LOG_INFO("Aucun superviseur trouvé lors de cette tentative");
+            return 1;
+        }
+
+        timeout.tv_sec = remaining_us / 1000000L;
+        timeout.tv_usec = remaining_us % 1000000L;
+
+        if (dsm_udp_recvfrom(discover_ctx.sock_udp_recv, buf, buf_size, &src_ip,
+                             &src_port, &timeout) < 0) {
+            LOG_INFO("Aucun superviseur trouvé lors de cette tentative");
+            return 1;
+        }
+
+        dsm_msg_header header;
+        int offset = dsm_dsrlze_header(buf, buf_size, &header);
+        if (offset < 0) {
+            continue;
+        }
+
+        if (header.id != dsm_ctx->config.net.system.system_id ||
+            header.code != CODE_DISCOVER_SUPERVISOR_DATA) {
+            LOG_WARNING("Message ignoré...");
+            continue;
+        }
+
+        dsm_msg_dscv_spvs_data spvs_data;
+        offset = dsm_dsrlze_dscv_spvs_data(buf + offset, buf_size - offset, &spvs_data);
+        if (offset < 0) {
+            continue;
+        }
+
+        LOG_INFO("Superviseur trouvé à %s:%d; port TCP à connecter: %d", src_ip, src_port,
+                 spvs_data.tcp_port_spvs);
+
+        discover_ctx.supervisor_ip = src_ip;
+        discover_ctx.supervisor_tcp_port = spvs_data.tcp_port_spvs;
+
+        return 0;
     }
-
-    dsm_msg_header header;
-    int offset = dsm_dsrlze_header(buf, buf_size, &header);
-    if (offset < 0) {
-        return -1;
-    }
-    if (header.code != CODE_DISCOVER_SUPERVISOR_DATA) {
-        LOG_ERROR("CODE reçu incorrect : %d", header.code, src_ip, src_port);
-        return -1;
-    }
-
-    dsm_msg_dscv_spvs_data spvs_data;
-    offset = dsm_dsrlze_dscv_spvs_data(buf + offset, buf_size - offset, &spvs_data);
-    if (offset < 0) {
-        return -1;
-    }
-
-    LOG_INFO("Superviseur trouvé à %s:%d; port TCP à connecter: %d", src_ip, src_port,
-             spvs_data.tcp_port_spvs);
-
-    discover_ctx.supervisor_ip = src_ip;
-    discover_ctx.supervisor_tcp_port = spvs_data.tcp_port_spvs;
-
-    return 0;
 }
 
 /* @return : -1 erreur, 0 noeud normal, 1 superviseur */
@@ -197,6 +216,23 @@ static int recv_dscv_join_ack() {
         LOG_ERROR("Code inconnu : %d", header.code);
         return -1;
     }
+}
+
+static int send_dscv_role_wish() {
+    LOG_INFO("Envoi d'un CODE=%d ...", CODE_DISCOVER_ROLE_WISH);
+
+    uint8_t buf[sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_role_wish)];
+    int msg_len = dsm_srlze_dscv_role_wish(buf, sizeof(buf));
+    if (msg_len < 0) {
+        return -1;
+    }
+
+    int sent_bytes = dsm_tcp_send_all(discover_ctx.supervisor_tcp_sock, buf, msg_len);
+    if (sent_bytes < 0) {
+        return -1;
+    }
+
+    return 0;
 }
 
 /* TODO FACTO AVEC connect_to_managers ? */
@@ -521,6 +557,10 @@ int dsm_discover() {
             return -1;
         } else if (ret == 1) {
             return DSM_ERROR_SYSTEM_FULL;
+        }
+
+        if (send_dscv_role_wish() < 0) {
+            return -1;
         }
 
         if (recv_dscv_share_reg() < 0) {

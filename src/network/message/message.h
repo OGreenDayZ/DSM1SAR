@@ -1,6 +1,7 @@
 #ifndef DSM_MESSAGE_H
 #define DSM_MESSAGE_H
 
+#include <netinet/in.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/time.h>
@@ -10,16 +11,17 @@
 typedef enum {
     /* Discover */
     CODE_DISCOVER_INIT = 1,
-    CODE_DISCOVER_SUPERVISOR_DATA = 2,
-    CODE_DISCOVER_JOIN_ACK = 3,
-    CODE_DISCOVER_SYSTEM_FULL = 4,
-    CODE_DISCOVER_SHARE_REGISTRY_MANAGER = 5,
-    CODE_DISCOVER_SHARE_REGISTRY_WORKER = 6,
-    CODE_DISCOVER_SHARE_REGISTRY_MANAGER_ACK = 7,
-    CODE_DISCOVER_MANAGER_READY = 8,
-    CODE_DISCOVER_WORKER_CONFIG = 9,
-    CODE_DISCOVER_WORKER_CONFIG_ACK = 10,
-    CODE_DISCOVER_FINALIZE = 11,
+    CODE_DISCOVER_SUPERVISOR_DATA,
+    CODE_DISCOVER_JOIN_ACK,
+    CODE_DISCOVER_SYSTEM_FULL,
+    CODE_DISCOVER_ROLE_WISH,
+    CODE_DISCOVER_SHARE_REGISTRY_MANAGER,
+    CODE_DISCOVER_SHARE_REGISTRY_MANAGER_ACK,
+    CODE_DISCOVER_SHARE_REGISTRY_WORKER,
+    CODE_DISCOVER_MANAGER_READY,
+    CODE_DISCOVER_WORKER_CONFIG,
+    CODE_DISCOVER_WORKER_CONFIG_ACK,
+    CODE_DISCOVER_FINALIZE,
 
     /* +... */
 } dsm_msg_code;
@@ -45,7 +47,6 @@ typedef struct {
 /* CODE_DISCOVER_INIT */
 typedef struct {
     uint16_t udp_port_uni;
-    uint32_t role;
 } dsm_msg_dscv_init;
 
 /* CODE_DISCOVER_SUPERVISOR_DATA */
@@ -62,6 +63,11 @@ typedef struct {
 // typedef struct {
 //     // struct vide
 // } dsm_msg_dscv_sys_full_t;
+
+/* CODE_DISCOVER_ROLE_WISH */
+typedef struct {
+    uint32_t role;
+} dsm_msg_dscv_role_wish;
 
 /* Composant de dsm_msg_dscv_share_reg_t */
 typedef struct {
@@ -105,6 +111,12 @@ typedef struct {
 // } dsm_msg_dscv_finalize;
 
 #pragma pack(pop)
+
+typedef struct {
+    struct sockaddr_in src_addr;
+    dsm_msg_header header;
+    uint8_t *payload;
+} dsm_msg_thread_ctx;
 
 int dsm_tcp_send_all(int sock, const uint8_t *buf, size_t len);
 int dsm_tcp_recv_all(int sock, uint8_t *buf, size_t len, struct timeval *tv);

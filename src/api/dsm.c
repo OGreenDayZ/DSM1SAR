@@ -8,14 +8,35 @@
 #include "network/network.h"
 #include "pager/pager.h"
 #include "util/hashmap.h"
+#include "util/thread_pool.h"
 
 dsm_context *dsm_ctx = NULL;
+
+void dsm_get_default_config(dsm_config *config) {
+    // Pour certains champs, si 0 => soulève erreur à l'init (ex:nb_nodes)
+    // et #accept si la valeur sera redéfinie en interne si non spécifiée par l'user
+    config->pager.nb_pages = DSM_DEFAULT_NB_PAGES;
+    config->pager.page_size = DSM_DEFAULT_PAGESIZE;
+
+    config->net.system.system_id = 0;
+    config->net.system.nb_managers = 0;
+    config->net.system.nb_nodes = 0;
+    snprintf(config->net.system.multicast_ip, INET_ADDRSTRLEN, "%s",
+             DSM_DEFAULT_MULTICAST_IP);
+    config->net.system.multicast_port = DSM_DEFAULT_MULTICAST_PORT;
+
+    config->net.node.role = DSM_ROLE_UNDEFINED;
+    config->net.node.tcp_port = 0;        // #accept
+    config->net.node.udp_port = 0;        // #accept
+    config->net.node.pool_nb_threads = 0; // #accept
+    config->net.node.pool_queue_size = 0; // #accept
+}
 
 static int is_power_of_two(size_t x) {
     return (x != 0) && ((x & (x - 1)) == 0);
 }
 
-static int validate_config(const dsm_config *config) {
+static int validate_config(dsm_config *config) {
     if (config->pager.nb_pages == 0) {
         LOG_ERROR("nb_pages doit être > 0");
         return DSM_ERROR_INIT_ARG_NB_PAGES;
@@ -37,6 +58,14 @@ static int validate_config(const dsm_config *config) {
         return DSM_ERROR_INIT_ARG_NB_MANAGERS;
     }
 
+    if (config->net.node.pool_nb_threads == 0) {
+        config->net.node.pool_nb_threads = DSM_DEFAULT_NB_THREADS;
+    }
+
+    if (config->net.node.pool_queue_size == 0) {
+        config->net.node.pool_queue_size = DSM_DEFAULT_QUEUE_SIZE;
+    }
+
     return 0;
 }
 
@@ -46,17 +75,19 @@ static int dsm_ctx_init(const dsm_config *config) {
         return DSM_ERROR_ALREADY_INIT;
     }
 
-    int ret = validate_config(config);
-    if (ret != 0) {
-        return ret;
-    }
-
     dsm_ctx = malloc(sizeof(dsm_context));
     if (!dsm_ctx) {
         LOG_ERROR("Erreur malloc : dsm_ctx");
         return DSM_ERROR_CONTEXT_ALLOC;
     }
+
     dsm_ctx->config = *config;
+
+    int ret = validate_config(&dsm_ctx->config);
+    if (ret != 0) {
+        return ret;
+    }
+
     dsm_ctx->node_id = 0;
 
     for (size_t i = 0; i < DSM_HASH_SIZE(dsm_ctx->nodes_reg); i++) {
@@ -68,24 +99,6 @@ static int dsm_ctx_init(const dsm_config *config) {
     }
 
     return 0;
-}
-
-void dsm_get_default_config(dsm_config *config) {
-    // Pour certains champs, si 0 => soulève erreur à l'init (ex:nb_nodes)
-    // et #accept si la valeur sera redéfinie en interne si non spécifiée par l'user
-    config->pager.nb_pages = DSM_DEFAULT_NB_PAGES;
-    config->pager.page_size = DSM_DEFAULT_PAGESIZE;
-
-    config->net.system.system_id = 0;
-    config->net.system.nb_managers = 0;
-    config->net.system.nb_nodes = 0;
-    snprintf(config->net.system.multicast_ip, INET_ADDRSTRLEN, "%s",
-             DSM_DEFAULT_MULTICAST_IP);
-    config->net.system.multicast_port = DSM_DEFAULT_MULTICAST_PORT;
-
-    config->net.node.role = DSM_ROLE_UNDEFINED;
-    config->net.node.tcp_port = 0; // #accept
-    config->net.node.udp_port = 0; // #accept
 }
 
 int dsm_init(const dsm_config *config) {
