@@ -7,7 +7,6 @@
 #include "internal.h"
 #include "network/network.h"
 #include "pager/pager.h"
-#include "util/hashmap.h"
 #include "util/thread_pool.h"
 
 dsm_context *dsm_ctx = NULL;
@@ -90,12 +89,19 @@ static int dsm_ctx_init(const dsm_config *config) {
 
     dsm_ctx->node_id = 0;
 
-    for (size_t i = 0; i < DSM_HASH_SIZE(dsm_ctx->nodes_reg); i++) {
-        dsm_ctx->nodes_reg[i].first = NULL;
+    if (dsm_safe_map_init(&dsm_ctx->nodes_reg, DSM_NODE_HASH_BITS) != 0) {
+        LOG_ERROR("Erreur dsm_safe_map_init : nodes_reg");
+        free(dsm_ctx);
+        dsm_ctx = NULL;
+        return DSM_ERROR_CONTEXT_ALLOC;
     }
 
-    for (size_t i = 0; i < DSM_HASH_SIZE(dsm_ctx->pages_reg); i++) {
-        dsm_ctx->pages_reg[i].first = NULL;
+    if (dsm_safe_map_init(&dsm_ctx->pages_reg, DSM_PAGE_HASH_BITS) != 0) {
+        LOG_ERROR("Erreur dsm_safe_map_init : pages_reg");
+        dsm_safe_map_destroy(&dsm_ctx->nodes_reg);
+        free(dsm_ctx);
+        dsm_ctx = NULL;
+        return DSM_ERROR_CONTEXT_ALLOC;
     }
 
     return 0;

@@ -6,8 +6,8 @@
 
 #include "dsm.h"
 #include "network/discover/net_discover.h"
-#include "util/hlist.h"
 #include "util/list.h"
+#include "util/safe_map.h"
 #include "util/thread_pool.h"
 
 #define DSM_SPVS_POLL_FDS_SERVER 2
@@ -51,13 +51,15 @@ typedef struct {
     uint16_t manager_port;
     dsm_node_role role;
 
-    struct dsm_list_head node;
+    struct dsm_hlist_node node;
 } dsm_supervising_node;
 
 typedef struct {
     _Atomic dsm_supervising_state
-        state; /* @brief : atomic enum
-                * @warning : READ-ONLY pour tous sauf le main thread */
+        state; /**
+                * @brief : atomic enum
+                * @warning : READ-ONLY pour tous sauf le main thread
+                */
 
     atomic_uint id_count;
 
@@ -75,8 +77,7 @@ typedef struct {
     atomic_uint mgr_ready_count;  // nb_recv : CODE_DISCOVER_MANAGER_READY
     atomic_uint wkr_config_count; // nb_recv : CODE_DISCOVER_WORKER_CONFIG_ACK
 
-    // TODO REPLACE CONCURRENT HASHMAP
-    struct dsm_hlist_head spvs_reg[1 << DSM_SPVS_HASH_BITS];
+    dsm_safe_map spvs_reg;
 } dsm_supervisor_ctx;
 
 int dsm_supervisor_loop(dsm_dscv_ctx *dscv_ctx);

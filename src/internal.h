@@ -4,6 +4,7 @@
 #include "dsm.h"
 
 #include "util/hlist.h"
+#include "util/safe_map.h"
 
 #define DSM_NODE_HASH_BITS 4
 #define DSM_PAGE_HASH_BITS 12
@@ -29,8 +30,8 @@ typedef struct {
 
     unsigned int node_id;
 
-    struct dsm_hlist_head nodes_reg[1 << DSM_NODE_HASH_BITS];
-    struct dsm_hlist_head pages_reg[1 << DSM_PAGE_HASH_BITS];
+    dsm_safe_map nodes_reg;
+    dsm_safe_map pages_reg;
     // + mutex ?
 
     // à étendre...

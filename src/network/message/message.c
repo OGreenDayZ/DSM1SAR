@@ -63,7 +63,9 @@ int dsm_udp_sendto(int sock, const uint8_t *buf, size_t len, uint32_t dest_ip,
     return 0;
 }
 
-/* @note : src_ip & src_port -> Host byte order */
+/**
+ * @note : src_ip & src_port -> Host byte order
+ */
 int dsm_udp_recvfrom(int sock, uint8_t *buf, size_t len, uint32_t *src_ip,
                      uint16_t *src_port, struct timeval *tv) {
     fd_set read_fds;

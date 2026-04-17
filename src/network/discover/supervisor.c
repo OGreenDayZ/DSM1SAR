@@ -8,16 +8,13 @@
 #include <unistd.h>
 
 #include "debug/debug.h"
-#include "dsm.h"
 #include "internal.h"
 #include "network/message/message.h"
 #include "network/message/serializer.h"
 #include "network/network.h"
 #include "util/atomicity.h"
-#include "util/hashmap.h"
-#include "util/list.h"
 
-static dsm_supervisor_ctx spvs_ctx; // TODO MALLOC
+static dsm_supervisor_ctx *spvs_ctx;
 
 static int supervisor_config(dsm_dscv_ctx *dscv_ctx) {
 
@@ -26,19 +23,25 @@ static int supervisor_config(dsm_dscv_ctx *dscv_ctx) {
         return -1;
     }
 
-    if (pthread_mutex_init(&spvs_ctx.eligible_mutex, NULL) != 0 ||
-        pthread_mutex_init(&spvs_ctx.poll_update_mutex, NULL) != 0) {
+    spvs_ctx = malloc(sizeof(dsm_supervisor_ctx));
+    if (!spvs_ctx) {
+        LOG_ERROR("malloc : spvs_ctx");
         return -1;
     }
 
-    dsm_list_init(&spvs_ctx.eligible_ip);
-    dsm_list_init(&spvs_ctx.poll_fds_update);
+    if (pthread_mutex_init(&spvs_ctx->eligible_mutex, NULL) != 0 ||
+        pthread_mutex_init(&spvs_ctx->poll_update_mutex, NULL) != 0) {
+        return -1;
+    }
 
-    spvs_ctx.pool = pool_create(dsm_ctx->config.net.node.pool_nb_threads,
-                                dsm_ctx->config.net.node.pool_queue_size);
+    dsm_list_init(&spvs_ctx->eligible_ip);
+    dsm_list_init(&spvs_ctx->poll_fds_update);
 
-    for (size_t i = 0; i < DSM_HASH_SIZE(spvs_ctx.spvs_reg); i++) {
-        spvs_ctx.spvs_reg[i].first = NULL;
+    spvs_ctx->pool = pool_create(dsm_ctx->config.net.node.pool_nb_threads,
+                                 dsm_ctx->config.net.node.pool_queue_size);
+
+    if (dsm_safe_map_init(&spvs_ctx->spvs_reg, DSM_SPVS_HASH_BITS) < 0) {
+        return -1;
     }
 
     return 0;
@@ -87,7 +90,7 @@ static int handle_udp_mcast(dsm_dscv_ctx *dscv_ctx) {
         goto exit_err_payload;
     }
 
-    if (pool_add_task(spvs_ctx.pool, dispatch_call, msg_ctx) < 0) {
+    if (pool_add_task(spvs_ctx->pool, dispatch_call, msg_ctx) < 0) {
         goto exit_err_payload;
     }
 
@@ -118,17 +121,17 @@ static int handle_tcp_listen(dsm_dscv_ctx *dscv_ctx) {
 
     uint32_t client_ip = client_addr.sin_addr.s_addr;
     dsm_eligible_entry *pos, *n;
-    pthread_mutex_lock(&spvs_ctx.eligible_mutex);
-    dsm_list_for_each_entry_safe(pos, n, &spvs_ctx.eligible_ip, node) {
+    pthread_mutex_lock(&spvs_ctx->eligible_mutex);
+    dsm_list_for_each_entry_safe(pos, n, &spvs_ctx->eligible_ip, node) {
         if (pos->ip == client_ip) {
             dsm_list_del(&pos->node);
             free(pos);
-            pthread_mutex_unlock(&spvs_ctx.eligible_mutex);
+            pthread_mutex_unlock(&spvs_ctx->eligible_mutex);
             LOG_INFO("Client éligible connecté");
             goto found;
         }
     }
-    pthread_mutex_unlock(&spvs_ctx.eligible_mutex);
+    pthread_mutex_unlock(&spvs_ctx->eligible_mutex);
     close(client_sock);
     LOG_ERROR("Connexion d'un client non éligible");
     return -1;
@@ -137,7 +140,7 @@ static int handle_tcp_listen(dsm_dscv_ctx *dscv_ctx) {
     unsigned int id_node;
 found:
 
-    bool added = increment_if_less_ext(&spvs_ctx.id_count,
+    bool added = increment_if_less_ext(&spvs_ctx->id_count,
                                        dsm_ctx->config.net.system.nb_nodes - 1, &id_node);
 
     if (!added) {
@@ -154,15 +157,16 @@ found:
 
     update_entry->id_node = id_node;
     update_entry->fd = client_sock;
-    pthread_mutex_lock(&spvs_ctx.poll_update_mutex);
-    dsm_list_add_tail(&update_entry->node, &spvs_ctx.poll_fds_update);
-    pthread_mutex_unlock(&spvs_ctx.poll_update_mutex);
+    pthread_mutex_lock(&spvs_ctx->poll_update_mutex);
+    dsm_list_add_tail(&update_entry->node, &spvs_ctx->poll_fds_update);
+    pthread_mutex_unlock(&spvs_ctx->poll_update_mutex);
+    // send id_node
 
     return 0;
 }
 
 static int handle_tcp_recv(dsm_dscv_ctx *dscv_ctx, int poll_index) {
-    int id_node = poll_index - DSM_SPVS_POLL_FDS_SERVER;
+    unsigned int id_node = poll_index - DSM_SPVS_POLL_FDS_SERVER;
     LOG_INFO("Message reçu sur une socket TCP (ID_Node=%d)", id_node);
 
     dsm_msg_thread_ctx *msg_ctx = malloc(sizeof(dsm_msg_thread_ctx));
@@ -170,48 +174,54 @@ static int handle_tcp_recv(dsm_dscv_ctx *dscv_ctx, int poll_index) {
         LOG_ERROR("Erreur malloc : msg_ctx");
         return -1;
     }
-    struct timeval tv = {.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC, .tv_usec = 0};
-    uint8_t hbuf[sizeof(dsm_msg_header)];
 
-    int *recv_sock;
+    int recv_sock = -1;
+    dsm_supervising_node *node_content;
+    dsm_hash_safe_get(&spvs_ctx->spvs_reg, node_content, node, id_node) {
+        if (node_content->id == id_node) {
+            recv_sock = node_content->tcp_sock;
+            break;
+        }
+    }
+    dsm_hash_safe_get_end(&spvs_ctx->spvs_reg, id_node);
 
     return 0;
 }
 
 static void update_spvs_state() {
-    dsm_supervising_state state = atomic_load(&spvs_ctx.state);
+    dsm_supervising_state state = atomic_load(&spvs_ctx->state);
     unsigned int expected;
     bool is_manager = dsm_ctx->config.net.node.role == DSM_ROLE_MANAGER;
 
     switch (state) {
         case DSM_SPVS_STATE_SCANNING:
             expected = dsm_ctx->config.net.system.nb_nodes - 1;
-            if (atomic_load(&spvs_ctx.join_count) == expected) {
-                atomic_store(&spvs_ctx.state, DSM_SPVS_STATE_ROLE_COLLECTING);
+            if (atomic_load(&spvs_ctx->join_count) == expected) {
+                atomic_store(&spvs_ctx->state, DSM_SPVS_STATE_ROLE_COLLECTING);
                 // TODO send id / system full
             }
             return;
 
         case DSM_SPVS_STATE_ROLE_COLLECTING:
             expected = dsm_ctx->config.net.system.nb_nodes - 1;
-            if (atomic_load(&spvs_ctx.join_count) == expected) {
-                atomic_store(&spvs_ctx.state, DSM_SPVS_STATE_MGR_SHARING);
+            if (atomic_load(&spvs_ctx->join_count) == expected) {
+                atomic_store(&spvs_ctx->state, DSM_SPVS_STATE_MGR_SHARING);
                 // TODO share registry send
             }
             return;
 
         case DSM_SPVS_STATE_MGR_SHARING:
             expected = dsm_ctx->config.net.system.nb_managers - (is_manager ? 1 : 0);
-            if (atomic_load(&spvs_ctx.share_mgr_count) == expected) {
-                atomic_store(&spvs_ctx.state, DSM_SPVS_STATE_MGR_WAITING);
+            if (atomic_load(&spvs_ctx->share_mgr_count) == expected) {
+                atomic_store(&spvs_ctx->state, DSM_SPVS_STATE_MGR_WAITING);
                 // TODO mgr_ready send
             }
             return;
 
         case DSM_SPVS_STATE_MGR_WAITING:
             expected = dsm_ctx->config.net.system.nb_managers - (is_manager ? 1 : 0);
-            if (atomic_load(&spvs_ctx.mgr_ready_count) == expected) {
-                atomic_store(&spvs_ctx.state, DSM_SPVS_STATE_WKR_CONFIGURING);
+            if (atomic_load(&spvs_ctx->mgr_ready_count) == expected) {
+                atomic_store(&spvs_ctx->state, DSM_SPVS_STATE_WKR_CONFIGURING);
                 // TODO wkr_config send
             }
             return;
@@ -219,8 +229,8 @@ static void update_spvs_state() {
         case DSM_SPVS_STATE_WKR_CONFIGURING:
             expected = dsm_ctx->config.net.system.nb_nodes -
                        dsm_ctx->config.net.system.nb_managers - (is_manager ? 1 : 0);
-            if (atomic_load(&spvs_ctx.wkr_config_count) == expected) {
-                atomic_store(&spvs_ctx.state, DSM_SPVS_STATE_FINALIZING);
+            if (atomic_load(&spvs_ctx->wkr_config_count) == expected) {
+                atomic_store(&spvs_ctx->state, DSM_SPVS_STATE_FINALIZING);
                 // TODO finalize send
             }
             return;
@@ -233,8 +243,8 @@ static void update_spvs_state() {
 static void update_poll_fds(struct pollfd *fds, int max_fds, int skip_fds) {
     int index;
     dsm_poll_update_entry *pos, *n;
-    pthread_mutex_lock(&spvs_ctx.poll_update_mutex);
-    dsm_list_for_each_entry_safe(pos, n, &spvs_ctx.poll_fds_update, node) {
+    pthread_mutex_lock(&spvs_ctx->poll_update_mutex);
+    dsm_list_for_each_entry_safe(pos, n, &spvs_ctx->poll_fds_update, node) {
         index = pos->id_node + skip_fds;
         if (index >= 0 && index < max_fds) {
             fds[index].fd = pos->fd;
@@ -242,7 +252,7 @@ static void update_poll_fds(struct pollfd *fds, int max_fds, int skip_fds) {
         dsm_list_del(&pos->node);
         free(pos);
     }
-    pthread_mutex_unlock(&spvs_ctx.poll_update_mutex);
+    pthread_mutex_unlock(&spvs_ctx->poll_update_mutex);
 }
 
 int dsm_supervisor_loop(dsm_dscv_ctx *dscv_ctx) {
@@ -261,8 +271,7 @@ int dsm_supervisor_loop(dsm_dscv_ctx *dscv_ctx) {
 
     fds[0].fd = dscv_ctx->sock_udp_mcast;
     fds[1].fd = dscv_ctx->sock_tcp_listen;
-    // TODO poll update queue
-    while (atomic_load(&spvs_ctx.state) != DSM_SPVS_STATE_FINALIZING) {
+    while (atomic_load(&spvs_ctx->state) != DSM_SPVS_STATE_FINALIZING) {
 
         update_spvs_state();
         update_poll_fds(fds, max_fds, DSM_SPVS_POLL_FDS_SERVER);

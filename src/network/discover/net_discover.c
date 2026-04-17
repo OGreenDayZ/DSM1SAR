@@ -8,7 +8,6 @@
 #include "network/discover/supervisor.h"
 #include "network/message/serializer.h"
 #include "network/network.h"
-#include "util/hashmap.h"
 
 static dsm_dscv_ctx discover_ctx;
 
@@ -50,7 +49,9 @@ exit_udp_error:
     return -1;
 }
 
-/* @return : -1 erreur, 0 trouvé, 1 non trouvé */
+/**
+ *@return : -1 erreur, 0 trouvé, 1 non trouvé
+ */
 static int recv_dscv_spvs_data() {
     LOG_INFO("En attente d'un CODE=%d ...", CODE_DISCOVER_SUPERVISOR_DATA);
     struct timeval start, current, timeout;
@@ -109,7 +110,9 @@ static int recv_dscv_spvs_data() {
     }
 }
 
-/* @return : -1 erreur, 0 noeud normal, 1 superviseur */
+/**
+ * @return : -1 erreur, 0 noeud normal, 1 superviseur
+ */
 static int send_dscv_init() {
     LOG_INFO("Recherche d'un Superviseur ...");
 
@@ -171,9 +174,9 @@ static int connect_to_supervisor() {
     return 0;
 }
 
-/*
-@return : -1 erreur, 0 succès, 1 système complet
-*/
+/**
+ * @return : -1 erreur, 0 succès, 1 système complet
+ */
 static int recv_dscv_join_ack() {
     LOG_INFO("En attente d'un CODE=%d ...", CODE_DISCOVER_JOIN_ACK);
     struct timeval timeout = {.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC, .tv_usec = 0};
@@ -258,7 +261,7 @@ static int prepare_nodes_reg(const dsm_msg_dscv_share_reg *share) {
             node_content->tcp_sock = -1;
         }
 
-        dsm_hash_add(dsm_ctx->nodes_reg, &node_content->node, node_content->id);
+        dsm_hash_safe_add(&dsm_ctx->nodes_reg, &node_content->node, node_content->id);
     }
     return 0;
 }
@@ -291,7 +294,7 @@ static int connect_to_managers(const dsm_msg_dscv_share_reg *share) {
             node_content->tcp_sock = manager_sock;
         }
 
-        dsm_hash_add(dsm_ctx->nodes_reg, &node_content->node, node_content->id);
+        dsm_hash_safe_add(&dsm_ctx->nodes_reg, &node_content->node, node_content->id);
     }
     return 0;
 }
@@ -386,9 +389,11 @@ static int send_dscv_share_reg_ack() {
 static int wait_workers_connect() {
     LOG_INFO("En attente de connexions des workers ...");
     int connected_workers = discover_ctx.supervisor_role == DSM_ROLE_WORKER ? 1 : 0;
-    int expected_workers = DSM_HASH_COUNT(dsm_ctx->nodes_reg);
+    int expected_workers = dsm_safe_map_count(&dsm_ctx->nodes_reg);
+    bool found;
 
     while (connected_workers != expected_workers) {
+        found = false;
         struct sockaddr_in client_addr;
         socklen_t addr_len = sizeof(client_addr);
         int client_sock = accept(discover_ctx.sock_tcp_listen,
@@ -400,21 +405,25 @@ static int wait_workers_connect() {
         // Comparer ID et IP
         uint32_t client_ip = ntohl(client_addr.sin_addr.s_addr);
         dsm_node_content *node_content;
-        /* @note : dsm_hash_for_each_possible pour la sécurité,
-         * même si ID est normalement unique */
-        dsm_hash_for_each_possible(dsm_ctx->nodes_reg, node_content, node, client_ip) {
+        /**
+         * @note : dsm_hash_for_each_possible pour la sécurité,
+         * même si ID est normalement unique
+         */
+        dsm_hash_safe_get(&dsm_ctx->nodes_reg, node_content, node, client_ip) {
             if (node_content->ip == client_ip) {
                 node_content->tcp_sock = client_sock;
                 connected_workers++;
                 LOG_INFO("Worker %u connecté", node_content->id);
-                goto continue_accept;
+                found = true;
+                break;
             }
         }
-        close(client_sock);
-        LOG_ERROR("Connexion d'un client inconnu : IP %u", client_ip);
-        return -1;
+        dsm_hash_safe_get_end(&dsm_ctx->nodes_reg, client_ip);
 
-    continue_accept:;
+        if (!found) {
+            close(client_sock);
+            LOG_ERROR("Connexion d'un client inconnu : IP %u", client_ip);
+        }
     }
 
     return 0;

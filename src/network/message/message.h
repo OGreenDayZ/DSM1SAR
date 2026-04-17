@@ -26,13 +26,13 @@ typedef enum {
     /* +... */
 } dsm_msg_code;
 
-/* Lexique
-@dscv : discover
-@spvs : supervisor
-@reg : registry
-@mgr : manager
-@wkr : worker
-*/
+/** Lexique
+ * @dscv: discover
+ * @spvs: supervisor
+ * @reg: registry
+ * @mgr: manager
+ * @wkr: worker
+ */
 
 #pragma pack(push, 1)
 // Au lieu de __attribute__((packed)) chaque struct

@@ -3,10 +3,10 @@
 
 #include "network/message/message.h"
 
-/* Lexique
-@srlze: serialize
-@dsrlze: deserialize
-*/
+/** Lexique
+ * @srlze: serialize
+ * @dsrlze: deserialize
+ */
 
 int dsm_srlze_dscv_init(uint8_t *buf, size_t buf_sz);
 int dsm_srlze_dscv_spvs_data(uint8_t *buf, size_t buf_sz);
@@ -22,10 +22,10 @@ int dsm_srlze_dscv_wkr_config(uint64_t nb_pages, uint32_t page_size, uint8_t *bu
 int dsm_srlze_dscv_wkr_config_ack(uint8_t *buf, size_t buf_sz);
 int dsm_srlze_dscv_finalize(uint8_t *buf, size_t buf_sz);
 
-/*
-@note : Pas de fonction de désérialisation pour les messages sans payload,
-        le dsm_dsrlze_header suffit
-*/
+/**
+ * @note: Pas de fonction de désérialisation pour les messages sans payload,
+ *        le dsm_dsrlze_header suffit
+ */
 int dsm_dsrlze_header(uint8_t *buf, size_t buf_sz, dsm_msg_header *header);
 int dsm_dsrlze_dscv_init(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_init *msg);
 int dsm_dsrlze_dscv_spvs_data(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_spvs_data *msg);
