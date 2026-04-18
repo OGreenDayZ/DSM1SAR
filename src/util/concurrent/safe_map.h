@@ -1,7 +1,7 @@
-#ifndef SAFE_MAP_H
-#define SAFE_MAP_H
+#ifndef DSM_SAFE_MAP_H
+#define DSM_SAFE_MAP_H
 
-#include "hashmap.h"
+#include "util/hashmap.h"
 
 #include <pthread.h>
 
@@ -141,6 +141,8 @@ static inline void dsm_safe_map_destroy(dsm_safe_map *m) {
              (obj) ? 1 : (pthread_rwlock_unlock(__DSM_SAFE_LOCK((m), (bkt))), 0);        \
              obj = dsm_hlist_entry_safe((obj)->member.next, typeof(*(obj)), member))
 
+#define dsm_hash_safe_unlock(m, bkt) pthread_rwlock_unlock(__DSM_SAFE_LOCK((m), (bkt)));
+
 /**
  * @warning safe pour la suppression de l'entrée courante uniquement
  *
@@ -198,4 +200,4 @@ static inline size_t dsm_safe_map_count(dsm_safe_map *m) {
     return total;
 }
 
-#endif /* SAFE_MAP_H */
+#endif /* DSM_SAFE_MAP_H */

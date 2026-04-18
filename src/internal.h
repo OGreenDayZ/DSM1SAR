@@ -3,8 +3,8 @@
 
 #include "dsm.h"
 
+#include "util/concurrent/safe_map.h"
 #include "util/hlist.h"
-#include "util/safe_map.h"
 
 #define DSM_NODE_HASH_BITS 4
 #define DSM_PAGE_HASH_BITS 12

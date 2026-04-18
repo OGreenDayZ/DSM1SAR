@@ -112,11 +112,23 @@ typedef struct {
 
 #pragma pack(pop)
 
+/**
+ * @note : struct de transmission au thread
+ */
 typedef struct {
     struct sockaddr_in src_addr;
     dsm_msg_header header;
     uint8_t *payload;
-} dsm_msg_thread_ctx;
+} dsm_msg_udp_thread_ctx;
+
+/**
+ * @note : struct de transmission au thread
+ */
+typedef struct {
+    int sock;
+    dsm_msg_header header;
+    uint8_t *payload;
+} dsm_msg_tcp_thread_ctx;
 
 int dsm_tcp_send_all(int sock, const uint8_t *buf, size_t len);
 int dsm_tcp_recv_all(int sock, uint8_t *buf, size_t len, struct timeval *tv);

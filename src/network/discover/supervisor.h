@@ -6,8 +6,9 @@
 
 #include "dsm.h"
 #include "network/discover/net_discover.h"
+#include "util/concurrent/safe_list.h"
+#include "util/concurrent/safe_map.h"
 #include "util/list.h"
-#include "util/safe_map.h"
 #include "util/thread_pool.h"
 
 #define DSM_SPVS_POLL_FDS_SERVER 2
@@ -16,9 +17,7 @@
 #define DSM_SPVS_HASH_BITS 4
 
 typedef enum {
-    DSM_SPVS_STATE_SCANNING, /* [CODE_DISCOVER_INIT -> CODE_DISCOVER_SYSTEM_FULL] */
-
-    DSM_SPVS_STATE_ROLE_COLLECTING, /* [CODE_DISCOVER_ROLE_WISH] */
+    DSM_SPVS_STATE_SCANNING, /* [CODE_DISCOVER_INIT -> CODE_DISCOVER_ROLE_WISH] */
 
     DSM_SPVS_STATE_MGR_SHARING, /* [CODE_DISCOVER_SHARE_REGISTRY_MANAGER ->
                                CODE_DISCOVER_SHARE_REGISTRY_MANAGER_ACK] */
@@ -31,6 +30,14 @@ typedef enum {
 
     DSM_SPVS_STATE_FINALIZING, /* [CODE_DISCOVER_FINALIZE] */
 } dsm_supervising_state;
+
+/**
+ * @note : struct de transmission au thread
+ */
+typedef struct {
+    int sock;
+    uint32_t client_ip;
+} dsm_eligible_ctx;
 
 typedef struct {
     uint32_t ip;
@@ -63,14 +70,15 @@ typedef struct {
 
     atomic_uint id_count;
 
-    dsm_list_head eligible_ip;
-    pthread_mutex_t eligible_mutex;
-
-    dsm_list_head poll_fds_update;
-    pthread_mutex_t poll_update_mutex;
+    dsm_safe_list eligible_ip;
+    dsm_safe_list poll_fds_update;
 
     dsm_thread_pool *pool;
 
+    /**
+     * @note : techniquement dans notre implémentation id_count == join_count,
+     * mais on sépare pour la maintenabilité du code
+     */
     atomic_uint join_count;       // nb_send : CODE_DISCOVER_JOIN_ACK
     atomic_uint role_wish_count;  // nb_recv : CODE_DISCOVER_ROLE_WISH
     atomic_uint share_mgr_count;  // nb_recv : CODE_DISCOVER_SHARE_REGISTRY_MANAGER_ACK

@@ -32,6 +32,7 @@ static int discover_ctx_init() {
                   dsm_ctx->config.net.system.multicast_ip);
         goto exit_udp_error;
     }
+    discover_ctx.multicast_ip = ntohl(discover_ctx.multicast_ip);
     discover_ctx.sock_udp_mcast = dsm_udp_bind_multicast(
         discover_ctx.multicast_ip, dsm_ctx->config.net.system.multicast_port);
 
@@ -43,9 +44,12 @@ static int discover_ctx_init() {
 
 exit_mcast_error:
     close(discover_ctx.sock_udp_recv);
+    discover_ctx.sock_udp_recv = -1;
 
 exit_udp_error:
     close(discover_ctx.sock_udp_mcast);
+    discover_ctx.sock_udp_mcast = -1;
+
     return -1;
 }
 
@@ -137,9 +141,9 @@ static int send_dscv_init() {
         LOG_INFO("\nTentative [%d/%d] — Demande de connexion en cours...", attempt,
                  DSM_DSCV_MAX_RETRIES);
         LOG_INFO("Envoi d'un CODE=%d ...", CODE_DISCOVER_INIT);
-        ssize_t sent_bytes = sendto(send_sock, msg_buf, msg_len, 0,
-                                    (struct sockaddr *)&addr, sizeof(addr));
-        if (sent_bytes < 0) {
+        ssize_t sent = sendto(send_sock, msg_buf, msg_len, 0, (struct sockaddr *)&addr,
+                              sizeof(addr));
+        if (sent < 0) {
             ret = -1;
             goto exit;
         }
@@ -230,8 +234,8 @@ static int send_dscv_role_wish() {
         return -1;
     }
 
-    int sent_bytes = dsm_tcp_send_all(discover_ctx.supervisor_tcp_sock, buf, msg_len);
-    if (sent_bytes < 0) {
+    int sent = dsm_tcp_send_all(discover_ctx.supervisor_tcp_sock, buf, msg_len);
+    if (sent < 0) {
         return -1;
     }
 
@@ -261,6 +265,7 @@ static int prepare_nodes_reg(const dsm_msg_dscv_share_reg *share) {
             node_content->tcp_sock = -1;
         }
 
+        dsm_init_hlist_node(&node_content->node);
         dsm_hash_safe_add(&dsm_ctx->nodes_reg, &node_content->node, node_content->id);
     }
     return 0;
@@ -294,6 +299,7 @@ static int connect_to_managers(const dsm_msg_dscv_share_reg *share) {
             node_content->tcp_sock = manager_sock;
         }
 
+        dsm_init_hlist_node(&node_content->node);
         dsm_hash_safe_add(&dsm_ctx->nodes_reg, &node_content->node, node_content->id);
     }
     return 0;
@@ -378,8 +384,8 @@ static int send_dscv_share_reg_ack() {
         return -1;
     }
 
-    int sent_bytes = dsm_tcp_send_all(discover_ctx.supervisor_tcp_sock, buf, msg_len);
-    if (sent_bytes < 0) {
+    int sent = dsm_tcp_send_all(discover_ctx.supervisor_tcp_sock, buf, msg_len);
+    if (sent < 0) {
         return -1;
     }
 
@@ -438,8 +444,8 @@ static int send_dscv_mgr_ready() {
         return -1;
     }
 
-    int sent_bytes = dsm_tcp_send_all(discover_ctx.supervisor_tcp_sock, buf, msg_len);
-    if (sent_bytes < 0) {
+    int sent = dsm_tcp_send_all(discover_ctx.supervisor_tcp_sock, buf, msg_len);
+    if (sent < 0) {
         return -1;
     }
 
@@ -497,8 +503,8 @@ static int send_dscv_wkr_config_ack() {
         return -1;
     }
 
-    int sent_bytes = dsm_tcp_send_all(discover_ctx.supervisor_tcp_sock, buf, msg_len);
-    if (sent_bytes < 0) {
+    int sent = dsm_tcp_send_all(discover_ctx.supervisor_tcp_sock, buf, msg_len);
+    if (sent < 0) {
         return -1;
     }
 
@@ -545,6 +551,7 @@ int dsm_discover() {
     }
 
     if (is_supervisor) {
+        LOG_INFO("Aucun superviseur trouvé après [%d] tentatives", DSM_DSCV_MAX_RETRIES);
         LOG_INFO("Elu en tant que superviseur du système");
         dsm_ctx->node_id = 0;
 

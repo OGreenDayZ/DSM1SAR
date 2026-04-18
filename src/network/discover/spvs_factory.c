@@ -1,0 +1,310 @@
+#include "spvs_factory.h"
+#include "debug/debug.h"
+#include "dsm.h"
+#include "internal.h"
+#include "network/message/message.h"
+#include "network/message/serializer.h"
+#include "network/network.h"
+#include <stddef.h>
+#include <stdint.h>
+#include <unistd.h>
+
+static int send_dscv_spvs_data(uint32_t ip_dst, uint16_t port_dst) {
+    LOG_INFO("Envoi d'un CODE=%d...", CODE_DISCOVER_SUPERVISOR_DATA);
+
+    uint8_t msg_buf[sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_spvs_data)];
+    int msg_len = dsm_srlze_dscv_spvs_data(msg_buf, sizeof(msg_buf));
+    if (msg_len < 0) {
+        return -1;
+    }
+
+    int send_sock = dsm_udp_sock();
+    if (send_sock < 0) {
+        return -1;
+    }
+
+    int ret = 0;
+    if (dsm_udp_sendto(send_sock, msg_buf, msg_len, ip_dst, port_dst) < 0) {
+        ret = -1;
+    }
+
+    close(send_sock);
+    return ret;
+}
+
+int treat_dscv_init(dsm_msg_udp_thread_ctx *msg_ctx, dsm_supervisor_ctx *spvs_ctx) {
+    LOG_INFO("Traitement d'un CODE=%d ...", CODE_DISCOVER_INIT);
+
+    uint32_t ip_src = msg_ctx->src_addr.sin_addr.s_addr;
+    dsm_eligible_entry *entry = malloc(sizeof(dsm_eligible_entry));
+    if (!entry) {
+        LOG_ERROR("malloc : entry");
+        return -1;
+    }
+    entry->ip = ip_src;
+    dsm_safe_list_add_tail(&spvs_ctx->eligible_ip, &entry->node);
+
+    dsm_msg_dscv_init init_msg;
+    if (dsm_dsrlze_dscv_init(msg_ctx->payload, msg_ctx->header.payload_len, &init_msg) <
+        0) {
+        return -1;
+    }
+
+    if (send_dscv_spvs_data(ip_src, init_msg.udp_port_uni) < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+int send_dscv_join_ack(int dest_sock, unsigned int assigned_id) {
+    LOG_INFO("Envoi d'un CODE=%d...", CODE_DISCOVER_JOIN_ACK);
+
+    uint8_t msg_buf[sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_join_ack)];
+    int msg_len = dsm_srlze_dscv_join_ack(assigned_id, msg_buf, sizeof(msg_buf));
+    if (msg_len < 0) {
+        return -1;
+    }
+
+    int sent = dsm_tcp_send_all(dest_sock, msg_buf, msg_len);
+    if (sent < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+int send_dscv_sys_full(int dest_sock) {
+    LOG_INFO("Envoi d'un CODE=%d...", CODE_DISCOVER_SYSTEM_FULL);
+
+    uint8_t msg_buf[sizeof(dsm_msg_header)];
+    int msg_len = dsm_srlze_dscv_sys_full(msg_buf, sizeof(msg_buf));
+    if (msg_len < 0) {
+        return -1;
+    }
+
+    int sent = dsm_tcp_send_all(dest_sock, msg_buf, msg_len);
+    if (sent < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+int treat_dscv_role_wish(dsm_msg_tcp_thread_ctx *msg_ctx, dsm_supervisor_ctx *spvs_ctx) {
+    LOG_INFO("Traitement d'un CODE=%d ...", CODE_DISCOVER_ROLE_WISH);
+
+    dsm_msg_dscv_role_wish role_wish;
+    if (dsm_dsrlze_dscv_role_wish(msg_ctx->payload, msg_ctx->header.payload_len,
+                                  &role_wish) < 0) {
+        return -1;
+    }
+
+    unsigned int id_node = msg_ctx->header.id;
+    atomic_fetch_add(&spvs_ctx->role_wish_count, 1);
+
+    dsm_supervising_node *node_content;
+    dsm_hash_safe_get(&spvs_ctx->spvs_reg, node_content, node, id_node) {
+        if (node_content->id == id_node) {
+            node_content->role = role_wish.role;
+            break;
+        }
+    }
+    dsm_hash_safe_get_end(&spvs_ctx->spvs_reg, id_node);
+
+    return 0;
+}
+
+static int make_share_reg(dsm_supervisor_ctx *spvs_ctx, dsm_dscv_ctx *dscv_ctx,
+                          dsm_node_role shared_role, dsm_msg_dscv_share_reg *share,
+                          size_t share_nb) {
+
+    share->sys_total_nodes = dsm_ctx->config.net.system.nb_nodes;
+    share->nb_nodes = share_nb;
+    size_t index = 0;
+    if (dsm_ctx->config.net.node.role == shared_role) {
+        share->nodes[index].id = 0;
+        share->nodes[index].ip = dscv_ctx->my_ip;
+        share->nodes[index].manager_port = 0; // inutile pour le superviseur
+        index++;
+    }
+
+    unsigned int bkt;
+    dsm_supervising_node *pos;
+    dsm_hash_safe_for_each(&spvs_ctx->spvs_reg, bkt, pos, node) {
+        if (index >= share_nb) {
+            dsm_hash_safe_unlock(&spvs_ctx->spvs_reg, bkt);
+            return 0;
+        }
+
+        else if (pos->role == shared_role) {
+            share->nodes[index].id = pos->id;
+            share->nodes[index].ip = pos->ip;
+            if (shared_role == DSM_ROLE_MANAGER) {
+                share->nodes[index].manager_port = pos->manager_port;
+
+            } else {
+                share->nodes[index].manager_port = 0; // inutile pour les workers
+            }
+            index++;
+        }
+    }
+    LOG_ERROR("Nombre de partages dans le registre insuffisant : %zu < %zu", index,
+              share_nb);
+    return -1;
+}
+
+int send_dscv_share_reg(dsm_supervisor_ctx *spvs_ctx, dsm_dscv_ctx *dscv_ctx,
+                        dsm_msg_code code) {
+    if (code != CODE_DISCOVER_SHARE_REGISTRY_MANAGER &&
+        code != CODE_DISCOVER_SHARE_REGISTRY_WORKER) {
+        LOG_ERROR("Code de partage de registre inconnu : %d", code);
+        return -1;
+    }
+    LOG_INFO("Envoi d'un CODE=%d...", code);
+
+    dsm_node_role shared_role = (code == CODE_DISCOVER_SHARE_REGISTRY_MANAGER)
+                                    ? DSM_ROLE_WORKER
+                                    : DSM_ROLE_MANAGER;
+    dsm_system_config *sys_cfg = &dsm_ctx->config.net.system;
+    size_t share_nb = shared_role == DSM_ROLE_MANAGER
+                          ? sys_cfg->nb_managers
+                          : sys_cfg->nb_nodes - sys_cfg->nb_managers;
+
+    size_t buf_sz = sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_share_reg) +
+                    share_nb * sizeof(dsm_reg_node);
+    uint8_t *msg_buf = malloc(buf_sz);
+    if (!msg_buf) {
+        LOG_ERROR("malloc : msg_buf");
+        return -1;
+    }
+
+    dsm_msg_dscv_share_reg *share =
+        malloc(sizeof(dsm_msg_dscv_share_reg) + share_nb * sizeof(dsm_reg_node));
+    if (!share) {
+        LOG_ERROR("malloc : share");
+        goto exit_msg_buf;
+    }
+
+    if (make_share_reg(spvs_ctx, dscv_ctx, shared_role, share, share_nb) < 0) {
+        goto exit_share;
+    }
+
+    int msg_len = dsm_srlze_dscv_share_reg(code, share, msg_buf, sizeof(msg_buf));
+    free(share);
+    if (msg_len < 0) {
+        goto exit_msg_buf;
+    }
+
+    unsigned int bkt;
+    dsm_supervising_node *pos;
+    dsm_hash_safe_for_each(&spvs_ctx->spvs_reg, bkt, pos, node) {
+        if (pos->role == shared_role) {
+            int sent = dsm_tcp_send_all(pos->tcp_sock, msg_buf, msg_len);
+            if (sent < 0) {
+                LOG_ERROR("Erreur d'envoi du registre partagé au node ID %u", pos->id);
+                dsm_hash_safe_unlock(&spvs_ctx->spvs_reg, bkt);
+                goto exit_msg_buf;
+            }
+        }
+    }
+
+    return 0;
+
+exit_share:
+    free(share);
+exit_msg_buf:
+    free(msg_buf);
+
+    return -1;
+}
+
+int treat_dscv_share_reg_ack(dsm_msg_tcp_thread_ctx *msg_ctx,
+                             dsm_supervisor_ctx *spvs_ctx) {
+    LOG_INFO("Traitement d'un CODE=%d ...", CODE_DISCOVER_SHARE_REGISTRY_MANAGER_ACK);
+
+    dsm_msg_dscv_share_reg_ack share_reg_ack;
+    if (dsm_dsrlze_dscv_share_reg_ack(msg_ctx->payload, msg_ctx->header.payload_len,
+                                      &share_reg_ack) < 0) {
+        return -1;
+    }
+
+    unsigned int id_node = msg_ctx->header.id;
+    atomic_fetch_add(&spvs_ctx->share_mgr_count, 1);
+
+    dsm_supervising_node *node_content;
+    dsm_hash_safe_get(&spvs_ctx->spvs_reg, node_content, node, id_node) {
+        if (node_content->id == id_node) {
+            node_content->manager_port = share_reg_ack.listen_port;
+            break;
+        }
+    }
+    dsm_hash_safe_get_end(&spvs_ctx->spvs_reg, id_node);
+
+    return 0;
+}
+
+int treat_dscv_mgr_ready(dsm_supervisor_ctx *spvs_ctx) {
+    LOG_INFO("Traitement d'un CODE=%d ...", CODE_DISCOVER_MANAGER_READY);
+
+    atomic_fetch_add(&spvs_ctx->mgr_ready_count, 1);
+    return 0;
+}
+
+int treat_dscv_wkr_config_ack(dsm_supervisor_ctx *spvs_ctx) {
+    LOG_INFO("Traitement d'un CODE=%d ...", CODE_DISCOVER_WORKER_CONFIG_ACK);
+
+    atomic_fetch_add(&spvs_ctx->wkr_config_count, 1);
+    return 0;
+}
+
+int send_dscv_wkr_config(dsm_supervisor_ctx *spvs_ctx) {
+    LOG_INFO("Envoi d'un CODE=%d...", CODE_DISCOVER_WORKER_CONFIG);
+
+    uint8_t msg_buf[sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_wkr_config)];
+    dsm_pager_config *pager_cfg = &dsm_ctx->config.pager;
+    int msg_len = dsm_srlze_dscv_wkr_config(pager_cfg->nb_pages, pager_cfg->page_size,
+                                            msg_buf, sizeof(msg_buf));
+    if (msg_len < 0) {
+        return -1;
+    }
+
+    unsigned int bkt;
+    dsm_supervising_node *pos;
+    dsm_hash_safe_for_each(&spvs_ctx->spvs_reg, bkt, pos, node) {
+        if (pos->role == DSM_ROLE_WORKER) {
+            int sent = dsm_tcp_send_all(pos->tcp_sock, msg_buf, msg_len);
+            if (sent < 0) {
+                LOG_ERROR("Erreur d'envoi de la configuration du worker au node ID %u",
+                          pos->id);
+                dsm_hash_safe_unlock(&spvs_ctx->spvs_reg, bkt);
+                return -1;
+            }
+        }
+    }
+
+    return 0;
+}
+
+int send_dscv_finalize(dsm_supervisor_ctx *spvs_ctx) {
+    LOG_INFO("Envoi d'un CODE=%d...", CODE_DISCOVER_FINALIZE);
+
+    uint8_t msg_buf[sizeof(dsm_msg_header)];
+    int msg_len = dsm_srlze_dscv_finalize(msg_buf, sizeof(msg_buf));
+    if (msg_len < 0) {
+        return -1;
+    }
+
+    unsigned int bkt;
+    dsm_supervising_node *pos;
+    dsm_hash_safe_for_each(&spvs_ctx->spvs_reg, bkt, pos, node) {
+        int sent = dsm_tcp_send_all(pos->tcp_sock, msg_buf, msg_len);
+        if (sent < 0) {
+            LOG_ERROR("Erreur d'envoi du message de finalisation au node ID %u", pos->id);
+            dsm_hash_safe_unlock(&spvs_ctx->spvs_reg, bkt);
+            return -1;
+        }
+    }
+
+    return 0;
+}
