@@ -2,17 +2,14 @@
 #define DSM_SUPERVISOR_H
 
 #include <stdatomic.h>
-#include <stdbool.h>
 
-#include "dsm.h"
 #include "network/discover/net_discover.h"
 #include "util/concurrent/safe_list.h"
 #include "util/concurrent/safe_map.h"
-#include "util/list.h"
 #include "util/thread_pool.h"
 
 #define DSM_SPVS_POLL_FDS_SERVER 2
-#define DSM_SPVS_POLL_TIMEOUT_MS 3000
+#define DSM_SPVS_POLL_TIMEOUT_MS 1500
 
 #define DSM_SPVS_HASH_BITS 4
 

@@ -31,7 +31,7 @@ int dsm_dsrlze_dscv_init(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_init *msg);
 int dsm_dsrlze_dscv_spvs_data(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_spvs_data *msg);
 int dsm_dsrlze_dscv_join_ack(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_join_ack *msg);
 int dsm_dsrlze_dscv_role_wish(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_role_wish *msg);
-int dsm_dsrlze_dscv_share_reg(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_share_reg *msg);
+int dsm_dsrlze_dscv_share_reg(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_share_reg **msg);
 int dsm_dsrlze_dscv_share_reg_ack(uint8_t *buf, size_t buf_sz,
                                   dsm_msg_dscv_share_reg_ack *msg);
 int dsm_dsrlze_dscv_wkr_config(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_wkr_config *msg);

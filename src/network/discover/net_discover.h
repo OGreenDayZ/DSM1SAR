@@ -4,7 +4,7 @@
 #include "dsm.h"
 
 #define DSM_DSCV_MAX_RETRIES 3
-#define DSM_DSCV_RESEND_INTERVAL_SEC 2
+#define DSM_DSCV_RESEND_INTERVAL_SEC 1
 
 /* Uniquemement utile jusqu'à la fin du discover */
 typedef struct {
@@ -14,6 +14,8 @@ typedef struct {
     int sock_udp_recv;
     int sock_udp_mcast;
     uint32_t multicast_ip;
+
+    uint16_t udp_send_port;
 
     uint32_t supervisor_ip;
     uint16_t supervisor_tcp_port;

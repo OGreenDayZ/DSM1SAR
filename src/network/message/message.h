@@ -7,6 +7,7 @@
 #include <sys/time.h>
 
 #define DSM_MSG_RECV_TIMEOUT_SEC 5
+#define DSM_MTU_SIZE 1500
 
 typedef enum {
     /* Discover */

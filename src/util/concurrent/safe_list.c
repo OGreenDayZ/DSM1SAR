@@ -13,19 +13,19 @@ void dsm_safe_list_destroy(dsm_safe_list *list) {
 
 void dsm_safe_list_add(dsm_safe_list *list, dsm_list_head *new) {
     pthread_rwlock_wrlock(&list->lock);
-    dsm_list_add(new, &list->head);
+    dsm_list_add(&list->head, new);
     pthread_rwlock_unlock(&list->lock);
 }
 
 void dsm_safe_list_add_tail(dsm_safe_list *list, dsm_list_head *new) {
     pthread_rwlock_wrlock(&list->lock);
-    dsm_list_add_tail(new, &list->head);
+    dsm_list_add_tail(&list->head, new);
     pthread_rwlock_unlock(&list->lock);
 }
 
 void dsm_safe_list_del(dsm_safe_list *list, dsm_list_head *entry) {
     pthread_rwlock_wrlock(&list->lock);
-    dsm_list_del(entry); /* laisse next/prev = NULL (poison) */
+    dsm_list_del(entry);
     pthread_rwlock_unlock(&list->lock);
 }
 

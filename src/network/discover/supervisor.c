@@ -1,19 +1,13 @@
 #include "supervisor.h"
 
-#include <netinet/in.h>
 #include <poll.h>
-#include <pthread.h>
 #include <stdatomic.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <sys/types.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "debug/debug.h"
 #include "internal.h"
 #include "network/discover/spvs_factory.h"
-#include "network/message/message.h"
 #include "network/message/serializer.h"
 #include "network/network.h"
 #include "util/atomicity.h"
@@ -22,9 +16,22 @@ static dsm_supervisor_ctx *spvs_ctx;
 
 static int spvs_ctx_init(dsm_dscv_ctx *dscv_ctx) {
 
-    dscv_ctx->sock_tcp_listen = dsm_tcp_bind_listen(dsm_ctx->config.net.node.tcp_port);
+    unsigned short *listen_port = &dsm_ctx->config.net.node.tcp_port;
+    dscv_ctx->sock_tcp_listen = dsm_tcp_bind_listen(*listen_port);
     if (dscv_ctx->sock_tcp_listen < 0) {
         return -1;
+    }
+
+    if (*listen_port == 0) {
+        struct sockaddr_in addr;
+        socklen_t addr_len = sizeof(addr);
+        if (getsockname(dscv_ctx->sock_tcp_listen, (struct sockaddr *)&addr, &addr_len) <
+            0) {
+            LOG_ERROR("getsockname");
+            close(dscv_ctx->sock_tcp_listen);
+            return -1;
+        }
+        *listen_port = ntohs(addr.sin_port);
     }
 
     spvs_ctx = malloc(sizeof(dsm_supervisor_ctx));
@@ -82,34 +89,39 @@ static void get_current_role_stats(size_t *managers_count, size_t *workers_count
 
 static void role_check(dsm_node_role *role, size_t *nb_assign_m, size_t *nb_assign_w,
                        size_t *nb_convert_m, size_t *nb_convert_w) {
+
+    // print all nb
+    LOG_INFO("nb_assign_m=%zu, nb_assign_w=%zu, nb_convert_m=%zu, nb_convert_w=%zu",
+             *nb_assign_m, *nb_assign_w, *nb_convert_m, *nb_convert_w);
     switch (*role) {
         case DSM_ROLE_UNDEFINED:
-            if (nb_assign_m > 0) {
+            if (*nb_assign_m > 0) {
                 *role = DSM_ROLE_MANAGER;
-                nb_assign_m--;
+                (*nb_assign_m)--;
             } else if (nb_assign_w > 0) {
                 *role = DSM_ROLE_WORKER;
-                nb_assign_w--;
+                (*nb_assign_w)--;
             }
             break;
 
         case DSM_ROLE_MANAGER:
-            if (nb_convert_w > 0) {
+            if (*nb_convert_w > 0) {
                 *role = DSM_ROLE_WORKER;
-                nb_convert_w--;
+                (*nb_convert_w)--;
             }
             break;
 
         case DSM_ROLE_WORKER:
-            if (nb_convert_m > 0) {
+            if (*nb_convert_m > 0) {
                 *role = DSM_ROLE_MANAGER;
-                nb_convert_m--;
+                (*nb_convert_m)--;
             }
             break;
     }
 }
 
 static int role_assignement() {
+    LOG_INFO("Attribution des rôles aux nodes...");
     size_t m_count, w_count, expected_m, expected_w, nb_undifined;
     get_current_role_stats(&m_count, &w_count);
 
@@ -145,11 +157,19 @@ static int role_assignement() {
 
     role_check(&dsm_ctx->config.net.node.role, &nb_assign_m, &nb_assign_w, &nb_convert_m,
                &nb_convert_w);
+    LOG_INFO("Rôle du superviseur : %s",
+             dsm_ctx->config.net.node.role == DSM_ROLE_MANAGER  ? "MANAGER"
+             : dsm_ctx->config.net.node.role == DSM_ROLE_WORKER ? "WORKER"
+                                                                : "UNDEFINED");
 
     unsigned int bkt;
     dsm_supervising_node *pos;
     dsm_hash_safe_for_each(&spvs_ctx->spvs_reg, bkt, pos, node) {
         role_check(&pos->role, &nb_assign_m, &nb_assign_w, &nb_convert_m, &nb_convert_w);
+        LOG_INFO("Node ID %u : rôle %s", pos->id,
+                 pos->role == DSM_ROLE_MANAGER
+                     ? "MANAGER"
+                     : (pos->role == DSM_ROLE_WORKER ? "WORKER" : "UNDEFINED"));
     }
 
     return 0;
@@ -235,15 +255,18 @@ static int handle_udp_mcast(dsm_dscv_ctx *dscv_ctx) {
         return -1;
     }
     struct timeval tv = {.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC, .tv_usec = 0};
-    uint8_t hbuf[sizeof(dsm_msg_header)];
 
-    if (dsm_udp_recvfrom(dscv_ctx->sock_udp_mcast, hbuf, sizeof(hbuf),
+    uint8_t buf[DSM_MTU_SIZE];
+
+    if (dsm_udp_recvfrom(dscv_ctx->sock_udp_mcast, buf, sizeof(buf),
                          &msg_ctx->src_addr.sin_addr.s_addr, &msg_ctx->src_addr.sin_port,
                          &tv) < 0) {
         goto exit_err_ctx;
     }
 
-    if (dsm_dsrlze_header(hbuf, sizeof(hbuf), &msg_ctx->header) < 0) {
+    int offset = dsm_dsrlze_header(buf, sizeof(buf), &msg_ctx->header);
+    if (offset < 0 || offset + msg_ctx->header.payload_len > sizeof(buf)) {
+        LOG_ERROR("Erreur de désérialisation du header ou payload trop grand");
         goto exit_err_ctx;
     }
 
@@ -253,12 +276,17 @@ static int handle_udp_mcast(dsm_dscv_ctx *dscv_ctx) {
         goto exit_err_ctx;
     }
 
-    tv.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC;
-    tv.tv_usec = 0;
-    if (dsm_udp_recvfrom(dscv_ctx->sock_udp_mcast, msg_ctx->payload,
-                         msg_ctx->header.payload_len, NULL, NULL, &tv) < 0) {
-        goto exit_err_payload;
+    if (msg_ctx->src_addr.sin_addr.s_addr == dscv_ctx->my_ip &&
+        msg_ctx->src_addr.sin_port == dscv_ctx->udp_send_port) {
+        LOG_INFO("Message multicast reçu de moi-même, ignoré");
+        free(msg_ctx->payload);
+        free(msg_ctx);
+        return 0;
     }
+    LOG_INFO("Message multicast reçu de %u:%u", msg_ctx->src_addr.sin_addr.s_addr,
+             msg_ctx->src_addr.sin_port);
+
+    memcpy(msg_ctx->payload, buf + offset, msg_ctx->header.payload_len);
 
     if (pool_add_task(spvs_ctx->pool, dispatch_call_udp, msg_ctx) < 0) {
         goto exit_err_payload;
@@ -334,11 +362,13 @@ found:
 
     update_entry->id_node = id_node;
     update_entry->fd = eli_ctx.sock;
-    dsm_safe_list_add_tail(&spvs_ctx->poll_fds_update, &update_entry->node);
+    dsm_safe_list_add(&spvs_ctx->poll_fds_update, &update_entry->node);
 
     if (send_dscv_join_ack(eli_ctx.sock, id_node) < 0) {
         goto exit_err_node;
     }
+
+    atomic_fetch_add(&spvs_ctx->join_count, 1);
 
     LOG_INFO("Acceptation d'un client, attribution du ID_Node=%u", id_node);
 
@@ -376,7 +406,7 @@ static int handle_tcp_listen(dsm_dscv_ctx *dscv_ctx) {
     }
 
     eli_ctx->sock = client_sock;
-    eli_ctx->client_ip = client_addr.sin_addr.s_addr;
+    eli_ctx->client_ip = ntohl(client_addr.sin_addr.s_addr);
     if (pool_add_task(spvs_ctx->pool, create_entry, eli_ctx) < 0) {
         free(eli_ctx);
         close(client_sock);
@@ -387,7 +417,7 @@ static int handle_tcp_listen(dsm_dscv_ctx *dscv_ctx) {
 }
 
 static int handle_tcp_recv(int poll_index) {
-    unsigned int id_node = poll_index - DSM_SPVS_POLL_FDS_SERVER;
+    unsigned int id_node = poll_index - DSM_SPVS_POLL_FDS_SERVER + 1;
     LOG_INFO("Message reçu sur une socket TCP (ID_Node=%d)", id_node);
 
     dsm_msg_tcp_thread_ctx *msg_ctx = malloc(sizeof(dsm_msg_tcp_thread_ctx));
@@ -413,7 +443,11 @@ static int handle_tcp_recv(int poll_index) {
 
     uint8_t hbuf[sizeof(dsm_msg_header)];
     struct timeval tv = {.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC, .tv_usec = 0};
-    if (dsm_tcp_recv_all(recv_sock, hbuf, sizeof(hbuf), &tv) < 0) {
+    int ret_recv = dsm_tcp_recv_all(recv_sock, hbuf, sizeof(hbuf), &tv);
+    if (ret_recv < 0) {
+        if (ret_recv == -2) {
+            goto exit_updt_close;
+        }
         goto exit_err_ctx;
     }
 
@@ -429,8 +463,12 @@ static int handle_tcp_recv(int poll_index) {
 
     tv.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC;
     tv.tv_usec = 0;
-    if (dsm_tcp_recv_all(recv_sock, msg_ctx->payload, msg_ctx->header.payload_len, &tv) <
-        0) {
+    ret_recv =
+        dsm_tcp_recv_all(recv_sock, msg_ctx->payload, msg_ctx->header.payload_len, &tv);
+    if (ret_recv < 0) {
+        if (ret_recv == -2) {
+            goto exit_updt_close;
+        }
         goto exit_err_payload;
     }
 
@@ -442,6 +480,19 @@ static int handle_tcp_recv(int poll_index) {
 
     return 0;
 
+    dsm_poll_update_entry *update_entry;
+exit_updt_close:
+    // TODO tolérance exit ?
+    close(recv_sock);
+    update_entry = malloc(sizeof(dsm_poll_update_entry));
+    if (!update_entry) {
+        LOG_ERROR("Erreur malloc : update_entry");
+        goto exit_err_payload;
+    }
+    update_entry->id_node = id_node;
+    update_entry->fd = -1;
+    dsm_safe_list_add(&spvs_ctx->poll_fds_update, &update_entry->node);
+
 exit_err_payload:
     free(msg_ctx->payload);
 
@@ -452,15 +503,22 @@ exit_err_ctx:
 }
 
 static int update_spvs_state(dsm_dscv_ctx *dscv_ctx) {
-    dsm_supervising_state state = atomic_load(&spvs_ctx->state);
     unsigned int expected;
     bool is_manager = dsm_ctx->config.net.node.role == DSM_ROLE_MANAGER;
 
-    switch (state) {
+    LOG_INFO("State=%d, join_count=%u, role_wish_count=%u, share_mgr_count=%u, "
+             "mgr_ready_count=%u, wkr_config_count=%u",
+             atomic_load(&spvs_ctx->state), atomic_load(&spvs_ctx->join_count),
+             atomic_load(&spvs_ctx->role_wish_count),
+             atomic_load(&spvs_ctx->share_mgr_count),
+             atomic_load(&spvs_ctx->mgr_ready_count),
+             atomic_load(&spvs_ctx->wkr_config_count));
+    switch (atomic_load(&spvs_ctx->state)) {
+
         case DSM_SPVS_STATE_SCANNING:
             expected = dsm_ctx->config.net.system.nb_nodes - 1;
             if (atomic_load(&spvs_ctx->join_count) == expected &&
-                atomic_load(&spvs_ctx->join_count) == expected) {
+                atomic_load(&spvs_ctx->role_wish_count) == expected) {
                 atomic_store(&spvs_ctx->state, DSM_SPVS_STATE_MGR_SHARING);
                 if (role_assignement() < 0 ||
                     send_dscv_share_reg(spvs_ctx, dscv_ctx,
@@ -493,7 +551,7 @@ static int update_spvs_state(dsm_dscv_ctx *dscv_ctx) {
 
         case DSM_SPVS_STATE_WKR_CONFIGURING:
             expected = dsm_ctx->config.net.system.nb_nodes -
-                       dsm_ctx->config.net.system.nb_managers - (is_manager ? 1 : 0);
+                       dsm_ctx->config.net.system.nb_managers - (is_manager ? 0 : 1);
             if (atomic_load(&spvs_ctx->wkr_config_count) == expected) {
                 atomic_store(&spvs_ctx->state, DSM_SPVS_STATE_FINALIZING);
                 // send finalize dans fin de boucle de dsm_supervisor_loop
@@ -509,9 +567,11 @@ static void update_poll_fds(struct pollfd *fds, int max_fds, int skip_fds) {
     int index;
     dsm_poll_update_entry *pos, *n;
     dsm_safe_list_for_each_entry_safe(&spvs_ctx->poll_fds_update, pos, n, node) {
-        index = pos->id_node + skip_fds;
+        index =
+            pos->id_node + skip_fds - 1; // -1 car ID_Node=0 est pris par le superviseur
         if (index >= 0 && index < max_fds) {
             fds[index].fd = pos->fd;
+            LOG_INFO("Socket de node ID:%u mis à jour à %d", pos->id_node, pos->fd);
         }
         dsm_list_del(&pos->node);
         free(pos);
@@ -519,7 +579,6 @@ static void update_poll_fds(struct pollfd *fds, int max_fds, int skip_fds) {
 }
 
 int dsm_supervisor_loop(dsm_dscv_ctx *dscv_ctx) {
-
     if (spvs_ctx_init(dscv_ctx) < 0) {
         return -1;
     }
@@ -543,7 +602,6 @@ int dsm_supervisor_loop(dsm_dscv_ctx *dscv_ctx) {
 
         int ret = poll(fds, max_fds, DSM_SPVS_POLL_TIMEOUT_MS);
         if (ret < 0) {
-            LOG_ERROR("Supervisor poll error (%d)", ret);
             goto exit_err;
 
         } else if (ret == 0) { // timeout
@@ -555,15 +613,15 @@ int dsm_supervisor_loop(dsm_dscv_ctx *dscv_ctx) {
 
                 if (i == 0) {
                     if (handle_udp_mcast(dscv_ctx) < 0) {
-                        goto exit_err;
+                        continue; // TODO
                     }
                 } else if (i == 1) {
                     if (handle_tcp_listen(dscv_ctx) < 0) {
-                        goto exit_err;
+                        continue;
                     }
                 } else {
                     if (handle_tcp_recv(i) < 0) {
-                        goto exit_err;
+                        continue;
                     }
                 }
             }
