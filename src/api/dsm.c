@@ -42,12 +42,12 @@ static int validate_config(dsm_config *config) {
     }
 
     if (!is_power_of_two(config->pager.page_size)) {
-        LOG_ERROR("page_size doit être une puissance de 2 > 0");
+        LOG_ERROR("page_size doit être une puissance de 2 et > 0");
         return DSM_ERROR_INIT_ARG_PAGE_SIZE;
     }
 
-    if (config->net.system.nb_nodes == 0) {
-        LOG_ERROR("nb_nodes doit être > 0");
+    if (config->net.system.nb_nodes < 2) {
+        LOG_ERROR("nb_nodes doit être >= 2");
         return DSM_ERROR_INIT_ARG_NB_NODES;
     }
 

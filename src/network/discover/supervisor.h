@@ -29,7 +29,7 @@ typedef enum {
 } dsm_supervising_state;
 
 /**
- * @note : struct de transmission au thread
+ * @note : struct de transmission au thread, utilitaire
  */
 typedef struct {
     int sock;
@@ -39,13 +39,13 @@ typedef struct {
 typedef struct {
     uint32_t ip;
     struct dsm_list_head node;
-} dsm_eligible_entry;
+} dsm_eligible_entry; // Dans eligible_ip
 
 typedef struct {
     int id_node;
     int fd; // -1 ou nouvelle valeur de fd
     struct dsm_list_head node;
-} dsm_poll_update_entry;
+} dsm_poll_update_entry; // Dans poll_fds_update
 
 typedef struct {
     unsigned int id;
@@ -56,7 +56,7 @@ typedef struct {
     dsm_node_role role;
 
     struct dsm_hlist_node node;
-} dsm_supervising_node;
+} dsm_supervising_node; // Dans spvs_reg
 
 typedef struct {
     _Atomic dsm_supervising_state
@@ -85,6 +85,6 @@ typedef struct {
     dsm_safe_map spvs_reg;
 } dsm_supervisor_ctx;
 
-int dsm_supervisor_loop(dsm_dscv_ctx *dscv_ctx);
+int dsm_supervising_start(dsm_dscv_ctx *dscv_ctx);
 
 #endif // DSM_SUPERVISOR_H

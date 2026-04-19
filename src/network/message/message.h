@@ -19,6 +19,8 @@ typedef enum {
     CODE_DISCOVER_SHARE_REGISTRY_MANAGER,
     CODE_DISCOVER_SHARE_REGISTRY_MANAGER_ACK,
     CODE_DISCOVER_SHARE_REGISTRY_WORKER,
+    CODE_DISCOVER_WORKER_IDENTITY,
+    CODE_DISCOVER_WORKER_IDENTITY_ACK,
     CODE_DISCOVER_MANAGER_READY,
     CODE_DISCOVER_WORKER_CONFIG,
     CODE_DISCOVER_WORKER_CONFIG_ACK,
@@ -84,6 +86,16 @@ typedef struct {
     uint32_t nb_nodes; // le nombre de nodes envoyés dans ce message (< sys_total_nodes)
     dsm_reg_node nodes[];
 } dsm_msg_dscv_share_reg;
+
+/* CODE_DISCOVER_WORKER_IDENTITY */
+// typedef struct {
+//     // struct vide
+// } dsm_msg_dscv_wkr_id;
+
+/* CODE_DISCOVER_WORKER_IDENTITY_ACK */
+// typedef struct {
+//     // struct vide
+// } dsm_msg_dscv_wkr_id_ack;
 
 /* CODE_DISCOVER_SHARE_REGISTRY_MANAGER_ACK */
 typedef struct {

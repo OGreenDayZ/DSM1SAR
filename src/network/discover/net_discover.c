@@ -1,5 +1,6 @@
 #include "net_discover.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
@@ -71,6 +72,7 @@ exit_udp_error:
  */
 static int recv_dscv_spvs_data() {
     LOG_INFO("En attente d'un CODE=%d ...", CODE_DISCOVER_SUPERVISOR_DATA);
+
     struct timeval start, current, timeout;
     gettimeofday(&start, NULL);
 
@@ -95,7 +97,6 @@ static int recv_dscv_spvs_data() {
         int ret = dsm_udp_recvfrom(discover_ctx.sock_udp_recv, buf, buf_size, &src_ip,
                                    &src_port, &timeout);
         if (ret < 0) {
-            LOG_INFO("Aucun superviseur trouvé lors de cette tentative");
             return 1;
         } else if ((size_t)ret != buf_size) {
             LOG_WARNING(
@@ -123,7 +124,8 @@ static int recv_dscv_spvs_data() {
             continue;
         }
 
-        LOG_INFO("Superviseur trouvé à l'adresse %u:%u", src_ip, src_port);
+        LOG_INFO("Superviseur trouvé à l'adresse Multicast, ses données sont %u:%u",
+                 src_ip, src_port);
 
         discover_ctx.supervisor_ip = src_ip;
         discover_ctx.supervisor_tcp_port = spvs_data.tcp_port_spvs;
@@ -164,8 +166,8 @@ static int send_dscv_init() {
     discover_ctx.udp_send_port = ntohs(local_addr.sin_port);
 
     for (int attempt = 1; attempt <= DSM_DSCV_MAX_RETRIES; attempt++) {
-        LOG_INFO("\nTentative [%d/%d] — Demande de connexion en cours...", attempt,
-                 DSM_DSCV_MAX_RETRIES);
+        LOG_INFO("\n ----- Tentative [%d/%d] — Demande de connexion en cours... -----",
+                 attempt, DSM_DSCV_MAX_RETRIES);
         LOG_INFO("Envoi d'un CODE=%d ...", CODE_DISCOVER_INIT);
         LOG_INFO("Envoi de %zu octets", msg_len);
         ssize_t sent = sendto(send_sock, msg_buf, msg_len, 0, (struct sockaddr *)&addr,
@@ -210,6 +212,7 @@ static int connect_to_supervisor() {
  */
 static int recv_dscv_join_ack() {
     LOG_INFO("En attente d'un CODE=%d ...", CODE_DISCOVER_JOIN_ACK);
+
     struct timeval timeout = {.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC, .tv_usec = 0};
     size_t buf_size = sizeof(dsm_msg_header);
     uint8_t hbuf[buf_size];
@@ -270,7 +273,6 @@ static int send_dscv_role_wish() {
     return 0;
 }
 
-/* TODO FACTO AVEC connect_to_managers ? */
 static int prepare_nodes_reg(const dsm_msg_dscv_share_reg *share) {
 
     for (uint32_t i = 0; i < share->nb_nodes; i++) {
@@ -285,7 +287,8 @@ static int prepare_nodes_reg(const dsm_msg_dscv_share_reg *share) {
 
         node_content->id = reg_node->id;
         node_content->ip = reg_node->ip;
-
+        LOG_INFO("Préparation du registre de nœuds : ID=%u, IP=%u", node_content->id,
+                 node_content->ip);
         if (reg_node->id == 0) {
             discover_ctx.supervisor_role = DSM_ROLE_WORKER;
             node_content->tcp_sock = discover_ctx.supervisor_tcp_sock;
@@ -299,10 +302,53 @@ static int prepare_nodes_reg(const dsm_msg_dscv_share_reg *share) {
     return 0;
 }
 
+static int send_dscv_wkr_id(int manager_sock) {
+    LOG_INFO("Envoi d'un CODE=%d ...", CODE_DISCOVER_WORKER_IDENTITY);
+
+    uint8_t buf[sizeof(dsm_msg_header)];
+    int msg_len = dsm_srlze_dscv_wkr_id(buf, sizeof(buf));
+    if (msg_len < 0) {
+        return -1;
+    }
+
+    int sent = dsm_tcp_send_all(manager_sock, buf, msg_len);
+    if (sent < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+static int recv_dscv_wkr_id_ack(int manager_sock) {
+    LOG_INFO("En attente d'un CODE=%d ...", CODE_DISCOVER_WORKER_IDENTITY_ACK);
+
+    struct timeval timeout = {.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC, .tv_usec = 0};
+    size_t buf_size = sizeof(dsm_msg_header);
+    uint8_t hbuf[buf_size];
+
+    if (dsm_tcp_recv_all(manager_sock, hbuf, buf_size, &timeout) < 0) {
+        return -1;
+    }
+
+    dsm_msg_header header;
+    if (dsm_dsrlze_header(hbuf, buf_size, &header) < 0) {
+        return -1;
+    }
+
+    if (header.code == CODE_DISCOVER_WORKER_IDENTITY_ACK) {
+        LOG_INFO("CODE=%d reçu du manager", CODE_DISCOVER_WORKER_IDENTITY_ACK);
+        return 0;
+
+    } else {
+        LOG_ERROR("Code inconnu : %d", header.code);
+        return -1;
+    }
+}
+
 static int connect_to_managers(const dsm_msg_dscv_share_reg *share) {
 
+    LOG_INFO("Connexion aux managers avec le registre ...");
     for (uint32_t i = 0; i < share->nb_nodes; i++) {
-
         const dsm_reg_node *reg_node = &share->nodes[i];
 
         dsm_node_content *node_content = malloc(sizeof(dsm_node_content));
@@ -319,13 +365,30 @@ static int connect_to_managers(const dsm_msg_dscv_share_reg *share) {
             node_content->tcp_sock = discover_ctx.supervisor_tcp_sock;
 
         } else {
+            LOG_INFO("Connexion au manager ID %u ...", reg_node->id);
             int manager_sock = dsm_tcp_connect_sock(reg_node->ip, reg_node->manager_port);
             if (manager_sock < 0) {
                 LOG_ERROR("Connexion au manager %u échouée", reg_node->id);
                 return -1;
             }
-            node_content->tcp_sock = manager_sock;
+
             LOG_INFO("Connecté au manager ID %u", reg_node->id);
+
+            if (send_dscv_wkr_id(manager_sock) < 0) {
+                LOG_ERROR("Envoi de l'identité du worker au manager %u échoué",
+                          reg_node->id);
+                close(manager_sock);
+                return -1;
+            }
+
+            if (recv_dscv_wkr_id_ack(manager_sock) < 0) {
+                LOG_ERROR("Vous n'avez pas été reconnu par le manager");
+                close(manager_sock);
+                return -1;
+            }
+
+            node_content->tcp_sock = manager_sock;
+            LOG_INFO("Vous avez été reconnu par le manager ID %u", reg_node->id);
         }
 
         dsm_init_hlist_node(&node_content->node);
@@ -337,6 +400,7 @@ static int connect_to_managers(const dsm_msg_dscv_share_reg *share) {
 static int recv_dscv_share_reg() {
     LOG_INFO("En attente d'un CODE=%d || CODE=%d ...",
              CODE_DISCOVER_SHARE_REGISTRY_MANAGER, CODE_DISCOVER_SHARE_REGISTRY_WORKER);
+
     size_t buf_size = sizeof(dsm_msg_header);
     uint8_t hbuf[buf_size];
 
@@ -399,6 +463,7 @@ static int recv_dscv_share_reg() {
 
 static int send_dscv_share_reg_ack() {
     LOG_INFO("Envoi d'un CODE=%d ...", CODE_DISCOVER_SHARE_REGISTRY_MANAGER_ACK);
+
     unsigned short *listen_port = &dsm_ctx->config.net.node.tcp_port;
     discover_ctx.sock_tcp_listen = dsm_tcp_bind_listen(*listen_port);
 
@@ -435,8 +500,54 @@ static int send_dscv_share_reg_ack() {
     return 0;
 }
 
+static int recv_dscv_wkr_id(int worker_sock, uint32_t *worker_id) {
+    LOG_INFO("En attente d'un CODE=%d ...", CODE_DISCOVER_WORKER_IDENTITY);
+
+    struct timeval timeout = {.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC, .tv_usec = 0};
+    size_t buf_size = sizeof(dsm_msg_header);
+    uint8_t hbuf[buf_size];
+
+    if (dsm_tcp_recv_all(worker_sock, hbuf, buf_size, &timeout) < 0) {
+        return -1;
+    }
+
+    dsm_msg_header header;
+    if (dsm_dsrlze_header(hbuf, buf_size, &header) < 0) {
+        return -1;
+    }
+
+    if (header.code == CODE_DISCOVER_WORKER_IDENTITY) {
+        LOG_INFO("CODE=%d reçu du worker", CODE_DISCOVER_WORKER_IDENTITY);
+        *worker_id = header.id;
+        return 0;
+
+    } else {
+        LOG_ERROR("Code inconnu : %d", header.code);
+        return -1;
+    }
+}
+
+static int send_dscv_wkr_id_ack(int worker_sock) {
+    LOG_INFO("Envoi d'un CODE=%d ...", CODE_DISCOVER_WORKER_IDENTITY_ACK);
+
+    uint8_t buf[sizeof(dsm_msg_header)];
+    int msg_len = dsm_srlze_dscv_wkr_id_ack(buf, sizeof(buf));
+    if (msg_len < 0) {
+        return -1;
+    }
+
+    int sent = dsm_tcp_send_all(worker_sock, buf, msg_len);
+    if (sent < 0) {
+        return -1;
+    }
+
+    LOG_INFO("Succès de l'envoi du CODE=%d", CODE_DISCOVER_WORKER_IDENTITY_ACK);
+    return 0;
+}
+
 static int wait_workers_connect() {
     LOG_INFO("En attente de connexions des workers ...");
+
     int connected_workers = discover_ctx.supervisor_role == DSM_ROLE_WORKER ? 1 : 0;
     int expected_workers = dsm_safe_map_count(&dsm_ctx->nodes_reg);
     bool found;
@@ -451,27 +562,42 @@ static int wait_workers_connect() {
             LOG_ERROR("accept");
             return -1;
         }
+        LOG_INFO("Nouvelle connexion, vérification de l'identité du worker...");
+
         // Comparer ID et IP
+        uint32_t client_id;
+        if (recv_dscv_wkr_id(client_sock, &client_id) < 0) {
+            close(client_sock);
+            return -1;
+        }
+
         uint32_t client_ip = ntohl(client_addr.sin_addr.s_addr);
+
         dsm_node_content *node_content;
         /**
          * @note : dsm_hash_for_each_possible pour la sécurité,
          * même si ID est normalement unique
          */
-        dsm_hash_safe_get(&dsm_ctx->nodes_reg, node_content, node, client_ip) {
-            if (node_content->ip == client_ip) {
+        dsm_hash_safe_get(&dsm_ctx->nodes_reg, node_content, node, client_id) {
+            if (node_content->id == client_id && node_content->ip == client_ip) {
                 node_content->tcp_sock = client_sock;
                 connected_workers++;
                 LOG_INFO("Worker %u connecté", node_content->id);
                 found = true;
-                break;
+                // dsm_hash_safe_unlock(&dsm_ctx->nodes_reg, client_id);
+                // break; // On sort du dsm_hash_safe_get, pas du while !!
             }
         }
         dsm_hash_safe_get_end(&dsm_ctx->nodes_reg, client_ip);
 
+        if (send_dscv_wkr_id_ack(client_sock) < 0) {
+            close(client_sock);
+            return -1;
+        }
+
         if (!found) {
             close(client_sock);
-            LOG_ERROR("Connexion d'un client inconnu : IP %u", client_ip);
+            LOG_ERROR("Connexion refusée : client inconnu IP=%u", client_ip);
         }
     }
 
@@ -498,6 +624,7 @@ static int send_dscv_mgr_ready() {
 
 static int recv_dscv_wkr_config() {
     LOG_INFO("En attente d'un CODE=%d ...", CODE_DISCOVER_WORKER_CONFIG);
+
     struct timeval timeout = {.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC, .tv_usec = 0};
     size_t buf_size = sizeof(dsm_msg_header);
     uint8_t hbuf[buf_size];
@@ -560,6 +687,7 @@ static int send_dscv_wkr_config_ack() {
 
 static int recv_dscv_finalize() {
     LOG_INFO("En attente d'un CODE=%d ...", CODE_DISCOVER_FINALIZE);
+
     struct timeval timeout = {.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC, .tv_usec = 0};
     size_t buf_size = sizeof(dsm_msg_header);
     uint8_t hbuf[buf_size];
@@ -583,7 +711,7 @@ static int recv_dscv_finalize() {
     return 0;
 }
 
-// TODO FACTO
+// TODO FACTO + TRANSFERT ?
 int dsm_discover() {
 
     if (discover_ctx_init() < 0) {
@@ -604,7 +732,7 @@ int dsm_discover() {
         LOG_INFO("Elu en tant que superviseur du système");
         dsm_ctx->node_id = 0;
 
-        if (dsm_supervisor_loop(&discover_ctx) < 0) {
+        if (dsm_supervising_start(&discover_ctx) < 0) {
             return -1;
         }
 

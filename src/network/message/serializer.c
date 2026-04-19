@@ -179,14 +179,12 @@ int dsm_srlze_dscv_share_reg(uint32_t code, dsm_msg_dscv_share_reg *share, uint8
                   code, buf_sz, needed_sz);
         return -1;
     }
-    LOG_INFO("buf_sz=%zu, needed_sz=%zu ", buf_sz, needed_sz, code, share->nb_nodes);
     dsm_msg_header header = {
         .code = code,
         .id = dsm_ctx->node_id,
         .payload_len =
             sizeof(dsm_msg_dscv_share_reg) + share->nb_nodes * sizeof(dsm_reg_node),
     };
-    LOG_INFO("Payload_len=%zu", header.payload_len);
 
     int offset = serialize_header(&header, buf, buf_sz);
     if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header)) {
@@ -236,6 +234,16 @@ int dsm_srlze_dscv_share_reg_ack(uint16_t listen_port, uint8_t *buf, size_t buf_
     memcpy(buf + offset, &payload, sizeof(payload));
 
     return offset + sizeof(payload);
+}
+
+int dsm_srlze_dscv_wkr_id(uint8_t *buf, size_t buf_sz) {
+    return serialize_no_payload_msg(CODE_DISCOVER_WORKER_IDENTITY, dsm_ctx->node_id, buf,
+                                    buf_sz);
+}
+
+int dsm_srlze_dscv_wkr_id_ack(uint8_t *buf, size_t buf_sz) {
+    return serialize_no_payload_msg(CODE_DISCOVER_WORKER_IDENTITY_ACK, dsm_ctx->node_id,
+                                    buf, buf_sz);
 }
 
 int dsm_srlze_dscv_mgr_ready(uint8_t *buf, size_t buf_sz) {
@@ -389,9 +397,7 @@ int dsm_dsrlze_dscv_share_reg(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_share_re
     dsm_msg_dscv_share_reg net_msg;
     memcpy(&net_msg, buf, sizeof(net_msg));
     net_msg.sys_total_nodes = ntohl(net_msg.sys_total_nodes);
-    LOG_INFO("nb_nodes : %u", net_msg.nb_nodes);
     net_msg.nb_nodes = ntohl(net_msg.nb_nodes);
-    LOG_INFO("nb_nodes : %u", net_msg.nb_nodes);
     size_t offset = sizeof(dsm_msg_dscv_share_reg);
 
     size_t needed_sz =

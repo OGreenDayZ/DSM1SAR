@@ -141,6 +141,15 @@ static inline void dsm_safe_map_destroy(dsm_safe_map *m) {
              (obj) ? 1 : (pthread_rwlock_unlock(__DSM_SAFE_LOCK((m), (bkt))), 0);        \
              obj = dsm_hlist_entry_safe((obj)->member.next, typeof(*(obj)), member))
 
+/**
+ * @example : Si id_node n'est pas unique :
+ *            dsm_hash_safe_unlock(&spvs_ctx->spvs_reg, id_node);
+ *            break;
+ *
+ * @warning : Si id_node est unique :
+ *            on peut ne pas break et laisser la boucle se finir naturellement sur
+ *            dsm_hash_safe_get_end
+ */
 #define dsm_hash_safe_unlock(m, bkt) pthread_rwlock_unlock(__DSM_SAFE_LOCK((m), (bkt)));
 
 /**

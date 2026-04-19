@@ -8,6 +8,7 @@ int main(int argc, char const *argv[]) {
 
     config.net.system.nb_nodes = 3;
     config.net.system.nb_managers = 1;
-    printf("j'ai bien compilé\n");
+
+    config.net.node.role = DSM_ROLE_MANAGER; // Collision
     return dsm_init(&config);
 }

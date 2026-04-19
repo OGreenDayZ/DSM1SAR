@@ -21,7 +21,6 @@ static int send_dscv_spvs_data(uint32_t ip_dst, uint16_t port_dst) {
         return -1;
     }
 
-    LOG_INFO("Envoie du message de données du superviseur au %u:%u", ip_dst, port_dst);
     if (dsm_udp_sendto(send_sock, msg_buf, msg_len, ip_dst, port_dst) < 0) {
         close(send_sock);
         return -1;
@@ -47,15 +46,19 @@ int treat_dscv_init(dsm_msg_udp_thread_ctx *msg_ctx, dsm_supervisor_ctx *spvs_ct
     dsm_msg_dscv_init init_msg;
     if (dsm_dsrlze_dscv_init(msg_ctx->payload, msg_ctx->header.payload_len, &init_msg) <
         0) {
-        return -1;
+        goto exit_err;
     }
 
     if (send_dscv_spvs_data(ip_src, init_msg.udp_port_uni) < 0) {
-        return -1;
+        goto exit_err;
     }
 
     LOG_INFO("Succès du traitement du CODE=%d", CODE_DISCOVER_INIT);
     return 0;
+
+exit_err:
+    free(entry);
+    return -1;
 }
 
 int send_dscv_join_ack(int dest_sock, unsigned int assigned_id) {
@@ -105,12 +108,17 @@ int treat_dscv_role_wish(dsm_msg_tcp_thread_ctx *msg_ctx, dsm_supervisor_ctx *sp
 
     unsigned int id_node = msg_ctx->header.id;
     atomic_fetch_add(&spvs_ctx->role_wish_count, 1);
-
+    LOG_INFO("Node ID %u souhaite être %s", id_node,
+             role_wish.role == DSM_ROLE_MANAGER  ? "MANAGER"
+             : role_wish.role == DSM_ROLE_WORKER ? "WORKER"
+                                                 : "UNDEFINED");
     dsm_supervising_node *node_content;
     dsm_hash_safe_get(&spvs_ctx->spvs_reg, node_content, node, id_node) {
         if (node_content->id == id_node) {
             node_content->role = role_wish.role;
-            break;
+            LOG_INFO("Enregistrement du souhait");
+            // dsm_hash_safe_unlock(&spvs_ctx->spvs_reg, id_node);
+            // break;
         }
     }
     dsm_hash_safe_get_end(&spvs_ctx->spvs_reg, id_node);
@@ -123,8 +131,8 @@ static int make_share_reg(dsm_supervisor_ctx *spvs_ctx, dsm_dscv_ctx *dscv_ctx,
                           dsm_node_role shared_role, dsm_msg_dscv_share_reg *share,
                           size_t share_nb) {
 
-    LOG_INFO("Construction d'un registre partagé pour le rôle %s ...",
-             shared_role == DSM_ROLE_MANAGER ? "MANAGER" : "WORKER");
+    LOG_INFO("Construction d'un registre partagé de %d nodes pour le rôle %s ...",
+             share_nb, shared_role == DSM_ROLE_MANAGER ? "MANAGER" : "WORKER");
     share->sys_total_nodes = dsm_ctx->config.net.system.nb_nodes;
     share->nb_nodes = share_nb;
     size_t index = 0;
@@ -181,30 +189,26 @@ int send_dscv_share_reg(dsm_supervisor_ctx *spvs_ctx, dsm_dscv_ctx *dscv_ctx,
     size_t share_nb = shared_role == DSM_ROLE_MANAGER
                           ? sys_cfg->nb_managers
                           : sys_cfg->nb_nodes - sys_cfg->nb_managers;
-    LOG_INFO("Nombre de nœuds à partager %d", share_nb);
     size_t buf_sz = sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_share_reg) +
                     share_nb * sizeof(dsm_reg_node);
-    uint8_t *msg_buf = malloc(buf_sz);
-    if (!msg_buf) {
-        LOG_ERROR("malloc : msg_buf");
-        return -1;
-    }
+    uint8_t msg_buf[buf_sz];
 
     dsm_msg_dscv_share_reg *share =
         malloc(sizeof(dsm_msg_dscv_share_reg) + share_nb * sizeof(dsm_reg_node));
     if (!share) {
         LOG_ERROR("malloc : share");
-        goto exit_msg_buf;
+        return -1;
     }
 
     if (make_share_reg(spvs_ctx, dscv_ctx, shared_role, share, share_nb) < 0) {
-        goto exit_share;
+        free(share);
+        return -1;
     }
 
     int msg_len = dsm_srlze_dscv_share_reg(code, share, msg_buf, buf_sz);
     free(share);
     if (msg_len < 0) {
-        goto exit_msg_buf;
+        return -1;
     }
 
     unsigned int bkt;
@@ -215,19 +219,12 @@ int send_dscv_share_reg(dsm_supervisor_ctx *spvs_ctx, dsm_dscv_ctx *dscv_ctx,
             if (sent < 0) {
                 LOG_ERROR("Erreur d'envoi du registre partagé au node ID %u", pos->id);
                 dsm_hash_safe_unlock(&spvs_ctx->spvs_reg, bkt);
-                goto exit_msg_buf;
+                return -1;
             }
         }
     }
     LOG_INFO("Succès de l'envoi du CODE=%d", code);
     return 0;
-
-exit_share:
-    free(share);
-exit_msg_buf:
-    free(msg_buf);
-
-    return -1;
 }
 
 int treat_dscv_share_reg_ack(dsm_msg_tcp_thread_ctx *msg_ctx,
@@ -247,7 +244,8 @@ int treat_dscv_share_reg_ack(dsm_msg_tcp_thread_ctx *msg_ctx,
     dsm_hash_safe_get(&spvs_ctx->spvs_reg, node_content, node, id_node) {
         if (node_content->id == id_node) {
             node_content->manager_port = share_reg_ack.listen_port;
-            break;
+            // dsm_hash_safe_unlock(&spvs_ctx->spvs_reg, id_node);
+            // break;
         }
     }
     dsm_hash_safe_get_end(&spvs_ctx->spvs_reg, id_node);

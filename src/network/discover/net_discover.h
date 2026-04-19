@@ -21,7 +21,7 @@ typedef struct {
     uint16_t supervisor_tcp_port;
     int supervisor_tcp_sock;
     dsm_node_role supervisor_role;
-
+    // TODO MOVE TO CANDIDATE_CTX pour split dsm_dscv_ctx
 } dsm_dscv_ctx;
 
 int dsm_discover(void);

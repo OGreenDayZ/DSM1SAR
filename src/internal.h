@@ -12,9 +12,10 @@
 /* dsm_node_content correspond au contenu d'un noeud du système,
  * ne pas confondre avec le node d'une liste */
 typedef struct {
-    unsigned int id;            // key : node_id
-    int tcp_sock;               // socket de communication avec ce node
-    uint32_t ip;                // adresse IP du node (format binaire)
+    unsigned int id; // key : node_id
+    int tcp_sock;    // socket de communication avec ce node
+    uint32_t ip;     // adresse IP du node (format binaire)
+    // TODO REMOVE ip -> candidate_ctx
     struct dsm_hlist_node node; // "node" pour la liste de la hashmap
 } dsm_node_content;
 
@@ -25,7 +26,7 @@ typedef struct {
 } dsm_page_content;
 
 typedef struct {
-    /* Une fois le discover fini, config devient READ-ONLY */
+    /** @warning Une fois le discover fini, config devient READ-ONLY */
     dsm_config config;
 
     unsigned int node_id;
