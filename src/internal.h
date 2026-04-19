@@ -18,12 +18,6 @@ typedef struct {
 } dsm_node_content;
 
 typedef struct {
-    unsigned int id; // key : page_id
-    // TODO
-    struct dsm_hlist_node node; // "node" pour la liste de la hashmap
-} dsm_page_content;
-
-typedef struct {
     /* Une fois le discover fini, config devient READ-ONLY */
     dsm_config config;
 

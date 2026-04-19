@@ -46,5 +46,6 @@ int main(int argc, char const *argv[]) {
     printf("[OK] empty after delete\n");
 
     printf("\nAll tests passed.\n");
+
     return 0;
 }
