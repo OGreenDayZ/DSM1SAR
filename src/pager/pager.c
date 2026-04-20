@@ -1,7 +1,8 @@
 #include "pager.h"
-#include <fcntl.h>
+#include "debug/debug.h"
 #include <internal.h>
-#include <linux/userfaultfd.h>
+
+#include <fcntl.h>
 #include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,13 +10,21 @@
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 static int userfaultfd(int flags) {
     // UFFD_USER_MODE_ONLY -> rattrape que les fautes user et non kernel
     return syscall(SYS_userfaultfd, flags | UFFD_USER_MODE_ONLY);
 }
 
-static int userfaultfd_init(void *range) {
+int userfaultfd_init() {
+    void *range = mmap(NULL, EFFECTIVE_PAGESIZE * EFFECTIVE_NB_PAGES,
+                       PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (range == MAP_FAILED) {
+        perror("mmap");
+        goto error1;
+    }
+    range_start = (__u64)range;
     int fd = userfaultfd(O_NONBLOCK);
     if (fd == -1) {
         perror("userfaultfd");
@@ -39,64 +48,12 @@ static int userfaultfd_init(void *range) {
         perror("ioctl register");
         goto error2;
     }
+    printf("dsm_init_pager OK, fd = %d \n", fd);
 
     return fd;
 error2:
-    if (fd)
+    if (fd != -1)
         close(fd);
-error1:
-    return -1;
-}
-
-void thread_worker_pager(int *fd) {
-    struct pollfd event = {.fd = *fd, .events = POLLIN};
-    int ret;
-    while (1) {
-        ret = poll(&event, 1, 1000);
-        if (ret == 0)
-            continue;
-        if (event.revents & POLLERR) {
-            perror("POLLERR");
-            break;
-        }
-
-        struct uffd_msg fault_msg = {0};
-        if (read(*fd, &fault_msg, sizeof(fault_msg)) != sizeof(fault_msg)) {
-            perror("read");
-            break;
-        }
-
-        switch (fault_msg.event) {
-            case UFFD_EVENT_PAGEFAULT:
-                handler_pagefault_worker(&fault_msg, *fd);
-                break;
-            case UFFD_EVENT_REMOVE: // lors de l'invocation de madvise
-                break;
-            case UFFD_EVENT_UNMAP:
-                break;
-        }
-    }
-}
-
-int pager_worker_init() {
-    // Initialise la plage mémoire à surveiller
-    void *range = mmap(NULL, EFFECTIVE_PAGESIZE * EFFECTIVE_NB_PAGES,
-                       PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (range == MAP_FAILED) {
-        perror("mmap");
-        goto error1;
-    }
-    range_start = (__u64)range;
-    int *userfault = malloc(sizeof(int));
-    if (!(*userfault = userfaultfd_init(range))) {
-        perror("userfault_init");
-        goto error2;
-    }
-    printf("dsm_init_pager OK, fd = %d \n", *userfault);
-
-    return 0;
-error2:
-    munmap(range, EFFECTIVE_PAGESIZE);
 error1:
     return -1;
 }
@@ -108,8 +65,9 @@ int handler_pagefault_worker(struct uffd_msg *fault_msg, int fd) {
 
     if (flags & UFFD_PAGEFAULT_FLAG_WP) {
         // accés en écriture a une page présente en mémoire et protégé en écriture
-        // envoie un message au manager qui gere la page
-        // faut juste retirer la protection d'écriture
+        // envoie un message au manager qui gere la page -> pour prévenir que la page va
+        // être modifié donc faut invalider la page chez les autres workers faut juste
+        // retirer la protection d'écriture
         struct uffdio_writeprotect wp = {
             .range = {.start = (__u64)page, .len = EFFECTIVE_PAGESIZE}, .mode = 0};
         if (ioctl(fd, UFFDIO_WRITEPROTECT, &wp)) {
@@ -177,5 +135,136 @@ int handler_pagefault_worker(struct uffd_msg *fault_msg, int fd) {
             }
         }
     }
+    return 0;
+}
+
+int pager_worker_loop() {
+    int fd = userfaultfd_init();
+    if (fd == -1) {
+        perror("pager_worker_loop");
+        return -1;
+    }
+
+    struct pollfd event = {.fd = fd, .events = POLLIN};
+    int ret;
+    while (1) {
+        ret = poll(&event, 1, 1000);
+        if (ret == 0)
+            continue;
+        if (event.revents & POLLERR) {
+            perror("POLLERR");
+            break;
+        }
+
+        struct uffd_msg fault_msg = {0};
+        if (read(fd, &fault_msg, sizeof(fault_msg)) != sizeof(fault_msg)) {
+            perror("read");
+            break;
+        }
+
+        switch (fault_msg.event) {
+            case UFFD_EVENT_PAGEFAULT:
+                // a exécuter dans un  slave thread du pool de thread
+                handler_pagefault_worker(&fault_msg, fd);
+                break;
+            case UFFD_EVENT_REMOVE: // lors de l'invocation de madvise
+                // envoyer un ack au manager qui demande l'invalidation de la page
+                break;
+            case UFFD_EVENT_UNMAP: // lors de l'invocation de unmap
+                // a gamberge
+                break;
+        }
+    }
+
+    return 0;
+}
+
+// A mettre dans le réseau ca
+int handler_pagefault_manager() {
+    // reception de <num_page, client_id, READ>
+    // reception de <num_page, client_id, WRITE>
+    // reception de <num_page, data_page>
+    return 0;
+}
+
+int manager_read(int page_index, int worker_id) {
+    dsm_page *page = NULL;
+
+    // met dans la map le client et le mode de détention de la page
+    dsm_hash_for_each_possible(PAGES_MAP, page, node, worker_id) {
+        if (page->id == page_index) {
+            page->mode = PAGE_R;
+            // check si la page a un propriétaire, si oui envoie un message de demande de
+            // données au propriétaire
+            if (page->owner_id == -1) {
+                LOG_INFO("La page n'a pas de propriétaire\n");
+            } else {
+                // le propriétaire passe de writer à reader (donc on doit lui envoyer
+                // un message pour lui remettre la protection d'écriture)
+                // envoie un message de réponse au client avec les données de la page
+                LOG_INFO("La page a un propriétaire, envoie un message de demande de "
+                         "données au propriétaire et faire passer le propriétaire "
+                         "de writer à reader\n");
+            }
+            return 0;
+        }
+    }
+    // si la page n'est pas dans la map, on l'ajoute avec le client comme propriétaire
+    page = malloc(sizeof(dsm_page));
+    if (!page) {
+        perror("malloc manager_read");
+        return -1;
+    }
+    page->id = page_index;
+    page->mode = PAGE_R;
+    page->owner_id = -1;
+    dsm_init_hlist_node(&page->node);
+    // la map des pages est indexé par rapport au worker
+    dsm_hash_add(PAGES_MAP, &page->node, worker_id);
+    return 0;
+}
+
+int manager_write(int page_index, int worker_id) {
+    dsm_page *page = NULL;
+
+    // met dans la map le client et le mode de détention de la page
+    dsm_hash_for_each_possible(PAGES_MAP, page, node, worker_id) {
+        if (page->id == page_index) {
+            page->mode = PAGE_RW;
+            // check si la page a un propriétaire, si oui envoie un message de demande de
+            // données au propriétaire
+            if (page->owner_id == -1) {
+                LOG_INFO("La page n'a pas de propriétaire\n");
+            } else {
+                // le propriétaire passe de writer à reader (donc on doit lui envoyer
+                // un message pour lui remettre la protection d'écriture)
+                // envoie un message de réponse au client avec les données de la page
+                LOG_INFO("La page a un propriétaire, envoie un message de demande de "
+                         "données au propriétaire et faire passer le propriétaire "
+                         "de writer à reader + modifié l'owner_id + demande "
+                         "d'invalidation de la page a tout les worker\n");
+                dsm_hash_for_each_possible(PAGES_MAP, page, node, page->owner_id) {
+                    if (page->id == page_index) {
+                        page->mode = PAGE_R;
+                        break;
+                    }
+                }
+            }
+            page->owner_id = worker_id;
+            return 0;
+        }
+    }
+    // si la page n'est pas dans la map, on l'ajoute avec le client comme propriétaire
+    page = malloc(sizeof(dsm_page));
+    if (!page) {
+        perror("malloc manager_read");
+        return -1;
+    }
+    page->id = page_index;
+    page->mode = PAGE_RW;
+    page->owner_id = worker_id;
+    dsm_init_hlist_node(&page->node);
+    // la map des pages est indexé par rapport au worker
+    dsm_hash_add(PAGES_MAP, &page->node, worker_id);
     return 0;
 }

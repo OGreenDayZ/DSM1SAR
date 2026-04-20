@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include "util/hashmap.h"
 #include <linux/userfaultfd.h>
+#include "internal.h"
 /**
  * La taille de la page est différente d'un système à un autre
  */
@@ -18,31 +19,26 @@
 typedef enum{
     PAGE_R, 
     PAGE_RW, 
-    PAGE_NONE // cas ou le worker posséde pas la page 
+    PAGE_NONE // cas ou le worker posséde pas la page - apres un madvise ou un remove
 } dsm_page_mode; 
 
 typedef struct {
     unsigned int id; // key : page_id
     unsigned long addr; // l'adresse de la page localement
     struct dsm_hlist_node node; // "node" pour la liste de la hashmap
-    dsm_page_mode mode; // mode de detention de la page è
+    dsm_page_mode mode; // mode de detention de la page 
+    int owner_id; 
 } dsm_page;
 
 // le manager doit avoir une table de hash avec l'id de la page et les infos (struct dsm_page)
 __u64 range_start; 
 
-#define PAGE_TABLE dsm_ctx->pages_reg
-
-int pager_init();
-void thread_pager(int*); 
-void pager_destroy(void);
-
-int handler_pagefault_worker(struct uffd_msg *fault_msg, int fd); 
-int handler_REMOVE(); 
-int handler_UNMAP(); 
-
+int userfaultfd_init() ; 
+int pager_worker_loop(); 
 
 // conversion addresse to pageID -> par rapport au index des pages (à gamberge)
+// la map des pages est indexé par rapport au worker
+#define PAGES_MAP dsm_ctx->pages_reg
 
 
 // NETWORK : 

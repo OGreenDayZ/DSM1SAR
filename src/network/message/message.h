@@ -23,7 +23,10 @@ typedef enum {
     CODE_DISCOVER_WORKER_CONFIG_ACK,
     CODE_DISCOVER_FINALIZE,
 
-    /* +... */
+    CODE_PAGER_REQUEST, 
+    CODE_PAGER_INVALIDATE,
+    CODE_PAGER_DATA_REQUEST, 
+    CODE_PAGER_DATA, 
 } dsm_msg_code;
 
 /* Lexique
@@ -32,6 +35,7 @@ typedef enum {
 @reg : registry
 @mgr : manager
 @wkr : worker
+@pgr : pager
 */
 
 #pragma pack(push, 1)
@@ -109,6 +113,27 @@ typedef struct {
 // typedef struct {
 //     // struct vide
 // } dsm_msg_dscv_finalize;
+
+/* PAGER */
+typedef struct {
+    uint32_t page_id; 
+    uint8_t mode; // 0 : read, 1 : write
+} dsm_msg_pgr_wkr_request;
+
+typedef struct {
+    uint32_t page_id;
+} dsm_msg_pgr_mgr_invalidate;
+
+typedef struct {
+    uint32_t page_id;
+} dsm_msg_pgr_mgr_data_request;
+
+typedef struct {
+    uint32_t page_id;
+    uint8_t data[]; // la page entière
+} dsm_msg_pgr_data;
+
+
 
 #pragma pack(pop)
 
