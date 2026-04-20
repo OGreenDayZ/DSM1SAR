@@ -43,7 +43,7 @@ static int g_tests_failed = 0;
     } while (0)
 
 /* -------------------------------------------------------------------------
- * Structure de données embarquant un nœud de liste
+ * Structure de données embarquant un noeud de liste
  * ---------------------------------------------------------------------- */
 
 typedef struct {

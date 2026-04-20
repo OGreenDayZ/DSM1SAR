@@ -5,6 +5,8 @@
 #include "network/discover/net_discover.h"
 #include "util/concurrent/safe_map.h"
 
+#define DSM_CAND_HASH_BITS 4
+
 typedef struct {
     unsigned int id;
     int tcp_sock;
@@ -21,6 +23,7 @@ typedef struct {
     dsm_safe_map cand_reg;
 } dsm_candidate_ctx;
 
-int dsm_candidate_start(dsm_dscv_ctx *dscv_ctx);
+int dsm_candidate_start(dsm_discover_ctx *dscv_ctx, uint32_t spvs_ip,
+                        uint16_t spvs_tcp_port);
 
 #endif // DSM_CANDIDATE_H

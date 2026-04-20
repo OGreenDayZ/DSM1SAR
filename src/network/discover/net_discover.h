@@ -1,7 +1,7 @@
 #ifndef DSM_NET_DISCOVER_H
 #define DSM_NET_DISCOVER_H
 
-#include "dsm.h"
+#include <stdint.h>
 
 #define DSM_DSCV_MAX_RETRIES 3
 #define DSM_DSCV_RESEND_INTERVAL_SEC 1
@@ -17,12 +17,7 @@ typedef struct {
 
     uint16_t udp_send_port;
 
-    uint32_t supervisor_ip;
-    uint16_t supervisor_tcp_port;
-    int supervisor_tcp_sock;
-    dsm_node_role supervisor_role;
-    // TODO MOVE TO CANDIDATE_CTX pour split dsm_dscv_ctx
-} dsm_dscv_ctx;
+} dsm_discover_ctx;
 
 int dsm_discover(void);
 

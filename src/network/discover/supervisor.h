@@ -3,6 +3,7 @@
 
 #include <stdatomic.h>
 
+#include "dsm.h"
 #include "network/discover/net_discover.h"
 #include "util/concurrent/safe_list.h"
 #include "util/concurrent/safe_map.h"
@@ -85,6 +86,6 @@ typedef struct {
     dsm_safe_map spvs_reg;
 } dsm_supervisor_ctx;
 
-int dsm_supervising_start(dsm_dscv_ctx *dscv_ctx);
+int dsm_supervising_start(dsm_discover_ctx *dscv_ctx);
 
 #endif // DSM_SUPERVISOR_H

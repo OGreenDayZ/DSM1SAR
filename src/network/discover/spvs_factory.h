@@ -13,7 +13,7 @@ int treat_dscv_init(dsm_msg_udp_thread_ctx *msg_ctx, dsm_supervisor_ctx *spvs_ct
 int send_dscv_join_ack(int dest_sock, unsigned int assigned_id);
 int send_dscv_sys_full(int dest_sock);
 int treat_dscv_role_wish(dsm_msg_tcp_thread_ctx *msg_ctx, dsm_supervisor_ctx *spvs_ctx);
-int send_dscv_share_reg(dsm_supervisor_ctx *spvs_ctx, dsm_dscv_ctx *dscv_ctx,
+int send_dscv_share_reg(dsm_supervisor_ctx *spvs_ctx, dsm_discover_ctx *dscv_ctx,
                         dsm_msg_code code);
 int treat_dscv_share_reg_ack(dsm_msg_tcp_thread_ctx *msg_ctx,
                              dsm_supervisor_ctx *spvs_ctx);

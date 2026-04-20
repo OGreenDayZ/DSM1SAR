@@ -154,7 +154,7 @@ int dsm_srlze_dscv_role_wish(uint8_t *buf, size_t buf_sz) {
 
 static int serialize_reg_node(dsm_reg_node *node, uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_reg_node)) {
-        LOG_ERROR("Taille du buffer insuffisante pour sérialiser un nœud du registre : "
+        LOG_ERROR("Taille du buffer insuffisante pour sérialiser un noeud du registre : "
                   "%zu < %zu",
                   buf_sz, sizeof(dsm_reg_node));
         return -1;
@@ -371,9 +371,10 @@ int dsm_dsrlze_dscv_role_wish(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_role_wis
 
 static int deserialize_reg_node(uint8_t *buf, size_t buf_sz, dsm_reg_node *node) {
     if (buf_sz < sizeof(dsm_reg_node)) {
-        LOG_ERROR("Taille du buffer insuffisante pour désérialiser un nœud du registre : "
-                  "%zu < %zu",
-                  buf_sz, sizeof(dsm_reg_node));
+        LOG_ERROR(
+            "Taille du buffer insuffisante pour désérialiser un noeud du registre : "
+            "%zu < %zu",
+            buf_sz, sizeof(dsm_reg_node));
         return -1;
     }
 

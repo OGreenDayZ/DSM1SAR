@@ -148,7 +148,7 @@ static void test_del_single(void) {
 
     TEST_ASSERT(dsm_safe_map_empty(&m), "map vide après del du seul élément");
     TEST_ASSERT(dsm_safe_map_count(&m) == 0, "count == 0 après del");
-    TEST_ASSERT(dsm_hlist_unhashed(&it->node), "nœud unhashed après del");
+    TEST_ASSERT(dsm_hlist_unhashed(&it->node), "noeud unhashed après del");
 
     free(it);
     dsm_safe_map_destroy(&m);

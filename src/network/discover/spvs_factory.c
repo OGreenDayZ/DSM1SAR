@@ -127,7 +127,7 @@ int treat_dscv_role_wish(dsm_msg_tcp_thread_ctx *msg_ctx, dsm_supervisor_ctx *sp
     return 0;
 }
 
-static int make_share_reg(dsm_supervisor_ctx *spvs_ctx, dsm_dscv_ctx *dscv_ctx,
+static int make_share_reg(dsm_supervisor_ctx *spvs_ctx, dsm_discover_ctx *dscv_ctx,
                           dsm_node_role shared_role, dsm_msg_dscv_share_reg *share,
                           size_t share_nb) {
 
@@ -173,7 +173,7 @@ exit:
     return -1;
 }
 
-int send_dscv_share_reg(dsm_supervisor_ctx *spvs_ctx, dsm_dscv_ctx *dscv_ctx,
+int send_dscv_share_reg(dsm_supervisor_ctx *spvs_ctx, dsm_discover_ctx *dscv_ctx,
                         dsm_msg_code code) {
     if (code != CODE_DISCOVER_SHARE_REGISTRY_MANAGER &&
         code != CODE_DISCOVER_SHARE_REGISTRY_WORKER) {

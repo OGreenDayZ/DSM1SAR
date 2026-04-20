@@ -69,7 +69,9 @@ static int validate_config(dsm_config *config) {
 }
 
 static int dsm_ctx_init(const dsm_config *config) {
-    if (dsm_ctx != NULL) {
+    LOG_INFO("Initialisation du contexte de DSM ...");
+
+    if (dsm_ctx) {
         LOG_ERROR("DSM déjà initialisé");
         return DSM_ERROR_ALREADY_INIT;
     }
@@ -107,6 +109,34 @@ static int dsm_ctx_init(const dsm_config *config) {
     return 0;
 }
 
+static void dsm_ctx_cleanup() {
+    dsm_node_content *pos;
+    unsigned int bkt;
+    struct dsm_hlist_node *tmp;
+
+    dsm_hash_safe_for_each_safe(&dsm_ctx->nodes_reg, bkt, tmp, pos, node) {
+        dsm_hlist_del_init(&pos->node);
+        free(pos);
+    }
+
+    dsm_safe_map_destroy(&dsm_ctx->nodes_reg);
+    dsm_safe_map_destroy(&dsm_ctx->pages_reg);
+
+    free(dsm_ctx);
+    dsm_ctx = NULL;
+}
+
+static void print_nodes_reg() {
+    dsm_node_content *pos;
+    unsigned int bkt;
+    struct dsm_hlist_node *tmp;
+
+    LOG_INFO("Mon Registre de Noeuds :");
+    dsm_hash_safe_for_each_safe(&dsm_ctx->nodes_reg, bkt, tmp, pos, node) {
+        LOG_INFO("ID=%u, FD_SOCK=%u", pos->id, pos->tcp_sock);
+    }
+}
+
 int dsm_init(const dsm_config *config) {
     LOG_INFO("Initialisation de DSM1SAR...");
     int ret = dsm_ctx_init(config);
@@ -115,7 +145,8 @@ int dsm_init(const dsm_config *config) {
     }
 
     ret = dsm_network_init();
-
+    print_nodes_reg();
+    dsm_ctx_cleanup(); // TODO A ENLEVER SI VRAI TEST DEMON !!!!!!
     // TODO SPLIT THREAD AVANT RETURN
     return ret;
 }

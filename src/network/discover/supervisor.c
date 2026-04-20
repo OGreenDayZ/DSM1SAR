@@ -3,10 +3,12 @@
 #include <poll.h>
 #include <stdatomic.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "debug/debug.h"
+#include "dsm.h"
 #include "internal.h"
 #include "network/discover/spvs_factory.h"
 #include "network/message/serializer.h"
@@ -15,7 +17,13 @@
 
 static dsm_supervisor_ctx *spvs_ctx;
 
-static int spvs_ctx_init(dsm_dscv_ctx *dscv_ctx) {
+static int spvs_ctx_init(dsm_discover_ctx *dscv_ctx) {
+    LOG_INFO("Initialisation du contexte du superviseur ...");
+
+    if (spvs_ctx) {
+        LOG_ERROR("spvs_ctx déjà initialisé ?!");
+        return -1;
+    }
 
     unsigned short *listen_port = &dsm_ctx->config.net.node.tcp_port;
     dscv_ctx->sock_tcp_listen = dsm_tcp_bind_listen(*listen_port);
@@ -68,9 +76,10 @@ static int spvs_ctx_init(dsm_dscv_ctx *dscv_ctx) {
     return 0;
 }
 
-static void spvs_ctx_cleanup() {
+static void spvs_ctx_cleanup(dsm_discover_ctx *dscv_ctx) {
 
-    pool_destroy(spvs_ctx->pool, graceful_shutdown);
+    close(dscv_ctx->sock_tcp_listen);
+    dscv_ctx->sock_tcp_listen = -1;
 
     dsm_eligible_entry *pos_e, *tmp_pos_e;
     dsm_safe_list_for_each_entry_safe(&spvs_ctx->eligible_ip, pos_e, tmp_pos_e, node) {
@@ -79,7 +88,6 @@ static void spvs_ctx_cleanup() {
     }
     dsm_safe_list_destroy(&spvs_ctx->eligible_ip);
 
-    // !! TODO TRANSFERT SOCKETS -> INTERNAL ET FACTO CTX
     dsm_poll_update_entry *pos_pu, *tmp_pos_pu;
     dsm_safe_list_for_each_entry_safe(&spvs_ctx->poll_fds_update, pos_pu, tmp_pos_pu,
                                       node) {
@@ -88,16 +96,39 @@ static void spvs_ctx_cleanup() {
     }
     dsm_safe_list_destroy(&spvs_ctx->poll_fds_update);
 
+    pool_destroy(spvs_ctx->pool, graceful_shutdown);
+
+    dsm_node_role my_role = dsm_ctx->config.net.node.role;
+
     unsigned int bkt;
     struct dsm_hlist_node *tmp;
     dsm_supervising_node *pos;
+
     dsm_hash_safe_for_each_safe(&spvs_ctx->spvs_reg, bkt, tmp, pos, node) {
+
+        if (my_role == pos->role && pos->tcp_sock >= 0) {
+            close(pos->tcp_sock);
+        } else {
+            dsm_node_content *node_content = malloc(sizeof(dsm_node_content));
+            if (node_content) {
+                node_content->id = pos->id;
+                node_content->tcp_sock = pos->tcp_sock;
+                dsm_init_hlist_node(&node_content->node);
+                dsm_hash_safe_add(&dsm_ctx->nodes_reg, &node_content->node,
+                                  node_content->id);
+            } else {
+                LOG_ERROR("malloc : node_content");
+            }
+        }
+
         dsm_hlist_del_init(&pos->node);
         free(pos);
     }
+
     dsm_safe_map_destroy(&spvs_ctx->spvs_reg);
 
     free(spvs_ctx);
+    spvs_ctx = NULL;
 }
 
 static void get_current_role_stats(size_t *managers_count, size_t *workers_count) {
@@ -171,12 +202,9 @@ static int role_assignement() {
     expected_m = dsm_ctx->config.net.system.nb_managers;
     expected_w = dsm_ctx->config.net.system.nb_nodes - expected_m;
 
-    LOG_INFO("Mon rôle : %s",
-             dsm_ctx->config.net.node.role == DSM_ROLE_MANAGER  ? "MANAGER"
-             : dsm_ctx->config.net.node.role == DSM_ROLE_WORKER ? "WORKER"
-                                                                : "UNDEFINED");
-    LOG_INFO("Rôles actuels : %zu managers, %zu workers, %zu undefined", m_count, w_count,
-             nb_undifined);
+    LOG_INFO(
+        "Rôles actuels (avant assignement) : %zu managers, %zu workers, %zu undefined",
+        m_count, w_count, nb_undifined);
     /**
      * @note : nb_assign_X -> nb_assign_TO_m
      * @note : nb_convert_X -> nb_convert_TO_m
@@ -290,7 +318,7 @@ static void dispatch_call_tcp(void *arg) {
     return;
 }
 
-static int handle_udp_mcast(dsm_dscv_ctx *dscv_ctx) {
+static int handle_udp_mcast(dsm_discover_ctx *dscv_ctx) {
     LOG_INFO("Message reçu sur la socket UDP multicast");
 
     dsm_msg_udp_thread_ctx *msg_ctx = malloc(sizeof(dsm_msg_udp_thread_ctx));
@@ -425,7 +453,7 @@ exit_err_socket:
     return;
 }
 
-static int handle_tcp_listen(dsm_dscv_ctx *dscv_ctx) {
+static int handle_tcp_listen(dsm_discover_ctx *dscv_ctx) {
     LOG_INFO("Message reçu sur la socket TCP d'écoute");
 
     struct sockaddr_in client_addr;
@@ -545,7 +573,7 @@ exit_err_ctx:
     return -1;
 }
 
-static int update_spvs_state(dsm_dscv_ctx *dscv_ctx) {
+static int update_spvs_state(dsm_discover_ctx *dscv_ctx) {
     unsigned int expected;
     bool is_manager = dsm_ctx->config.net.node.role == DSM_ROLE_MANAGER;
 
@@ -621,13 +649,16 @@ static void update_poll_fds(struct pollfd *fds, int max_fds, int skip_fds) {
     }
 }
 
-int dsm_supervising_start(dsm_dscv_ctx *dscv_ctx) {
-    if (spvs_ctx_init(dscv_ctx) < 0) {
-        return -1;
-    }
+int dsm_supervising_start(dsm_discover_ctx *dscv_ctx) {
+    int ret = 0;
 
     int max_fds = DSM_SPVS_POLL_FDS_SERVER + dsm_ctx->config.net.system.nb_nodes - 1;
     struct pollfd fds[max_fds];
+
+    if (spvs_ctx_init(dscv_ctx) < 0) {
+        ret = -1;
+        goto exit;
+    }
 
     for (int i = 0; i < max_fds; i++) {
         fds[i].fd = -1;
@@ -639,13 +670,15 @@ int dsm_supervising_start(dsm_dscv_ctx *dscv_ctx) {
     while (atomic_load(&spvs_ctx->state) != DSM_SPVS_STATE_FINALIZING) {
 
         if (update_spvs_state(dscv_ctx) < 0) {
-            goto exit_err;
+            ret = -1;
+            goto exit;
         }
         update_poll_fds(fds, max_fds, DSM_SPVS_POLL_FDS_SERVER);
 
         int ret = poll(fds, max_fds, DSM_SPVS_POLL_TIMEOUT_MS);
         if (ret < 0) {
-            goto exit_err;
+            ret = -1;
+            goto exit;
 
         } else if (ret == 0) { // timeout
             continue;
@@ -672,12 +705,12 @@ int dsm_supervising_start(dsm_dscv_ctx *dscv_ctx) {
     }
 
     if (send_dscv_finalize(spvs_ctx) < 0) {
-        goto exit_err;
+        ret = -1;
+        goto exit;
     }
 
     LOG_INFO("Découverte terminée avec succès");
-    spvs_ctx_cleanup();
-    return 0;
-exit_err:
-    return -1;
+exit:
+    spvs_ctx_cleanup(dscv_ctx);
+    return ret;
 }
