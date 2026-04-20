@@ -58,6 +58,26 @@ error1:
     return -1;
 }
 
+int pager_writeprotect(int fd, __u64 page) {
+    struct uffdio_writeprotect wp = {.range = {.start = page, .len = EFFECTIVE_PAGESIZE},
+                                     .mode = 0};
+    if (ioctl(fd, UFFDIO_WRITEPROTECT, &wp)) {
+        perror("ioctl write-protect");
+        return -1;
+    }
+    return 0;
+}
+
+int pager_copy(int fd, __u64 dst, __u64 src, int mode) {
+    struct uffdio_copy cp = {
+        .dst = dst, .src = src, .len = EFFECTIVE_PAGESIZE, .mode = mode};
+    if (ioctl(fd, UFFDIO_COPY, &cp)) {
+        perror("ioctl copy");
+        return -1;
+    }
+    return 0;
+}
+
 int handler_pagefault_worker(struct uffd_msg *fault_msg, int fd) {
     __u64 page = fault_msg->arg.pagefault.address;
     int page_index = (page - range_start) / EFFECTIVE_PAGESIZE;
