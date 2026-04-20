@@ -781,7 +781,7 @@ int main(void) {
     printf("   Tests exhaustifs : dsm_thread_pool\n");
     printf("═══════════════════════════════════════════\n" RESET);
 
-    printf("Nombre de coeurs logique : %d\n", DEFAULT_NB_THREADS);
+    printf("Nombre de coeurs logique : %ld\n", DSM_DEFAULT_NB_THREADS);
     test_create_destroy();
     test_invalid_args();
     test_task_execution();

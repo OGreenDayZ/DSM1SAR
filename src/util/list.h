@@ -10,7 +10,7 @@ typedef struct dsm_list_head {
 
 #define DSM_LIST_HEAD_INIT(name) {&(name), &(name)}
 
-static inline void DSM_LIST_INIT(dsm_list_head *list) {
+static inline void dsm_list_init(dsm_list_head *list) {
     list->next = list;
     list->prev = list;
 }

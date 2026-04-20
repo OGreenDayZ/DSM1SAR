@@ -33,6 +33,8 @@ typedef struct {
     dsm_node_role role;
     unsigned short tcp_port;
     unsigned short udp_port;
+    unsigned long pool_nb_threads; // Pour les pools de threads, local au noeud
+    unsigned long pool_queue_size; // Pour les pools de threads, local au noeud
 } dsm_node_config;
 
 typedef struct {

@@ -59,7 +59,6 @@ static inline uint32_t dsm_hash_64(uint64_t val, unsigned int bits) {
     struct dsm_hlist_head name[1 << (bits)] = {[0 ...((1 << (bits)) - 1)] =              \
                                                    DSM_HLIST_HEAD_INIT}
 
-
 /**
  * @brief Supprime le node de la map
  *
@@ -68,6 +67,22 @@ static inline uint32_t dsm_hash_64(uint64_t val, unsigned int bits) {
 static inline void dsm_hash_del(struct dsm_hlist_node *node) {
     dsm_hlist_del_init(node);
 }
+
+ /**
+ * @brief Initialisation dynamique de la hashtable
+ * 
+ * @param ht la map a initialiser -> un struct dsm_hslist_head 
+ * @param sz taille de la table a initialiser
+ */
+static inline void __dsm_hash_init(struct dsm_hlist_head *ht, unsigned int sz)
+{
+	unsigned int i;
+	for (i = 0; i < sz; i++){
+		DSM_INIT_HLIST_HEAD(&ht[i]); 
+    }
+}
+
+#define dsm_hash_init(hashtable) __dsm_hash_init(hashtable, DSM_HASH_SIZE(hashtable))
 
 /**
  * @brief Ajoute un élement à la map, ne renvoie rien.
