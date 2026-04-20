@@ -25,9 +25,10 @@ typedef struct {
     unsigned int id; // key : page_id
     unsigned long addr; // l'adresse de la page localement
     struct dsm_hlist_node node; // "node" pour la liste de la hashmap
-    dsm_page_mode mode; // mode de detention de la page 
+    dsm_page_mode mode; // mode de detention de la page è
 } dsm_page;
 
+// le manager doit avoir une table de hash avec l'id de la page et les infos (struct dsm_page)
 __u64 range_start; 
 
 #define PAGE_TABLE dsm_ctx->pages_reg
@@ -36,7 +37,7 @@ int pager_init();
 void thread_pager(int*); 
 void pager_destroy(void);
 
-int handler_pagefault(struct uffd_msg *fault_msg, int fd);
+int handler_pagefault_worker(struct uffd_msg *fault_msg, int fd); 
 int handler_REMOVE(); 
 int handler_UNMAP(); 
 

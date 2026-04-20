@@ -48,9 +48,13 @@ error1:
     return -1;
 }
 
-void thread_pager(int *fd) {
+void thread_worker_pager(int *fd) {
     struct pollfd event = {.fd = *fd, .events = POLLIN};
-    while (poll(&event, 1, 1000)) {
+    int ret;
+    while (1) {
+        ret = poll(&event, 1, 1000);
+        if (ret == 0)
+            continue;
         if (event.revents & POLLERR) {
             perror("POLLERR");
             break;
@@ -64,7 +68,7 @@ void thread_pager(int *fd) {
 
         switch (fault_msg.event) {
             case UFFD_EVENT_PAGEFAULT:
-                handler_pagefault(&fault_msg, *fd);
+                handler_pagefault_worker(&fault_msg, *fd);
                 break;
             case UFFD_EVENT_REMOVE: // lors de l'invocation de madvise
                 break;
@@ -74,7 +78,7 @@ void thread_pager(int *fd) {
     }
 }
 
-int pager_init() {
+int pager_worker_init() {
     // Initialise la plage mémoire à surveiller
     void *range = mmap(NULL, EFFECTIVE_PAGESIZE * EFFECTIVE_NB_PAGES,
                        PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -97,19 +101,54 @@ error1:
     return -1;
 }
 
-int handler_pagefault(struct uffd_msg *fault_msg, int fd) {
+int handler_pagefault_worker(struct uffd_msg *fault_msg, int fd) {
     __u64 page = fault_msg->arg.pagefault.address;
     int page_index = (page - range_start) / EFFECTIVE_PAGESIZE;
     int flags = fault_msg->arg.pagefault.flags;
 
     if (flags & UFFD_PAGEFAULT_FLAG_WP) {
-        // accés en écriture a une page protégé en écriture
+        // accés en écriture a une page présente en mémoire et protégé en écriture
         // envoie un message au manager qui gere la page
+        // faut juste retirer la protection d'écriture
+        struct uffdio_writeprotect wp = {
+            .range = {.start = (__u64)page, .len = EFFECTIVE_PAGESIZE}, .mode = 0};
+        if (ioctl(fd, UFFDIO_WRITEPROTECT, &wp)) {
+            perror("ioctl write-protect");
+            return -1;
+        }
+        // ici pas besoin de demander les données, car si la page est présente en mémoire
+        // et qu'on demande une écriture alors entre temps personne n'a écrit sur la page,
+        // car sinon on aurai invalider la page
     } else if (flags & UFFD_PAGEFAULT_FLAG_WRITE) {
-        // accés en écriture a une page non mappé
+        // accés en écriture a une page non présente en mémoire
+        // contact le manager de la page
+        // on reprotège pas la page en écriture ici
+        if (0 /*recoit des données de la page car elle avait un propriétaire*/) {
+            char *page_data = {
+                0}; // normalement = le contenu de la page recu de la part du manager
+            struct uffdio_copy cp = {.dst = page,
+                                     .src = (__u64)page_data,
+                                     .len = EFFECTIVE_PAGESIZE,
+                                     .mode = 0};
+            if (ioctl(fd, UFFDIO_COPY, &cp)) {
+                perror("ioctl copy");
+                return -1;
+            }
+        } else {
+            // cas ou la page est vide -> n'a jamais été écrite
+            char *page_data = {0};
+            struct uffdio_copy cp = {.dst = page,
+                                     .src = (__u64)page_data,
+                                     .len = EFFECTIVE_PAGESIZE,
+                                     .mode = 0};
+            if (ioctl(fd, UFFDIO_COPY, &cp)) {
+                perror("ioctl copy");
+                return -1;
+            }
+        }
     } else {
         // accés en lecture ou écriture a une page non mappé
-        // envoie un message au manager qui gere la page
+        // envoie un message au manager qui gere la page, message avec l'index de la page
         if (0 /*recoit des données de la page car elle avait un propriétaire*/) {
             char *page_data = {
                 0}; // normalement = le contenu des data recu de la part du manager
@@ -124,17 +163,18 @@ int handler_pagefault(struct uffd_msg *fault_msg, int fd) {
             }
         } else {
             // cas ou la page est vide -> n'a jamais été écrite
-            struct uffdio_zeropage zp = {
-                .range = {.start = page, .len = EFFECTIVE_PAGESIZE}, .mode = 0};
-            if (ioctl(fd, UFFDIO_ZEROPAGE, &zp)) {
-                perror("ioctl zeropage");
+            char *page_data = {
+                0}; // ici page_data est rempli de 0, ce qui est équivalent a faire
+                    // UFFDIO_ZEROPAGE, mais je choisi de faire un UFFDIO_COPY pour
+                    // pouvoir re-verrouiller la page en écriture de maniere atomique
+            struct uffdio_copy cp = {.dst = page,
+                                     .src = (__u64)page_data,
+                                     .len = EFFECTIVE_PAGESIZE,
+                                     .mode = UFFDIO_COPY_MODE_WP};
+            if (ioctl(fd, UFFDIO_COPY, &cp)) {
+                perror("ioctl copy");
                 return -1;
             }
-            // Pour protéger la page en écriture apres son initialisation
-            struct uffdio_writeprotect wp = {
-                .range = {.start = page, .len = EFFECTIVE_PAGESIZE},
-                .mode = UFFDIO_WRITEPROTECT_MODE_WP};
-            ioctl(fd, UFFDIO_WRITEPROTECT, &wp);
         }
     }
     return 0;
