@@ -321,6 +321,7 @@ static void dispatch_call_tcp(void *arg) {
 static int handle_udp_mcast(dsm_discover_ctx *dscv_ctx) {
     LOG_INFO("Message reçu sur la socket UDP multicast");
 
+    int ret = 0;
     dsm_msg_udp_thread_ctx *msg_ctx = malloc(sizeof(dsm_msg_udp_thread_ctx));
     if (!msg_ctx) {
         LOG_ERROR("malloc : msg_ctx");
@@ -333,34 +334,42 @@ static int handle_udp_mcast(dsm_discover_ctx *dscv_ctx) {
     if (dsm_udp_recvfrom(dscv_ctx->sock_udp_mcast, buf, sizeof(buf),
                          &msg_ctx->src_addr.sin_addr.s_addr, &msg_ctx->src_addr.sin_port,
                          &tv) < 0) {
+        ret = -1;
         goto exit_err_ctx;
     }
 
     int offset = dsm_dsrlze_header(buf, sizeof(buf), &msg_ctx->header);
     if (offset < 0 || offset + msg_ctx->header.payload_len > sizeof(buf)) {
         LOG_ERROR("Erreur de désérialisation du header ou payload trop grand");
+        ret = -1;
         goto exit_err_ctx;
     }
 
     msg_ctx->payload = malloc(msg_ctx->header.payload_len);
     if (!msg_ctx->payload) {
         LOG_ERROR("malloc : msg_ctx->payload");
+        ret = -1;
         goto exit_err_ctx;
     }
 
     if (msg_ctx->src_addr.sin_addr.s_addr == dscv_ctx->my_ip &&
         msg_ctx->src_addr.sin_port == dscv_ctx->udp_send_port) {
         LOG_INFO("Message multicast reçu de moi-même, ignoré");
-        free(msg_ctx->payload);
-        free(msg_ctx);
-        return 0;
+        goto exit_err_payload;
+    }
+
+    if (msg_ctx->header.id != dsm_ctx->config.net.system.system_id) {
+        LOG_INFO("Message multicast reçu d'un autre système, ignoré");
+        goto exit_err_payload;
     }
 
     memcpy(msg_ctx->payload, buf + offset, msg_ctx->header.payload_len);
 
     if (pool_add_task(spvs_ctx->pool, dispatch_call_udp, msg_ctx) < 0) {
+        ret = -1;
         goto exit_err_payload;
     }
+
     return 0;
 
 exit_err_payload:
@@ -369,7 +378,7 @@ exit_err_payload:
 exit_err_ctx:
     free(msg_ctx);
 
-    return -1;
+    return ret;
 }
 
 /**

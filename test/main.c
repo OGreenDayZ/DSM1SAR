@@ -22,6 +22,7 @@ int main(int argc, char const *argv[]) {
         // Sinon trop rapide (car redémarre en même temps) et ne se détecte pas à temps
         //  -> deviennent tous des superviseurs
         sleep(3);
+        // config.net.system.system_id = 1; // Collision
     }
     return dsm_init(&config);
 }
