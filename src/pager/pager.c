@@ -1,5 +1,6 @@
 #include "pager.h"
 #include "debug/debug.h"
+#include "util/hashmap.h"
 #include <internal.h>
 
 #include <fcntl.h>
@@ -24,7 +25,7 @@ int userfaultfd_init() {
         perror("mmap");
         goto error1;
     }
-    range_start = (__u64)range;
+    RANGE_START = (__u64)range;
     int fd = userfaultfd(O_NONBLOCK);
     if (fd == -1) {
         perror("userfaultfd");
@@ -80,7 +81,7 @@ int pager_copy(int fd, __u64 dst, __u64 src, int mode) {
 
 int handler_pagefault_worker(struct uffd_msg *fault_msg, int fd) {
     __u64 page = fault_msg->arg.pagefault.address;
-    int page_index = (page - range_start) / EFFECTIVE_PAGESIZE;
+    int page_index = (page - RANGE_START) / EFFECTIVE_PAGESIZE;
     int flags = fault_msg->arg.pagefault.flags;
 
     if (flags & UFFD_PAGEFAULT_FLAG_WP) {
@@ -286,5 +287,16 @@ int manager_write(int page_index, int worker_id) {
     dsm_init_hlist_node(&page->node);
     // la map des pages est indexé par rapport au worker
     dsm_hash_add(PAGES_MAP, &page->node, worker_id);
+    return 0;
+}
+
+// Trouver le manager qui gere la page :
+int get_manager_for_page(int page_index) {
+    // Pour le worker pages_reg est indexé par l'id du manager, et les buckets contiennent
+    // les pages géré par ce manager :
+    dsm_page *page;
+    // dsm_hash_for_each(PAGES_MAP, page, node, ){
+
+    // };
     return 0;
 }

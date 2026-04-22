@@ -251,8 +251,8 @@ int dsm_srlze_dscv_finalize(uint8_t *buf, size_t buf_sz) {
 }
 
 // envoie la requete du worker pour une page (lecture ou écriture)
-int dsm_srlze_pgr_wkr_request(uint32_t page_id, uint32_t worker_id, uint8_t mode,
-                              uint8_t *buf, size_t buf_sz) {
+int dsm_srlze_pgr_wkr_req(uint32_t page_id, uint32_t worker_id, uint8_t mode,
+                          uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_pgr_wkr_req)) {
         return -1;
     }
@@ -278,7 +278,7 @@ int dsm_srlze_pgr_wkr_request(uint32_t page_id, uint32_t worker_id, uint8_t mode
 }
 
 // envoie la requete d'invalidation de la page
-int dsm_srlze_pgr_mgr_invalidate(uint32_t page_id, uint8_t *buf, size_t buf_sz) {
+int dsm_srlze_pgr_mgr_inva(uint32_t page_id, uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_pgr_mgr_inval)) {
         return -1;
     }
@@ -303,7 +303,7 @@ int dsm_srlze_pgr_mgr_invalidate(uint32_t page_id, uint8_t *buf, size_t buf_sz) 
 }
 
 // envoie la requete de demande de données de la page
-int dsm_srlze_pgr_mgr_data_request(uint32_t page_id, uint8_t *buf, size_t buf_sz) {
+int dsm_srlze_pgr_mgr_data_req(uint32_t page_id, uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_pgr_mgr_data_req)) {
         return -1;
     }
@@ -479,7 +479,7 @@ int dsm_dsrlze_dscv_wkr_config(uint8_t *buf, size_t buf_sz,
 }
 
 // recevoir la requete du worker pour une page (lecture ou écriture)
-int dsm_dsrlze_pgr_wkr_request(uint8_t *buf, size_t buf_sz, dsm_msg_pgr_wkr_req *msg) {
+int dsm_dsrlze_pgr_wkr_req(uint8_t *buf, size_t buf_sz, dsm_msg_pgr_wkr_req *msg) {
     if (buf_sz < sizeof(dsm_msg_pgr_wkr_req)) {
         return -1;
     }
@@ -507,8 +507,8 @@ int dsm_dsrlze_pgr_mgr_invalidate(uint8_t *buf, size_t buf_sz,
 }
 
 // recevoir la requete de demande de données de la page
-int dsm_dsrlze_pgr_mgr_data_request(uint8_t *buf, size_t buf_sz,
-                                    dsm_msg_pgr_mgr_data_req *msg) {
+int dsm_dsrlze_pgr_mgr_data_req(uint8_t *buf, size_t buf_sz,
+                                dsm_msg_pgr_mgr_data_req *msg) {
     if (buf_sz < sizeof(dsm_msg_pgr_mgr_data_req)) {
         return -1;
     }

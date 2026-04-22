@@ -5,6 +5,9 @@
 
 #include "util/hlist.h"
 
+#include <unistd.h>
+#include <stdint.h>
+#include "util/thread_pool.h"
 #define DSM_NODE_HASH_BITS 4
 #define DSM_PAGE_HASH_BITS 12
 
@@ -21,10 +24,17 @@ typedef struct {
     // map des pages détenues par le worker, indexé par page_id
     struct dsm_hlist_head pages_reg[1 << DSM_PAGE_HASH_BITS];
 } dsm_manager_ctx; 
-
 typedef struct {
     // map des pages et par quel manager ils sont detenus, indexé par page_id
+    struct dsm_hlist_head pages_reg[1 << DSM_PAGE_HASH_BITS];
+    uint64_t range_start; 
 } dsm_worker_ctx;
+// typedef union {
+//     dsm_manager_ctx manager_ctx;
+//     dsm_worker_ctx worker_ctx;
+// } dsm_node_ctx; 
+
+
 typedef struct {
     /* Une fois le discover fini, config devient READ-ONLY */
     dsm_config config;
@@ -34,8 +44,9 @@ typedef struct {
     struct dsm_hlist_head nodes_reg[1 << DSM_NODE_HASH_BITS];
     // struct dsm_hlist_head pages_reg[1 << DSM_PAGE_HASH_BITS];
     // + mutex ?
+    // dsm_node_ctx node_ctx; 
     dsm_manager_ctx manager_ctx;
-    dsm_worker_ctx worker_ctx;  
+    dsm_worker_ctx worker_ctx;
 
     // à étendre...
 } dsm_context;
@@ -43,5 +54,8 @@ typedef struct {
 
 
 extern dsm_context *dsm_ctx; // Initialisé dans dsm.c
+
+// Pool de thread : 
+dsm_thread_pool * thread_pool; ;
 
 #endif // DSM_INTERNAL_H

@@ -107,5 +107,7 @@ int dsm_init(const dsm_config *config) {
     ret = dsm_network_init();
 
     // TODO SPLIT THREAD AVANT RETURN
+    thread_pool = pool_create(DSM_DEFAULT_NB_THREADS,
+                              DSM_DEFAULT_QUEUE_SIZE); // TODO : paramètre a revoir
     return ret;
 }

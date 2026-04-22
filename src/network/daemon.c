@@ -1,9 +1,14 @@
-#include "debug/debug.h"
 #include "pager/pager.h"
+#include "pager/pager_msg.h"
 #include <fcntl.h>
 #include <linux/userfaultfd.h>
 #include <poll.h>
 #include <stdio.h>
+
+typedef struct {
+    struct uffd_msg *fault_msg;
+    int fd;
+} thread_arg;
 
 int pager_worker_loop() {
     int fd = userfaultfd_init();
@@ -48,15 +53,22 @@ int pager_worker_loop() {
 
 int handler_pagefault_worker(struct uffd_msg *fault_msg, int fd) {
     __u64 page = fault_msg->arg.pagefault.address;
-    int page_index = (page - range_start) / EFFECTIVE_PAGESIZE;
+    int page_index = (page - RANGE_START) / EFFECTIVE_PAGESIZE;
     int flags = fault_msg->arg.pagefault.flags;
 
     if (flags & UFFD_PAGEFAULT_FLAG_WP) {
         // voir message avec olivier
+
+        // accés en écriture a une page présente en mémoire et protégé en écriture
+        // envoie un message au manager qui gere la page -> pour prévenir que la page va
+        // être modifié donc faut invalider la page chez les autres workers faut juste
+        // retirer la protection d'écriture
+        send_wkr_req(page_index, WRITE_REQ);
+        pager_writeprotect(fd, page); // retire la protection d'écriture
+    } else if (flags & UFFD_PAGEFAULT_FLAG_WRITE) {
+        // envoie une demande d'écriture au manager
+        send_wkr_req(page_index, WRITE_REQ);
+        // attends la réponse du manager
     }
     return 0;
-}
-
-int send_pgr_msg() {
-    // LOG_INFO("Envoie d'une msg CODE=%d\n", );
 }

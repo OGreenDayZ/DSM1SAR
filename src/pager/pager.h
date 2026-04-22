@@ -14,18 +14,22 @@
 #define EFFECTIVE_PAGESIZE dsm_ctx->config.pager.nb_pages
 #define EFFECTIVE_NB_PAGES dsm_ctx->config.pager.page_size
 // la map des pages est indexé par rapport au worker
-#define PAGES_MAP dsm_ctx->manager_ctx.pages_reg
-__u64 range_start; 
+#define PAGES_MAP dsm_ctx->worker_ctx.pages_reg
+#define RANGE_START dsm_ctx->worker_ctx.range_start
 typedef enum{
     PAGE_R, 
     PAGE_RW, 
     PAGE_NONE // cas ou le worker posséde pas la page - apres un madvise ou un remove
-} dsm_page_mode; 
+} dsm_page_mode_poss; // mode de détention de la page chez le worker
+
+typedef enum {
+    READ_REQ, 
+    WRITE_REQ
+} dsm_page_mode_req; // mode de requete de la page par le worker (lecture ou écriture)
 typedef struct {
     unsigned int id; // key : page_id
-    unsigned long addr; // l'adresse de la page localement
     struct dsm_hlist_node node; // "node" pour la liste de la hashmap
-    dsm_page_mode mode; // mode de detention de la page 
+    dsm_page_mode_poss mode; // mode de detention de la page 
     int owner_id; 
 } dsm_page;
 
