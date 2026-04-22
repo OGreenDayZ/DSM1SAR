@@ -23,10 +23,10 @@ typedef enum {
     CODE_DISCOVER_WORKER_CONFIG_ACK,
     CODE_DISCOVER_FINALIZE,
 
-    CODE_PAGER_REQUEST, 
-    CODE_PAGER_INVALIDATE,
-    CODE_PAGER_DATA_REQUEST, 
-    CODE_PAGER_DATA, 
+    CODE_PAGER_REQUEST, // worker
+    CODE_PAGER_INVALIDATE, // manager
+    CODE_PAGER_DATA_REQUEST, // manager
+    CODE_PAGER_DATA, // worker ou manager
 } dsm_msg_code;
 
 /* Lexique
@@ -118,15 +118,15 @@ typedef struct {
 typedef struct {
     uint32_t page_id; 
     uint8_t mode; // 0 : read, 1 : write
-} dsm_msg_pgr_wkr_request;
+} dsm_msg_pgr_wkr_req;
 
 typedef struct {
     uint32_t page_id;
-} dsm_msg_pgr_mgr_invalidate;
+} dsm_msg_pgr_mgr_inval;
 
 typedef struct {
     uint32_t page_id;
-} dsm_msg_pgr_mgr_data_request;
+} dsm_msg_pgr_mgr_data_req;
 
 typedef struct {
     uint32_t page_id;

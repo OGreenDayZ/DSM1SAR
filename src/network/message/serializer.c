@@ -251,19 +251,19 @@ int dsm_srlze_dscv_finalize(uint8_t *buf, size_t buf_sz) {
 }
 
 // envoie la requete du worker pour une page (lecture ou écriture)
-int dsm_srlze_pgr_wrk_request(uint32_t page_id, uint32_t worker_id, uint8_t mode,
+int dsm_srlze_pgr_wkr_request(uint32_t page_id, uint32_t worker_id, uint8_t mode,
                               uint8_t *buf, size_t buf_sz) {
-    if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_pgr_wkr_request)) {
+    if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_pgr_wkr_req)) {
         return -1;
     }
 
     dsm_msg_header header = {
         .code = CODE_PAGER_REQUEST,
         .id = dsm_ctx->node_id, // worker_id qui envoie la requete
-        .payload_len = sizeof(dsm_msg_pgr_wkr_request),
+        .payload_len = sizeof(dsm_msg_pgr_wkr_req),
     };
 
-    dsm_msg_pgr_wkr_request payload = {
+    dsm_msg_pgr_wkr_req payload = {
         .page_id = htonl(page_id),
         .mode = mode,
     };
@@ -279,17 +279,17 @@ int dsm_srlze_pgr_wrk_request(uint32_t page_id, uint32_t worker_id, uint8_t mode
 
 // envoie la requete d'invalidation de la page
 int dsm_srlze_pgr_mgr_invalidate(uint32_t page_id, uint8_t *buf, size_t buf_sz) {
-    if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_pgr_mgr_invalidate)) {
+    if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_pgr_mgr_inval)) {
         return -1;
     }
 
     dsm_msg_header header = {
         .code = CODE_PAGER_INVALIDATE,
         .id = dsm_ctx->node_id, // manager_id qui envoie la requete
-        .payload_len = sizeof(dsm_msg_pgr_mgr_invalidate),
+        .payload_len = sizeof(dsm_msg_pgr_mgr_inval),
     };
 
-    dsm_msg_pgr_mgr_invalidate payload = {
+    dsm_msg_pgr_mgr_inval payload = {
         .page_id = htonl(page_id),
     };
 
@@ -304,17 +304,17 @@ int dsm_srlze_pgr_mgr_invalidate(uint32_t page_id, uint8_t *buf, size_t buf_sz) 
 
 // envoie la requete de demande de données de la page
 int dsm_srlze_pgr_mgr_data_request(uint32_t page_id, uint8_t *buf, size_t buf_sz) {
-    if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_pgr_mgr_data_request)) {
+    if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_pgr_mgr_data_req)) {
         return -1;
     }
 
     dsm_msg_header header = {
         .code = CODE_PAGER_DATA_REQUEST,
         .id = dsm_ctx->node_id, // manager_id qui envoie la requete
-        .payload_len = sizeof(dsm_msg_pgr_mgr_data_request),
+        .payload_len = sizeof(dsm_msg_pgr_mgr_data_req),
     };
 
-    dsm_msg_pgr_mgr_data_request payload = {
+    dsm_msg_pgr_mgr_data_req payload = {
         .page_id = htonl(page_id),
     };
 
@@ -479,46 +479,45 @@ int dsm_dsrlze_dscv_wkr_config(uint8_t *buf, size_t buf_sz,
 }
 
 // recevoir la requete du worker pour une page (lecture ou écriture)
-int dsm_dsrlze_pgr_wrk_request(uint8_t *buf, size_t buf_sz,
-                               dsm_msg_pgr_wkr_request *msg) {
-    if (buf_sz < sizeof(dsm_msg_pgr_wkr_request)) {
+int dsm_dsrlze_pgr_wkr_request(uint8_t *buf, size_t buf_sz, dsm_msg_pgr_wkr_req *msg) {
+    if (buf_sz < sizeof(dsm_msg_pgr_wkr_req)) {
         return -1;
     }
 
-    dsm_msg_pgr_wkr_request net_msg;
+    dsm_msg_pgr_wkr_req net_msg;
     memcpy(&net_msg, buf, sizeof(net_msg));
     msg->page_id = ntohl(net_msg.page_id);
     msg->mode = net_msg.mode;
 
-    return sizeof(dsm_msg_pgr_wkr_request);
+    return sizeof(dsm_msg_pgr_wkr_req);
 }
 
 // recevoir la requete d'invalidation de la page
 int dsm_dsrlze_pgr_mgr_invalidate(uint8_t *buf, size_t buf_sz,
-                                  dsm_msg_pgr_mgr_invalidate *msg) {
-    if (buf_sz < sizeof(dsm_msg_pgr_mgr_invalidate)) {
+                                  dsm_msg_pgr_mgr_inval *msg) {
+    if (buf_sz < sizeof(dsm_msg_pgr_mgr_inval)) {
         return -1;
     }
 
-    dsm_msg_pgr_mgr_invalidate net_msg;
+    dsm_msg_pgr_mgr_inval net_msg;
     memcpy(&net_msg, buf, sizeof(net_msg));
     msg->page_id = ntohl(net_msg.page_id);
 
-    return sizeof(dsm_msg_pgr_mgr_invalidate);
+    return sizeof(dsm_msg_pgr_mgr_inval);
 }
 
 // recevoir la requete de demande de données de la page
 int dsm_dsrlze_pgr_mgr_data_request(uint8_t *buf, size_t buf_sz,
-                                    dsm_msg_pgr_mgr_data_request *msg) {
-    if (buf_sz < sizeof(dsm_msg_pgr_mgr_data_request)) {
+                                    dsm_msg_pgr_mgr_data_req *msg) {
+    if (buf_sz < sizeof(dsm_msg_pgr_mgr_data_req)) {
         return -1;
     }
 
-    dsm_msg_pgr_mgr_data_request net_msg;
+    dsm_msg_pgr_mgr_data_req net_msg;
     memcpy(&net_msg, buf, sizeof(net_msg));
     msg->page_id = ntohl(net_msg.page_id);
 
-    return sizeof(dsm_msg_pgr_mgr_data_request);
+    return sizeof(dsm_msg_pgr_mgr_data_req);
 }
 
 // recevoir les données de la page

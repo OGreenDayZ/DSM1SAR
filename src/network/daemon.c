@@ -1,3 +1,4 @@
+#include "debug/debug.h"
 #include "pager/pager.h"
 #include <fcntl.h>
 #include <linux/userfaultfd.h>
@@ -54,4 +55,8 @@ int handler_pagefault_worker(struct uffd_msg *fault_msg, int fd) {
         // voir message avec olivier
     }
     return 0;
+}
+
+int send_pgr_msg() {
+    // LOG_INFO("Envoie d'une msg CODE=%d\n", );
 }

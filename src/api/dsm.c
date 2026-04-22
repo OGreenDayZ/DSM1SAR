@@ -90,13 +90,9 @@ static int dsm_ctx_init(const dsm_config *config) {
 
     dsm_ctx->node_id = 0;
 
-    for (size_t i = 0; i < DSM_HASH_SIZE(dsm_ctx->nodes_reg); i++) {
-        dsm_ctx->nodes_reg[i].first = NULL;
-    }
+    dsm_hash_init(dsm_ctx->manager_ctx.pages_reg);
 
-    for (size_t i = 0; i < DSM_HASH_SIZE(dsm_ctx->pages_reg); i++) {
-        dsm_ctx->pages_reg[i].first = NULL;
-    }
+    dsm_hash_init(dsm_ctx->nodes_reg);
 
     return 0;
 }
