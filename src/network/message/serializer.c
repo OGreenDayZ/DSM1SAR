@@ -385,7 +385,7 @@ int dsm_srlze_pgr_data(uint32_t page_id, uint8_t *data, size_t data_len, uint8_t
         .payload_len = sizeof(dsm_msg_pgr_data) + data_len,
     };
 
-    dsm_msg_pgr_data payload = {.page_id = htonl(page_id), .data = {}};
+    dsm_msg_pgr_data payload = {.page_id = htonl(page_id) /*, .data = 0*/};
 
     int offset = serialize_header(&header, buf, buf_sz);
     if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header)) {

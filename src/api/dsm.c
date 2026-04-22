@@ -148,7 +148,7 @@ int dsm_init(const dsm_config *config) {
     print_nodes_reg();
     dsm_ctx_cleanup(); // TODO A ENLEVER SI VRAI TEST DEMON !!!!!!
     // TODO SPLIT THREAD AVANT RETURN
-    thread_pool = pool_create(DSM_DEFAULT_NB_THREADS,
-                              DSM_DEFAULT_QUEUE_SIZE); // TODO : paramètre a revoir
+    // thread_pool = pool_create(DSM_DEFAULT_NB_THREADS,
+    //   DSM_DEFAULT_QUEUE_SIZE); // TODO : paramètre a revoir
     return ret;
 }

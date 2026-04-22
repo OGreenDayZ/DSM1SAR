@@ -56,6 +56,6 @@ typedef struct {
 extern dsm_context *dsm_ctx; // Initialisé dans dsm.c
 
 // Pool de thread : 
-dsm_thread_pool * thread_pool; ;
+// dsm_thread_pool * thread_pool; ;
 
 #endif // DSM_INTERNAL_H
