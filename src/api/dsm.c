@@ -7,6 +7,7 @@
 #include "internal.h"
 #include "network/network.h"
 #include "pager/pager.h"
+#include "util/concurrent/safe_map.h"
 #include "util/thread_pool.h"
 
 dsm_context *dsm_ctx = NULL;
@@ -91,21 +92,32 @@ static int dsm_ctx_init(const dsm_config *config) {
 
     dsm_ctx->node_id = 0;
 
-    if (dsm_safe_map_init(&dsm_ctx->nodes_reg, DSM_NODE_HASH_BITS) != 0) {
-        LOG_ERROR("Erreur dsm_safe_map_init : nodes_reg");
-        free(dsm_ctx);
-        dsm_ctx = NULL;
-        return DSM_ERROR_CONTEXT_ALLOC;
+    if (config->net.node.role == DSM_ROLE_MANAGER) {
+        if (dsm_safe_map_init(&dsm_ctx->node_ctx.manager_ctx.pages_reg,
+                              DSM_NODE_HASH_BITS) != 0) {
+            LOG_ERROR("Erreur dsm_safe_map_init : manager_ctx.pages_reg");
+            free(dsm_ctx);
+            dsm_ctx = NULL;
+            return DSM_ERROR_CONTEXT_ALLOC;
+        }
+    } else if (config->net.node.role == DSM_ROLE_WORKER) {
+        if (dsm_safe_map_init(&dsm_ctx->node_ctx.worker_ctx.managerID_to_nodeID,
+                              DSM_PAGE_HASH_BITS) != 0) {
+            LOG_ERROR("Erreur dsm_safe_map_init : worker_ctx.managerID_to_nodeID");
+            dsm_safe_map_destroy(&dsm_ctx->nodes_reg);
+            free(dsm_ctx);
+            dsm_ctx = NULL;
+            return DSM_ERROR_CONTEXT_ALLOC;
+        }
     }
 
-    if (dsm_safe_map_init(&dsm_ctx->pages_reg, DSM_PAGE_HASH_BITS) != 0) {
-        LOG_ERROR("Erreur dsm_safe_map_init : pages_reg");
+    if (dsm_safe_map_init(&dsm_ctx->nodes_reg, DSM_PAGE_HASH_BITS) != 0) {
+        LOG_ERROR("Erreur dsm_safe_map_init : nodes_reg");
         dsm_safe_map_destroy(&dsm_ctx->nodes_reg);
         free(dsm_ctx);
         dsm_ctx = NULL;
         return DSM_ERROR_CONTEXT_ALLOC;
     }
-
     return 0;
 }
 
@@ -120,7 +132,10 @@ static void dsm_ctx_cleanup() {
     }
 
     dsm_safe_map_destroy(&dsm_ctx->nodes_reg);
-    dsm_safe_map_destroy(&dsm_ctx->pages_reg);
+    if (dsm_ctx->config.net.node.role == DSM_ROLE_MANAGER)
+        dsm_safe_map_destroy(&dsm_ctx->node_ctx.manager_ctx.pages_reg);
+    else if (dsm_ctx->config.net.node.role == DSM_ROLE_WORKER)
+        dsm_safe_map_destroy(&dsm_ctx->node_ctx.worker_ctx.managerID_to_nodeID);
 
     free(dsm_ctx);
     dsm_ctx = NULL;

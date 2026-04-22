@@ -294,8 +294,7 @@ int dsm_srlze_dscv_finalize(uint8_t *buf, size_t buf_sz) {
 }
 
 // envoie la requete du worker pour une page (lecture ou écriture)
-int dsm_srlze_pgr_wkr_req(uint32_t page_id, uint32_t worker_id, uint8_t mode,
-                          uint8_t *buf, size_t buf_sz) {
+int dsm_srlze_pgr_wkr_req(uint32_t page_id, uint8_t mode, uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_pgr_wkr_req)) {
         return -1;
     }
@@ -322,17 +321,17 @@ int dsm_srlze_pgr_wkr_req(uint32_t page_id, uint32_t worker_id, uint8_t mode,
 
 // envoie la requete d'invalidation de la page
 int dsm_srlze_pgr_mgr_inva(uint32_t page_id, uint8_t *buf, size_t buf_sz) {
-    if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_pgr_mgr_inval)) {
+    if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_pgr_mgr_inva)) {
         return -1;
     }
 
     dsm_msg_header header = {
         .code = CODE_PAGER_INVALIDATE,
         .id = dsm_ctx->node_id, // manager_id qui envoie la requete
-        .payload_len = sizeof(dsm_msg_pgr_mgr_inval),
+        .payload_len = sizeof(dsm_msg_pgr_mgr_inva),
     };
 
-    dsm_msg_pgr_mgr_inval payload = {
+    dsm_msg_pgr_mgr_inva payload = {
         .page_id = htonl(page_id),
     };
 
@@ -346,7 +345,8 @@ int dsm_srlze_pgr_mgr_inva(uint32_t page_id, uint8_t *buf, size_t buf_sz) {
 }
 
 // envoie la requete de demande de données de la page
-int dsm_srlze_pgr_mgr_data_req(uint32_t page_id, uint8_t *buf, size_t buf_sz) {
+int dsm_srlze_pgr_mgr_data_req(uint32_t page_id, uint8_t flags, uint8_t *buf,
+                               size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_pgr_mgr_data_req)) {
         return -1;
     }
@@ -357,9 +357,7 @@ int dsm_srlze_pgr_mgr_data_req(uint32_t page_id, uint8_t *buf, size_t buf_sz) {
         .payload_len = sizeof(dsm_msg_pgr_mgr_data_req),
     };
 
-    dsm_msg_pgr_mgr_data_req payload = {
-        .page_id = htonl(page_id),
-    };
+    dsm_msg_pgr_mgr_data_req payload = {.page_id = htonl(page_id), .flags = flags};
 
     int offset = serialize_header(&header, buf, buf_sz);
     if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header)) {
@@ -385,7 +383,7 @@ int dsm_srlze_pgr_data(uint32_t page_id, uint8_t *data, size_t data_len, uint8_t
         .payload_len = sizeof(dsm_msg_pgr_data) + data_len,
     };
 
-    dsm_msg_pgr_data payload = {.page_id = htonl(page_id) /*, .data = 0*/};
+    dsm_msg_pgr_data payload = {.page_id = htonl(page_id)};
 
     int offset = serialize_header(&header, buf, buf_sz);
     if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header)) {
@@ -394,6 +392,35 @@ int dsm_srlze_pgr_data(uint32_t page_id, uint8_t *data, size_t data_len, uint8_t
     memcpy(buf + offset, &payload, sizeof(payload));
     offset += sizeof(payload);
     memcpy(buf + offset, data, data_len);
+    return offset + data_len;
+}
+
+int dsm_srlze_pgr_mgr_ack(uint32_t page_id, uint32_t mode, uint8_t flags, uint8_t *data,
+                          size_t data_len, uint8_t *buf, size_t buf_sz) {
+    if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_pgr_mgr_ack) + data_len) {
+        return -1;
+    }
+
+    dsm_msg_header header = {
+        .code = CODE_PAGER_MANAGER_ACK,
+        .id =
+            dsm_ctx
+                ->node_id, // sender_id qui envoie les données (can be manager ou worker)
+        .payload_len = sizeof(dsm_msg_pgr_mgr_ack) + data_len,
+    };
+
+    dsm_msg_pgr_mgr_ack payload = {
+        .page_id = htonl(page_id), .mode = mode, .flags = flags /*, .data = 0*/};
+
+    int offset = serialize_header(&header, buf, buf_sz);
+    if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header)) {
+        return -1;
+    }
+    memcpy(buf + offset, &payload, sizeof(payload));
+    offset += sizeof(payload);
+    if (data_len > 0) {
+        memcpy(buf + offset, data, data_len);
+    }
     return offset + data_len;
 }
 
@@ -584,17 +611,16 @@ int dsm_dsrlze_pgr_wkr_req(uint8_t *buf, size_t buf_sz, dsm_msg_pgr_wkr_req *msg
 }
 
 // recevoir la requete d'invalidation de la page
-int dsm_dsrlze_pgr_mgr_invalidate(uint8_t *buf, size_t buf_sz,
-                                  dsm_msg_pgr_mgr_inval *msg) {
-    if (buf_sz < sizeof(dsm_msg_pgr_mgr_inval)) {
+int dsm_dsrlze_pgr_mgr_inva(uint8_t *buf, size_t buf_sz, dsm_msg_pgr_mgr_inva *msg) {
+    if (buf_sz < sizeof(dsm_msg_pgr_mgr_inva)) {
         return -1;
     }
 
-    dsm_msg_pgr_mgr_inval net_msg;
+    dsm_msg_pgr_mgr_inva net_msg;
     memcpy(&net_msg, buf, sizeof(net_msg));
     msg->page_id = ntohl(net_msg.page_id);
 
-    return sizeof(dsm_msg_pgr_mgr_inval);
+    return sizeof(dsm_msg_pgr_mgr_inva);
 }
 
 // recevoir la requete de demande de données de la page
@@ -607,6 +633,7 @@ int dsm_dsrlze_pgr_mgr_data_req(uint8_t *buf, size_t buf_sz,
     dsm_msg_pgr_mgr_data_req net_msg;
     memcpy(&net_msg, buf, sizeof(net_msg));
     msg->page_id = ntohl(net_msg.page_id);
+    msg->flags = net_msg.flags;
 
     return sizeof(dsm_msg_pgr_mgr_data_req);
 }
@@ -624,4 +651,21 @@ int dsm_dsrlze_pgr_data(uint8_t *buf, size_t buf_sz, dsm_msg_pgr_data *msg) {
     memcpy(msg->data, buf + sizeof(net_msg), data_len);
 
     return sizeof(dsm_msg_pgr_data) + data_len;
+}
+
+// recevoir l'ack du manager pour la requete de page
+int dsm_dsrlze_pgr_mgr_ack(uint8_t *buf, size_t buf_sz, dsm_msg_pgr_mgr_ack *msg) {
+    if (buf_sz < sizeof(dsm_msg_pgr_mgr_ack)) {
+        return -1;
+    }
+    dsm_msg_pgr_mgr_ack net_msg;
+    memcpy(&net_msg, buf, sizeof(net_msg));
+    msg->page_id = ntohl(net_msg.page_id);
+    msg->mode = net_msg.mode;
+    msg->flags = net_msg.flags;
+    size_t data_len = buf_sz - sizeof(dsm_msg_pgr_mgr_ack);
+    if (data_len > 0) {
+        memcpy(msg->data, buf + sizeof(net_msg), data_len);
+    }
+    return sizeof(dsm_msg_pgr_mgr_ack) + data_len;
 }

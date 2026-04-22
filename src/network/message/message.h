@@ -30,6 +30,7 @@ typedef enum {
     CODE_PAGER_INVALIDATE, // manager
     CODE_PAGER_DATA_REQUEST, // manager
     CODE_PAGER_DATA, // worker ou manager
+    CODE_PAGER_MANAGER_ACK, 
 } dsm_msg_code;
 
 /** Lexique
@@ -38,7 +39,7 @@ typedef enum {
  * @reg: registry
  * @mgr: manager
  * @wkr: worker
- * @pgr : pager
+ * @pgr: pager
  */
 
 #pragma pack(push, 1)
@@ -130,15 +131,16 @@ typedef struct {
 /* PAGER */
 typedef struct {
     uint32_t page_id; 
-    uint8_t mode; // 0 : read, 1 : write
+    uint8_t mode; // 0 : read, 1 : write, 3 : lock, 4 : unlock
 } dsm_msg_pgr_wkr_req;
 
 typedef struct {
     uint32_t page_id;
-} dsm_msg_pgr_mgr_inval;
+} dsm_msg_pgr_mgr_inva;
 
 typedef struct {
     uint32_t page_id;
+    uint8_t flags;
 } dsm_msg_pgr_mgr_data_req;
 
 typedef struct {
@@ -146,6 +148,16 @@ typedef struct {
     uint8_t data[]; // la page entière
 } dsm_msg_pgr_data;
 
+// Définir les flags
+#define MGR_INVALIDATE  (1 << 0)  // Bit 0
+#define PGR_SYNC        (1 << 1)  // Bit 1
+#define MGR_ACK_DATA        (1 << 2)  // Bit 2 : indique si data[] est présent
+typedef struct {
+    uint32_t page_id;
+    uint32_t mode; // 0 : read, 1 : write, 2 : lock, 3 : unlock
+    uint8_t flags;
+    uint8_t data[]; // optionnel : envoie des données si 
+} dsm_msg_pgr_mgr_ack;
 
 
 #pragma pack(pop)

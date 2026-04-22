@@ -8,7 +8,6 @@
 
 #include <unistd.h>
 #include <stdint.h>
-#include "util/thread_pool.h"
 #define DSM_NODE_HASH_BITS 4
 #define DSM_PAGE_HASH_BITS 12
 
@@ -21,18 +20,18 @@ typedef struct {
 } dsm_node_content;
 
 typedef struct {
-    // map des pages détenues par le worker, indexé par page_id
-    struct dsm_hlist_head pages_reg[1 << DSM_PAGE_HASH_BITS];
+    // map des pages : page_id -> dsm_page
+    dsm_safe_map pages_reg;
 } dsm_manager_ctx; 
 typedef struct {
-    // map des pages et par quel manager ils sont detenus, indexé par page_id
-    struct dsm_hlist_head pages_reg[1 << DSM_PAGE_HASH_BITS];
+    // map des managers : manager_id -> node_id
+    dsm_safe_map managerID_to_nodeID; 
     uint64_t range_start; 
 } dsm_worker_ctx;
-// typedef union {
-//     dsm_manager_ctx manager_ctx;
-//     dsm_worker_ctx worker_ctx;
-// } dsm_node_ctx; 
+typedef union {
+    dsm_manager_ctx manager_ctx;
+    dsm_worker_ctx worker_ctx;
+} node_ctx; 
 
 
 typedef struct {
@@ -42,12 +41,11 @@ typedef struct {
     unsigned int node_id;
 
     dsm_safe_map nodes_reg;
-    dsm_safe_map pages_reg;
     // + mutex ?
-    // dsm_node_ctx node_ctx; 
+    union {
     dsm_manager_ctx manager_ctx;
     dsm_worker_ctx worker_ctx;
-
+    } node_ctx; 
     // à étendre...
 } dsm_context;
 
