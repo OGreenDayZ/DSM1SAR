@@ -7,6 +7,7 @@
 #include <sys/time.h>
 
 #define DSM_MSG_RECV_TIMEOUT_SEC 5
+#define DSM_MTU_SIZE 1500
 
 typedef enum {
     /* Discover */
@@ -18,6 +19,8 @@ typedef enum {
     CODE_DISCOVER_SHARE_REGISTRY_MANAGER,
     CODE_DISCOVER_SHARE_REGISTRY_MANAGER_ACK,
     CODE_DISCOVER_SHARE_REGISTRY_WORKER,
+    CODE_DISCOVER_WORKER_IDENTITY,
+    CODE_DISCOVER_WORKER_IDENTITY_ACK,
     CODE_DISCOVER_MANAGER_READY,
     CODE_DISCOVER_WORKER_CONFIG,
     CODE_DISCOVER_WORKER_CONFIG_ACK,
@@ -29,14 +32,14 @@ typedef enum {
     CODE_PAGER_DATA, // worker ou manager
 } dsm_msg_code;
 
-/* Lexique
-@dscv : discover
-@spvs : supervisor
-@reg : registry
-@mgr : manager
-@wkr : worker
-@pgr : pager
-*/
+/** Lexique
+ * @dscv: discover
+ * @spvs: supervisor
+ * @reg: registry
+ * @mgr: manager
+ * @wkr: worker
+ * @pgr : pager
+ */
 
 #pragma pack(push, 1)
 // Au lieu de __attribute__((packed)) chaque struct
@@ -88,6 +91,16 @@ typedef struct {
     dsm_reg_node nodes[];
 } dsm_msg_dscv_share_reg;
 
+/* CODE_DISCOVER_WORKER_IDENTITY */
+// typedef struct {
+//     // struct vide
+// } dsm_msg_dscv_wkr_id;
+
+/* CODE_DISCOVER_WORKER_IDENTITY_ACK */
+// typedef struct {
+//     // struct vide
+// } dsm_msg_dscv_wkr_id_ack;
+
 /* CODE_DISCOVER_SHARE_REGISTRY_MANAGER_ACK */
 typedef struct {
     uint16_t listen_port;
@@ -137,11 +150,23 @@ typedef struct {
 
 #pragma pack(pop)
 
+/**
+ * @note : struct de transmission au thread
+ */
 typedef struct {
     struct sockaddr_in src_addr;
     dsm_msg_header header;
     uint8_t *payload;
-} dsm_msg_thread_ctx;
+} dsm_msg_udp_thread_ctx;
+
+/**
+ * @note : struct de transmission au thread
+ */
+typedef struct {
+    int sock;
+    dsm_msg_header header;
+    uint8_t *payload;
+} dsm_msg_tcp_thread_ctx;
 
 int dsm_tcp_send_all(int sock, const uint8_t *buf, size_t len);
 int dsm_tcp_recv_all(int sock, uint8_t *buf, size_t len, struct timeval *tv);

@@ -2,10 +2,13 @@
 
 #include <string.h>
 
+#include "debug/debug.h"
 #include "internal.h"
 
 static int serialize_header(dsm_msg_header *header, uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header)) {
+        LOG_ERROR("Taille du buffer insuffisante pour sérialiser le header : %zu < %zu",
+                  buf_sz, sizeof(dsm_msg_header));
         return -1;
     }
 
@@ -21,6 +24,9 @@ static int serialize_header(dsm_msg_header *header, uint8_t *buf, size_t buf_sz)
 static int serialize_no_payload_msg(uint32_t header_code, uint32_t header_id,
                                     uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header)) {
+        LOG_ERROR("Taille du buffer insuffisante pour sérialiser le message sans payload "
+                  "CODE=%d : %zu < %zu",
+                  header_code, buf_sz, sizeof(dsm_msg_header));
         return -1;
     }
 
@@ -35,6 +41,9 @@ static int serialize_no_payload_msg(uint32_t header_code, uint32_t header_id,
 
 int dsm_srlze_dscv_init(uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_init)) {
+        LOG_ERROR("Taille du buffer insuffisante pour sérialiser le CODE=%d : %zu < %zu",
+                  CODE_DISCOVER_INIT, buf_sz,
+                  sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_init));
         return -1;
     }
 
@@ -59,6 +68,9 @@ int dsm_srlze_dscv_init(uint8_t *buf, size_t buf_sz) {
 
 int dsm_srlze_dscv_spvs_data(uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_spvs_data)) {
+        LOG_ERROR("Taille du buffer insuffisante pour sérialiser le CODE=%d : %zu < %zu",
+                  CODE_DISCOVER_SUPERVISOR_DATA, buf_sz,
+                  sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_spvs_data));
         return -1;
     }
 
@@ -83,6 +95,9 @@ int dsm_srlze_dscv_spvs_data(uint8_t *buf, size_t buf_sz) {
 
 int dsm_srlze_dscv_join_ack(int assigned_id, uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_join_ack)) {
+        LOG_ERROR("Taille du buffer insuffisante pour sérialiser le CODE=%d : %zu < %zu",
+                  CODE_DISCOVER_JOIN_ACK, buf_sz,
+                  sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_join_ack));
         return -1;
     }
 
@@ -112,6 +127,9 @@ int dsm_srlze_dscv_sys_full(uint8_t *buf, size_t buf_sz) {
 
 int dsm_srlze_dscv_role_wish(uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_role_wish)) {
+        LOG_ERROR("Taille du buffer insuffisante pour sérialiser le CODE=%d : %zu < %zu",
+                  CODE_DISCOVER_ROLE_WISH, buf_sz,
+                  sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_role_wish));
         return -1;
     }
 
@@ -136,6 +154,9 @@ int dsm_srlze_dscv_role_wish(uint8_t *buf, size_t buf_sz) {
 
 static int serialize_reg_node(dsm_reg_node *node, uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_reg_node)) {
+        LOG_ERROR("Taille du buffer insuffisante pour sérialiser un noeud du registre : "
+                  "%zu < %zu",
+                  buf_sz, sizeof(dsm_reg_node));
         return -1;
     }
 
@@ -154,9 +175,10 @@ int dsm_srlze_dscv_share_reg(uint32_t code, dsm_msg_dscv_share_reg *share, uint8
     size_t needed_sz = sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_share_reg) +
                        share->nb_nodes * sizeof(dsm_reg_node);
     if (buf_sz < needed_sz) {
+        LOG_ERROR("Taille du buffer insuffisante pour sérialiser le CODE=%d : %zu < %zu",
+                  code, buf_sz, needed_sz);
         return -1;
     }
-
     dsm_msg_header header = {
         .code = code,
         .id = dsm_ctx->node_id,
@@ -168,7 +190,12 @@ int dsm_srlze_dscv_share_reg(uint32_t code, dsm_msg_dscv_share_reg *share, uint8
     if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header)) {
         return -1;
     }
-    memcpy(buf + offset, share, sizeof(dsm_msg_dscv_share_reg));
+
+    dsm_msg_dscv_share_reg net_share = {
+        .sys_total_nodes = htonl(share->sys_total_nodes),
+        .nb_nodes = htonl(share->nb_nodes),
+    };
+    memcpy(buf + offset, &net_share, sizeof(net_share));
     offset += sizeof(dsm_msg_dscv_share_reg);
 
     for (uint32_t i = 0; i < share->nb_nodes; i++) {
@@ -184,6 +211,9 @@ int dsm_srlze_dscv_share_reg(uint32_t code, dsm_msg_dscv_share_reg *share, uint8
 
 int dsm_srlze_dscv_share_reg_ack(uint16_t listen_port, uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_share_reg_ack)) {
+        LOG_ERROR("Taille du buffer insuffisante pour sérialiser le CODE=%d : %zu < %zu",
+                  CODE_DISCOVER_SHARE_REGISTRY_MANAGER_ACK, buf_sz,
+                  sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_share_reg_ack));
         return -1;
     }
 
@@ -206,6 +236,16 @@ int dsm_srlze_dscv_share_reg_ack(uint16_t listen_port, uint8_t *buf, size_t buf_
     return offset + sizeof(payload);
 }
 
+int dsm_srlze_dscv_wkr_id(uint8_t *buf, size_t buf_sz) {
+    return serialize_no_payload_msg(CODE_DISCOVER_WORKER_IDENTITY, dsm_ctx->node_id, buf,
+                                    buf_sz);
+}
+
+int dsm_srlze_dscv_wkr_id_ack(uint8_t *buf, size_t buf_sz) {
+    return serialize_no_payload_msg(CODE_DISCOVER_WORKER_IDENTITY_ACK, dsm_ctx->node_id,
+                                    buf, buf_sz);
+}
+
 int dsm_srlze_dscv_mgr_ready(uint8_t *buf, size_t buf_sz) {
     return serialize_no_payload_msg(CODE_DISCOVER_MANAGER_READY, dsm_ctx->node_id, buf,
                                     buf_sz);
@@ -217,6 +257,9 @@ int dsm_srlze_dscv_mgr_ready(uint8_t *buf, size_t buf_sz) {
 int dsm_srlze_dscv_wkr_config(uint64_t nb_pages, uint32_t page_size, uint8_t *buf,
                               size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_wkr_config)) {
+        LOG_ERROR("Taille du buffer insuffisante pour sérialiser le CODE=%d : %zu < %zu",
+                  CODE_DISCOVER_WORKER_CONFIG, buf_sz,
+                  sizeof(dsm_msg_header) + sizeof(dsm_msg_dscv_wkr_config));
         return -1;
     }
 
@@ -356,6 +399,8 @@ int dsm_srlze_pgr_data(uint32_t page_id, uint8_t *data, size_t data_len, uint8_t
 
 int dsm_dsrlze_header(uint8_t *buf, size_t buf_sz, dsm_msg_header *header) {
     if (buf_sz < sizeof(dsm_msg_header)) {
+        LOG_ERROR("Taille du buffer insuffisante pour désérialiser le header : %zu < %zu",
+                  buf_sz, sizeof(dsm_msg_header));
         return -1;
     }
 
@@ -370,6 +415,9 @@ int dsm_dsrlze_header(uint8_t *buf, size_t buf_sz, dsm_msg_header *header) {
 
 int dsm_dsrlze_dscv_init(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_init *msg) {
     if (buf_sz < sizeof(dsm_msg_dscv_init)) {
+        LOG_ERROR(
+            "Taille du buffer insuffisante pour désérialiser le CODE=%d : %zu < %zu",
+            CODE_DISCOVER_INIT, buf_sz, sizeof(dsm_msg_dscv_init));
         return -1;
     }
 
@@ -382,6 +430,9 @@ int dsm_dsrlze_dscv_init(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_init *msg) {
 
 int dsm_dsrlze_dscv_spvs_data(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_spvs_data *msg) {
     if (buf_sz < sizeof(dsm_msg_dscv_spvs_data)) {
+        LOG_ERROR(
+            "Taille du buffer insuffisante pour désérialiser le CODE=%d : %zu < %zu",
+            CODE_DISCOVER_SUPERVISOR_DATA, buf_sz, sizeof(dsm_msg_dscv_spvs_data));
         return -1;
     }
 
@@ -394,6 +445,9 @@ int dsm_dsrlze_dscv_spvs_data(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_spvs_dat
 
 int dsm_dsrlze_dscv_join_ack(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_join_ack *msg) {
     if (buf_sz < sizeof(dsm_msg_dscv_join_ack)) {
+        LOG_ERROR(
+            "Taille du buffer insuffisante pour désérialiser le CODE=%d : %zu < %zu",
+            CODE_DISCOVER_JOIN_ACK, buf_sz, sizeof(dsm_msg_dscv_join_ack));
         return -1;
     }
 
@@ -406,6 +460,9 @@ int dsm_dsrlze_dscv_join_ack(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_join_ack 
 
 int dsm_dsrlze_dscv_role_wish(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_role_wish *msg) {
     if (buf_sz < sizeof(dsm_msg_dscv_role_wish)) {
+        LOG_ERROR(
+            "Taille du buffer insuffisante pour désérialiser le CODE=%d : %zu < %zu",
+            CODE_DISCOVER_ROLE_WISH, buf_sz, sizeof(dsm_msg_dscv_role_wish));
         return -1;
     }
 
@@ -418,6 +475,10 @@ int dsm_dsrlze_dscv_role_wish(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_role_wis
 
 static int deserialize_reg_node(uint8_t *buf, size_t buf_sz, dsm_reg_node *node) {
     if (buf_sz < sizeof(dsm_reg_node)) {
+        LOG_ERROR(
+            "Taille du buffer insuffisante pour désérialiser un noeud du registre : "
+            "%zu < %zu",
+            buf_sz, sizeof(dsm_reg_node));
         return -1;
     }
 
@@ -430,20 +491,42 @@ static int deserialize_reg_node(uint8_t *buf, size_t buf_sz, dsm_reg_node *node)
     return sizeof(net_node);
 }
 
-int dsm_dsrlze_dscv_share_reg(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_share_reg *msg) {
+int dsm_dsrlze_dscv_share_reg(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_share_reg **msg) {
     if (buf_sz < sizeof(dsm_msg_dscv_share_reg)) {
+        LOG_ERROR(
+            "1. Taille du buffer insuffisante pour désérialiser le CODE=%d : %zu < %zu",
+            CODE_DISCOVER_SHARE_REGISTRY_MANAGER, buf_sz, sizeof(dsm_msg_dscv_share_reg));
         return -1;
     }
 
     dsm_msg_dscv_share_reg net_msg;
     memcpy(&net_msg, buf, sizeof(net_msg));
-    msg->sys_total_nodes = ntohl(net_msg.sys_total_nodes);
-    msg->nb_nodes = ntohl(net_msg.nb_nodes);
-
+    net_msg.sys_total_nodes = ntohl(net_msg.sys_total_nodes);
+    net_msg.nb_nodes = ntohl(net_msg.nb_nodes);
     size_t offset = sizeof(dsm_msg_dscv_share_reg);
-    for (uint32_t i = 0; i < msg->nb_nodes; i++) {
-        int res = deserialize_reg_node(buf + offset, buf_sz - offset, &msg->nodes[i]);
+
+    size_t needed_sz =
+        sizeof(dsm_msg_dscv_share_reg) + net_msg.nb_nodes * sizeof(dsm_reg_node);
+    if (buf_sz < needed_sz) {
+        LOG_ERROR(
+            "2. Taille du buffer insuffisante pour désérialiser le CODE=%d : %zu < %zu",
+            CODE_DISCOVER_SHARE_REGISTRY_MANAGER, buf_sz, needed_sz);
+        return -1;
+    }
+
+    *msg =
+        malloc(sizeof(dsm_msg_dscv_share_reg) + net_msg.nb_nodes * sizeof(dsm_reg_node));
+    if (!*msg) {
+        LOG_ERROR("malloc : msg");
+        return -1;
+    }
+
+    memcpy(*msg, &net_msg, offset);
+
+    for (uint32_t i = 0; i < net_msg.nb_nodes; i++) {
+        int res = deserialize_reg_node(buf + offset, buf_sz - offset, &(*msg)->nodes[i]);
         if (res < 0) {
+            free(*msg);
             return -1;
         }
         offset += res;
@@ -451,9 +534,14 @@ int dsm_dsrlze_dscv_share_reg(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_share_re
 
     return offset;
 }
+
 int dsm_dsrlze_dscv_share_reg_ack(uint8_t *buf, size_t buf_sz,
                                   dsm_msg_dscv_share_reg_ack *msg) {
     if (buf_sz < sizeof(dsm_msg_dscv_share_reg_ack)) {
+        LOG_ERROR(
+            "Taille du buffer insuffisante pour désérialiser le CODE=%d : %zu < %zu",
+            CODE_DISCOVER_SHARE_REGISTRY_MANAGER_ACK, buf_sz,
+            sizeof(dsm_msg_dscv_share_reg_ack));
         return -1;
     }
 
@@ -467,6 +555,9 @@ int dsm_dsrlze_dscv_share_reg_ack(uint8_t *buf, size_t buf_sz,
 int dsm_dsrlze_dscv_wkr_config(uint8_t *buf, size_t buf_sz,
                                dsm_msg_dscv_wkr_config *msg) {
     if (buf_sz < sizeof(dsm_msg_dscv_wkr_config)) {
+        LOG_ERROR(
+            "Taille du buffer insuffisante pour désérialiser le CODE=%d : %zu < %zu",
+            CODE_DISCOVER_WORKER_CONFIG, buf_sz, sizeof(dsm_msg_dscv_wkr_config));
         return -1;
     }
 

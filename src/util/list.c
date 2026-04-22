@@ -1,6 +1,6 @@
 #include "list.h"
 
-void dsm_list_add(dsm_list_head *new, dsm_list_head *head) {
+void dsm_list_add(dsm_list_head *head, dsm_list_head *new) {
     dsm_list_head *prev = head;
     dsm_list_head *next = head->next;
 
@@ -10,7 +10,7 @@ void dsm_list_add(dsm_list_head *new, dsm_list_head *head) {
     prev->next = new;
 }
 
-void dsm_list_add_tail(dsm_list_head *new, dsm_list_head *head) {
+void dsm_list_add_tail(dsm_list_head *head, dsm_list_head *new) {
     dsm_list_head *prev = head->prev;
     dsm_list_head *next = head;
 

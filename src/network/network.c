@@ -179,11 +179,6 @@ int dsm_udp_bind_multicast(uint32_t mcast_ip, uint16_t port) {
         goto error_exit;
     }
 
-    // uint8_t loop = 0;
-    // if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, sizeof(loop)) < 0) {
-    //     perror("setsockopt loopback");
-    // }
-
     return sock;
 
 error_exit:

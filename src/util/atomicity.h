@@ -4,11 +4,11 @@
 #include <stdatomic.h>
 #include <stdbool.h>
 
-/*
+/**
  * @note : Pour les compteurs type atomic_uint
  * @brief : Utilisé pour du CAS (Compare And Swap)
  * @note : Si atomic_compare_exchange_weak fail, current est màj avec la valeur actuelle
- * de counter
+ *         de counter
  */
 static inline bool increment_if_less(atomic_uint *counter, unsigned int limit) {
     unsigned int current = atomic_load(counter);
@@ -20,7 +20,7 @@ static inline bool increment_if_less(atomic_uint *counter, unsigned int limit) {
     return false;
 }
 
-/*
+/**
  * @note : La valeur retournée est après l'incrémentation (res == ++counter)
  */
 static inline bool increment_if_less_ext(atomic_uint *counter, unsigned int limit,

@@ -1,10 +1,10 @@
 #ifndef DSM_NET_DISCOVER_H
 #define DSM_NET_DISCOVER_H
 
-#include "dsm.h"
+#include <stdint.h>
 
 #define DSM_DSCV_MAX_RETRIES 3
-#define DSM_DSCV_RESEND_INTERVAL_SEC 2
+#define DSM_DSCV_RESEND_INTERVAL_SEC 1
 
 /* Uniquemement utile jusqu'à la fin du discover */
 typedef struct {
@@ -15,12 +15,9 @@ typedef struct {
     int sock_udp_mcast;
     uint32_t multicast_ip;
 
-    uint32_t supervisor_ip;
-    uint16_t supervisor_tcp_port;
-    int supervisor_tcp_sock;
-    dsm_node_role supervisor_role;
+    uint16_t udp_send_port;
 
-} dsm_dscv_ctx;
+} dsm_discover_ctx;
 
 int dsm_discover(void);
 

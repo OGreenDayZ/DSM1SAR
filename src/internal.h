@@ -3,6 +3,7 @@
 
 #include "dsm.h"
 
+#include "util/concurrent/safe_map.h"
 #include "util/hlist.h"
 
 #include <unistd.h>
@@ -16,7 +17,6 @@
 typedef struct {
     unsigned int id;            // key : node_id
     int tcp_sock;               // socket de communication avec ce node
-    uint32_t ip;                // adresse IP du node (format binaire)
     struct dsm_hlist_node node; // "node" pour la liste de la hashmap
 } dsm_node_content;
 
@@ -36,13 +36,13 @@ typedef struct {
 
 
 typedef struct {
-    /* Une fois le discover fini, config devient READ-ONLY */
+    /** @warning Une fois le discover fini, config devient READ-ONLY */
     dsm_config config;
 
     unsigned int node_id;
 
-    struct dsm_hlist_head nodes_reg[1 << DSM_NODE_HASH_BITS];
-    // struct dsm_hlist_head pages_reg[1 << DSM_PAGE_HASH_BITS];
+    dsm_safe_map nodes_reg;
+    dsm_safe_map pages_reg;
     // + mutex ?
     // dsm_node_ctx node_ctx; 
     dsm_manager_ctx manager_ctx;

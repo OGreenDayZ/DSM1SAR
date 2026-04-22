@@ -4,6 +4,7 @@
 #include "network/network.h"
 
 int dsm_tcp_send_all(int sock, const uint8_t *buf, size_t len) {
+    LOG_INFO("Envoi de %zu octets...", len);
     size_t total_sent = 0;
     while (total_sent < len) {
         ssize_t sent = send(sock, buf + total_sent, len - total_sent, 0);
@@ -17,6 +18,7 @@ int dsm_tcp_send_all(int sock, const uint8_t *buf, size_t len) {
 }
 
 int dsm_tcp_recv_all(int sock, uint8_t *buf, size_t len, struct timeval *tv) {
+    LOG_INFO("En attente de %zu octets...", len);
     size_t total_recv = 0;
     while (total_recv < len) {
         fd_set read_fds;
@@ -37,8 +39,8 @@ int dsm_tcp_recv_all(int sock, uint8_t *buf, size_t len, struct timeval *tv) {
             LOG_ERROR("recv");
             return -1;
         } else if (recv_len == 0) {
-            LOG_ERROR("connection closed by peer");
-            return -1;
+            LOG_WARNING("connection closed by peer");
+            return -2;
         }
         total_recv += recv_len;
     }
@@ -47,6 +49,7 @@ int dsm_tcp_recv_all(int sock, uint8_t *buf, size_t len, struct timeval *tv) {
 
 int dsm_udp_sendto(int sock, const uint8_t *buf, size_t len, uint32_t dest_ip,
                    uint16_t dest_port) {
+    LOG_INFO("Envoie de %zu octets", len);
     struct sockaddr_in dest_addr;
     if (dsm_make_addr(dest_ip, dest_port, &dest_addr) < 0) {
         return -1;
@@ -63,9 +66,12 @@ int dsm_udp_sendto(int sock, const uint8_t *buf, size_t len, uint32_t dest_ip,
     return 0;
 }
 
-/* @note : src_ip & src_port -> Host byte order */
+/**
+ * @note : src_ip & src_port -> Host byte order
+ */
 int dsm_udp_recvfrom(int sock, uint8_t *buf, size_t len, uint32_t *src_ip,
                      uint16_t *src_port, struct timeval *tv) {
+    LOG_INFO("En attente de %zu octets...", len);
     fd_set read_fds;
     FD_ZERO(&read_fds);
     FD_SET(sock, &read_fds);
