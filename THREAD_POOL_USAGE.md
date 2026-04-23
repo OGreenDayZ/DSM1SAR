@@ -15,7 +15,7 @@ Le thread pool (thread\_pool.c / thread\_pool.h) gère un ensemble de threads wo
 dsm_thread_pool *pool = pool_create(4, 16);
 
 if (pool == NULL) {
-    perror("Impossible de créer le pool");
+    LOG_ERROR("Impossible de créer le pool");
     return 1;
 }
 ```
@@ -129,7 +129,7 @@ int main() {
     // 1. Créer le pool : 4 threads, queue de 32 tâches
     dsm_thread_pool *pool = pool_create(4, 32);
     if (!pool) {
-        perror("pool_create");
+        LOG_ERROR("pool_create");
         return 1;
     }
 

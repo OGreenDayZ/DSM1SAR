@@ -54,7 +54,7 @@ typedef struct {
 static item_t *make_item(uint32_t key, int value) {
     item_t *it = malloc(sizeof(item_t));
     if (!it) {
-        perror("malloc");
+        LOG_ERROR("malloc");
         exit(EXIT_FAILURE);
     }
     it->key = key;

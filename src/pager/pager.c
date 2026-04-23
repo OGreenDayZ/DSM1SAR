@@ -1,11 +1,10 @@
 #include "pager.h"
+
 #include "debug/debug.h"
-#include <internal.h>
 
 #include <fcntl.h>
+#include <linux/userfaultfd.h>
 #include <poll.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
@@ -21,20 +20,20 @@ int userfaultfd_init() {
     void *range = mmap(NULL, EFFECTIVE_PAGESIZE * EFFECTIVE_NB_PAGES,
                        PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (range == MAP_FAILED) {
-        perror("mmap");
+        LOG_ERROR("mmap userfaultfd_init");
         goto error1;
     }
-    uffd = -1;
+    dsm_pager_uffd = -1;
     RANGE_START = (__u64)range;
     int fd = userfaultfd(O_CLOEXEC | O_NONBLOCK);
     if (fd == -1) {
-        perror("userfaultfd");
+        LOG_ERROR("userfaultfd userfaultfd_init");
         goto error1;
     }
 
-    struct uffdio_api api = {.api = UFFD_API};
+    struct uffdio_api api = {.api = UFFD_API, .features = UFFD_FEATURE_PAGEFAULT_FLAG_WP};
     if (ioctl(fd, UFFDIO_API, &api)) {
-        perror("ioctl api");
+        LOG_ERROR("ioctl api userfaultfd_init");
         goto error2;
     }
 
@@ -46,11 +45,11 @@ int userfaultfd_init() {
         .range = {.start = (long)range, .len = EFFECTIVE_PAGESIZE * EFFECTIVE_NB_PAGES}};
 
     if (ioctl(fd, UFFDIO_REGISTER, &reg)) {
-        perror("ioctl register");
+        LOG_ERROR("ioctl register userfaultfd_init");
         goto error2;
     }
 
-    uffd = fd;
+    dsm_pager_uffd = fd;
     LOG_INFO("dsm_init_pager OK, fd = %d \n", fd);
 
     return fd;
@@ -66,7 +65,7 @@ int pager_writeprotect(int page_id) {
     struct uffdio_writeprotect wp = {.range = {.start = page, .len = EFFECTIVE_PAGESIZE},
                                      .mode = 0};
     if (ioctl(uffd, UFFDIO_WRITEPROTECT, &wp)) {
-        perror("ioctl write-protect");
+        LOG_ERROR("ioctl write-protect");
         return -1;
     }
     return 0;
@@ -77,7 +76,7 @@ int pager_copy(int page_id, __u64 src, int mode) {
     struct uffdio_copy cp = {
         .dst = dst, .src = src, .len = EFFECTIVE_PAGESIZE, .mode = mode};
     if (ioctl(uffd, UFFDIO_COPY, &cp)) {
-        perror("ioctl copy");
+        LOG_ERROR("ioctl copy");
         return -1;
     }
     return 0;

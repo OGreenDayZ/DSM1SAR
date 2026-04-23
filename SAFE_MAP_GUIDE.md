@@ -34,7 +34,7 @@ unsigned int bits = 10;  // 2^10 = 1024 buckets
 
 int rc = dsm_safe_map_init(&map, bits);
 if (rc != 0) {
-    perror("Erreur lors de l'initialisation de la map");
+    LOG_ERROR("Erreur lors de l'initialisation de la map");
 }
 ```
 
@@ -221,7 +221,7 @@ int main() {
     
     // Initialisation
     if (dsm_safe_map_init(&users, 5) != 0) {
-        perror("init");
+        LOG_ERROR("init");
         return 1;
     }
     
