@@ -68,6 +68,7 @@ typedef enum {
 void dsm_get_default_config(dsm_config *config);
 int dsm_init(const dsm_config *config);
 // TODO dsm_alloc
+// lock, unlock de page addr
 int dsm_barrier(void);
 int dsm_barrier_advanced(unsigned int threads_count, unsigned int manager_id);
 int dsm_finalize(void);
