@@ -438,27 +438,26 @@ int dsm_srlze_mgr_data_ack(uint32_t page_id, uint8_t req_mode, uint8_t is_empty,
     return offset + data_len;
 }
 
-int dsm_srlze_mgr_lock_ack(uint32_t page_id, uint8_t *buf, size_t buf_sz) {
-    if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_mgr_lock_ack)) {
+int dsm_srlze_mgr_lock_ack(uint32_t page_id, uint8_t is_empty, uint8_t *data,
+                           uint8_t *buf, size_t buf_sz) {
+    size_t data_len = (is_empty ? 0 : EFFECTIVE_PAGESIZE);
+    if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_mgr_lock_ack) + data_len) {
         return -1;
     }
-
-    dsm_msg_header header = {
-        .code = CODE_MGR_LOCK_ACK,
-        .id = dsm_ctx->node_id,
-        .payload_len = sizeof(dsm_msg_mgr_lock_ack),
-    };
-
-    dsm_msg_mgr_lock_ack payload = {.page_id = htonl(page_id)};
+    dsm_msg_header header = {.code = CODE_MGR_LOCK_ACK,
+                             .id = dsm_ctx->node_id,
+                             .payload_len = sizeof(dsm_msg_mgr_lock_ack) + data_len};
+    dsm_msg_mgr_lock_ack payload = {.page_id = htonl(page_id), .is_empty = is_empty};
     int offset = serialize_header(&header, buf, buf_sz);
-    if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header)) {
+    if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header))
         return -1;
-    }
-
     memcpy(buf + offset, &payload, sizeof(payload));
-    return offset + sizeof(payload);
+    offset += sizeof(payload);
+    if (data_len > 0) {
+        memcpy(buf + offset, data, data_len);
+    }
+    return offset + data_len;
 }
-
 // FIN PAGER SERIA
 
 int dsm_dsrlze_header(uint8_t *buf, size_t buf_sz, dsm_msg_header *header) {
@@ -557,9 +556,10 @@ static int deserialize_reg_node(uint8_t *buf, size_t buf_sz, dsm_reg_node *node)
 
 int dsm_dsrlze_dscv_share_reg(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_share_reg **msg) {
     if (buf_sz < sizeof(dsm_msg_dscv_share_reg)) {
-        LOG_ERROR(
-            "1. Taille du buffer insuffisante pour désérialiser le CODE=%d : %zu < %zu",
-            CODE_DISCOVER_SHARE_REGISTRY_MANAGER, buf_sz, sizeof(dsm_msg_dscv_share_reg));
+        LOG_ERROR("1. Taille du buffer insuffisante pour désérialiser le CODE=%d : "
+                  "%zu < %zu",
+                  CODE_DISCOVER_SHARE_REGISTRY_MANAGER, buf_sz,
+                  sizeof(dsm_msg_dscv_share_reg));
         return -1;
     }
 
@@ -572,9 +572,9 @@ int dsm_dsrlze_dscv_share_reg(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_share_re
     size_t needed_sz =
         sizeof(dsm_msg_dscv_share_reg) + net_msg.nb_nodes * sizeof(dsm_reg_node);
     if (buf_sz < needed_sz) {
-        LOG_ERROR(
-            "2. Taille du buffer insuffisante pour désérialiser le CODE=%d : %zu < %zu",
-            CODE_DISCOVER_SHARE_REGISTRY_MANAGER, buf_sz, needed_sz);
+        LOG_ERROR("2. Taille du buffer insuffisante pour désérialiser le CODE=%d : "
+                  "%zu < %zu",
+                  CODE_DISCOVER_SHARE_REGISTRY_MANAGER, buf_sz, needed_sz);
         return -1;
     }
 
@@ -731,14 +731,23 @@ int dsm_dsrlze_mgr_data_ack(uint8_t *buf, size_t buf_sz, dsm_msg_mgr_data_ack *m
     return sizeof(dsm_msg_mgr_data_ack) + (msg->is_empty ? 0 : EFFECTIVE_PAGESIZE);
 }
 
+/**
+ * @warning : allouer sizeof(dsm_msg_mgr_data_ack) + EFFECTIVE_PAGESIZE pour msg
+ * // TODO - majda : voir si on peut pas faire autrement
+ */
 int dsm_dsrlze_mgr_lock_ack(uint8_t *buf, size_t buf_sz, dsm_msg_mgr_lock_ack *msg) {
-    if (buf_sz < sizeof(dsm_msg_mgr_lock_ack)) {
+    if (buf_sz < sizeof(dsm_msg_mgr_lock_ack))
         return -1;
-    }
-
     dsm_msg_mgr_lock_ack net_msg;
     memcpy(&net_msg, buf, sizeof(net_msg));
     msg->page_id = ntohl(net_msg.page_id);
+    msg->is_empty = net_msg.is_empty;
 
-    return sizeof(dsm_msg_mgr_lock_ack);
+    if (!msg->is_empty) {
+        if (buf_sz < sizeof(dsm_msg_mgr_lock_ack) + EFFECTIVE_PAGESIZE)
+            return -1;
+        memcpy(msg->data, buf + sizeof(dsm_msg_mgr_lock_ack), EFFECTIVE_PAGESIZE);
+    }
+
+    return sizeof(dsm_msg_mgr_lock_ack) + (msg->is_empty ? 0 : EFFECTIVE_PAGESIZE);
 }

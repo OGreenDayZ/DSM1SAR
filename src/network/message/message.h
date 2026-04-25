@@ -3,6 +3,7 @@
 
 #include <linux/userfaultfd.h>
 #include <netinet/in.h>
+#include <sys/types.h>
 
 #define DSM_MSG_RECV_TIMEOUT_SEC 5
 #define DSM_MTU_SIZE 1500
@@ -151,6 +152,8 @@ typedef struct {
 
 typedef struct {
     uint32_t page_id;
+    uint8_t is_empty; // 0 : pas de data, 1 : data
+    uint8_t data[]; // si is_empty == 0, pas de data
 } dsm_msg_mgr_lock_ack;
 
 typedef struct {

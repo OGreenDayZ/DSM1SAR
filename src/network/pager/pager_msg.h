@@ -3,10 +3,12 @@
 
 #include <stdint.h>
 
-int send_wkr_req(uint32_t page_id, uint8_t mode); 
-int send_mgr_inva(uint32_t page_id, uint8_t is_sync); 
-int send_mgr_data_req(uint32_t page_id, uint8_t flags); 
-int send_pgr_data(uint32_t page_id, uint8_t *data); 
-int send_mgr_ack(uint32_t page_id, uint32_t mode, uint8_t flags, uint8_t *data); 
+int send_wkr_req(uint32_t page_id, uint8_t mode); // OK
+int send_mgr_inva_req(uint32_t page_id, uint8_t is_sync); // OK
+int send_mgr_data_req(uint32_t page_id, uint8_t is_invalidate); // OK
+int send_wkr_inva_ack(uint32_t page_id); // OK
+int send_wkr_data_ack(uint32_t page_id, uint8_t is_empty, uint8_t* data); 
+int send_mgr_data_ack(uint32_t page_id, uint8_t req_mode, uint8_t is_empty, uint8_t* data);
+int send_mgr_lock_ack(uint32_t page_id, uint8_t is_empty, uint8_t* data); 
 
 #endif // DSM_PAGER_MSG_H

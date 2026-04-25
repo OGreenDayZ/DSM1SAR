@@ -8,7 +8,7 @@
 
 /** Lexique
  * @dmn : Daemon
- */
+*/
 
 typedef enum {
     DSM_DMN_STATE_ONGOING,
@@ -23,7 +23,6 @@ typedef struct {
                                      */
 
     // dsm_safe_list poll_fds_update; // Pour les finalize, à voir...
-
     dsm_thread_pool *pool;
 
 } dsm_daemon_ctx;
