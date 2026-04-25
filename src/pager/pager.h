@@ -47,7 +47,7 @@ int userfaultfd_init(int *out_uffd, uint64_t *out_range_start);
  * @return 0 en cas de succès.
  * @return -1 en cas d'erreur, errno positionné.
  */
-int pager_writeprotect(int uffd, int page_id, uint64_t range_start);
+int pager_writeprotect(int uffd, int page_id);
 
 /**
  * Copie une page dans la plage surveillée par userfaultfd.
@@ -65,9 +65,9 @@ int pager_writeprotect(int uffd, int page_id, uint64_t range_start);
  * est en lecture seule après la copie).
  *
  * @return 0 en cas de succès.
- * @return -1 en cas d'erreur, errno positionné.
+ * @return -1 en cas d'erreur.
  */
-int pager_copy(int uffd, int page_id, __u64 src, int mode, uint64_t range_start);
+int pager_copy(int uffd, int page_id, __u64 src, int mode);
 
 // TODO majda
 int pager_destroy();

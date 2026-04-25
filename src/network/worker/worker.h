@@ -66,8 +66,28 @@ extern dsm_worker_ctx *dsm_wkr_ctx;
 int dsm_wkr_ctx_init();
 void dsm_wkr_ctx_cleanup();
 
+/**
+ * @brief Retourne l'index de la page associé a cette adresse
+ * 
+ * @param addr 
+ * @return long l'index de la page qui contient addr
+ */
 long addr_to_page_id(uint64_t addr);
+
+/**
+ * @brief Recupere le node_id du manager qui gere page_id
+ * 
+ * @param page_id page dont on veut le manager
+ * @return int node_id du manager, -1 en cas d'erreur 
+ */
 int get_mgr_node_id_for_page(unsigned long page_id);
+
+/**
+ * @brief Recupere le fd de la socket du manager qui gere la page
+ * 
+ * @param page_id la page dont on veut recupere le manager
+ * @return int fd de la socket du manager, ou -1 en cas d'erreur 
+ */
 int get_mgr_node_socket_for_page(unsigned long page_id);
 
 void dispatch_call_uffd(void *arg);

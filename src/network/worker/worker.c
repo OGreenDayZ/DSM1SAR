@@ -1,8 +1,13 @@
 #include "worker.h"
+
 #include "debug/debug.h"
 #include "internal.h"
 #include "network/message/message.h"
+#include "network/message/serializer.h"
+#include "network/pager/pager_msg.h"
 #include "pager/pager.h"
+
+#include <linux/userfaultfd.h>
 
 dsm_worker_ctx *dsm_wkr_ctx = NULL;
 
@@ -109,31 +114,27 @@ int get_mgr_node_socket_for_page(unsigned long page_id) {
  * normalement les non static suffisent ?
  */
 static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
-    // __u64 page = fault_msg->arg.pagefault.address;
-    // int page_index = (page - dsm_wkr_ctx->range_start) / EFFECTIVE_PAGESIZE;
-    // int flags = fault_msg->arg.pagefault.flags;
+    __u64 addr = fault_msg->arg.pagefault.address;
+    int page_id = addr_to_page_id(addr);
+    int flags = fault_msg->arg.pagefault.flags;
+    int fd_sock_mgr = get_mgr_node_socket_for_page(page_id);
 
-    // if (flags & UFFD_PAGEFAULT_FLAG_WP) {
-    //     /*
-    //      * Accès en écriture sur une page présente et protégée en écriture :
-    //      * prévenir le manager pour qu'il invalide la page chez les autres workers,
-    //      * puis retirer la protection d'écriture localement.
-    //      */
-    //     return send_wkr_req(page_index, WRITE_REQ);
-    // }
-
-    // if (flags & UFFD_PAGEFAULT_FLAG_WRITE) {
-    //     /*
-    //      * Accés en écriture sur une page non présente :
-    //      */
-    //     return send_wkr_req(page_index, WRITE_REQ);
-    // }
-
-    // /*
-    //  * Accés a une page non présente en lecture :
-    //  */
-    // return send_wkr_req(page_index, READ_REQ);
-    return 0; // Enlever
+    if (flags & UFFD_PAGEFAULT_FLAG_WRITE || flags & UFFD_PAGEFAULT_FLAG_WP) {
+        /**
+         * Accés en écriture à une page non présente en mémoire :
+         * prévenir le manager de cette écriture, pour recuperer les données de la page
+         * OU
+         * Accès en écriture sur une page présente et protégée en écriture :
+         * prévenir le manager pour qu'il invalide la page chez les autres workers,
+         * puis retirer la protection d'écriture localement.
+         */
+        return send_wkr_req(page_id, WRITE_REQ, fd_sock_mgr);
+    }
+    /*
+     * Accés a une page non présente en lecture :
+     * envoyer une requete au manager qui gere cette page
+     */
+    return send_wkr_req(page_id, READ_REQ, fd_sock_mgr);
 }
 
 void dispatch_call_uffd(void *arg) {
@@ -164,10 +165,44 @@ void dispatch_call_uffd(void *arg) {
 
 static int treat_mgr_inva_req();
 static int treat_mgr_data_req();
-static int treat_mgr_data_ack();
+static int treat_mgr_data_ack(dsm_msg_tcp_thread_ctx *msg_ctx) {
+    dsm_msg_mgr_data_ack payload;
+    if (dsm_dsrlze_mgr_data_ack(msg_ctx->payload, sizeof(msg_ctx->payload), &payload) <
+        0) {
+        LOG_ERROR("dsm_dsrlze_mgr_data_ack");
+        return -1;
+    }
+
+    if (payload.is_empty) {
+        // Ya des données
+        if (pager_copy(dsm_wkr_ctx->uffd, payload.page_id, (__u64)payload.data,
+                       (payload.req_mode == WRITE_REQ) ? 0 : UFFDIO_COPY_MODE_WP) < 0) {
+            return -1;
+        }
+    } else {
+        // pas de données
+        /**
+         * @note possible d'avoir pas de données sur une requete READ ?
+         */
+        void *zero_page =
+            calloc(1, EFFECTIVE_PAGESIZE); // alloue une plage de EFFECTIVE_PAGESIZE
+                                           // contigue initialisée à 0
+        if (pager_copy(dsm_wkr_ctx->uffd, payload.page_id, (__u64)zero_page,
+                       (payload.req_mode == WRITE_REQ) ? 0 : UFFDIO_COPY_MODE_WP) < 0) {
+            return -1;
+        }
+    }
+    return 0;
+}
 static int treat_mgr_lock_ack();
 
 void dispatch_call_wkr(void *arg) {
+    /**
+     * Contient :
+     * fd_sock de qui envoie le message
+     * header
+     * payload
+     */
     dsm_msg_tcp_thread_ctx *msg_ctx = (dsm_msg_tcp_thread_ctx *)arg;
 
     int code = msg_ctx->header.code;
@@ -178,6 +213,10 @@ void dispatch_call_wkr(void *arg) {
 
         case CODE_MGR_DATA_ACK:
             // treat
+            LOG_INFO("Reception par le noeud %d du code CODE_MGR_DATA_ACK et traitement.",
+                     dsm_ctx->node_id);
+            treat_mgr_data_ack(msg_ctx);
+            break;
 
         default:
             LOG_WARNING("Code de message TCP inconnu ou non traitable: %d", code);

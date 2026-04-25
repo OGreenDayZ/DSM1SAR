@@ -165,7 +165,7 @@ typedef struct {
 typedef struct {
     uint32_t page_id;
     uint8_t req_mode;
-    uint8_t is_empty;
+    uint8_t is_empty; // 0 : pas de data, 1 : data
     uint8_t data[];
 } dsm_msg_mgr_data_ack;
 

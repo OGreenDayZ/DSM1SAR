@@ -8,6 +8,7 @@
 
 #include "debug/debug.h"
 #include "internal.h"
+#include "network/worker/worker.h"
 
 static int userfaultfd(int flags) {
     // UFFD_USER_MODE_ONLY -> rattrape que les fautes user et non kernel
@@ -57,8 +58,8 @@ error1:
     return -1;
 }
 
-int pager_writeprotect(int uffd, int page_id, uint64_t range_start) {
-    __u64 page = range_start + page_id * EFFECTIVE_PAGESIZE;
+int pager_writeprotect(int uffd, int page_id) {
+    __u64 page = dsm_wkr_ctx->range_start + page_id * EFFECTIVE_PAGESIZE;
     struct uffdio_writeprotect wp = {.range = {.start = page, .len = EFFECTIVE_PAGESIZE},
                                      .mode = 0};
     if (ioctl(uffd, UFFDIO_WRITEPROTECT, &wp)) {
@@ -68,8 +69,8 @@ int pager_writeprotect(int uffd, int page_id, uint64_t range_start) {
     return 0;
 }
 
-int pager_copy(int uffd, int page_id, __u64 src, int mode, uint64_t range_start) {
-    __u64 dst = range_start + page_id * EFFECTIVE_PAGESIZE;
+int pager_copy(int uffd, int page_id, __u64 src, int mode) {
+    __u64 dst = dsm_wkr_ctx->range_start + page_id * EFFECTIVE_PAGESIZE;
     struct uffdio_copy cp = {
         .dst = dst, .src = src, .len = EFFECTIVE_PAGESIZE, .mode = mode};
     if (ioctl(uffd, UFFDIO_COPY, &cp)) {

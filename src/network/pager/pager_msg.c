@@ -14,13 +14,20 @@
  * la lisibilite
  */
 
-int send_wkr_req(uint32_t page_id, uint8_t mode) {
+int send_wkr_req(uint32_t page_id, uint8_t mode, int fd_sock) {
     LOG_INFO("Envoi du CODE=%d ...", CODE_WKR_REQ);
     uint8_t msg_buf[sizeof(dsm_msg_header)];
     int msg_len = dsm_srlze_wkr_req(page_id, mode, msg_buf, sizeof(msg_buf));
     if (msg_len < 0)
         return -1;
 
+    int sent = dsm_tcp_send_all(fd_sock, msg_buf, msg_len);
+    if (sent < 0) {
+        LOG_ERROR("Erreur d'envoie du message de requete pour la page %d par le noeud %d",
+                  page_id, dsm_ctx->node_id);
+        return -1;
+    }
+    LOG_INFO("Succès de l'envoie du CODE=%d", CODE_WKR_REQ);
     return 0;
 }
 
