@@ -24,10 +24,10 @@ int send_wkr_req(uint32_t page_id, uint8_t mode) {
     return 0;
 }
 
-int send_mgr_inva(uint32_t page_id, uint8_t isSync) {
+int send_mgr_inva(uint32_t page_id, uint8_t is_sync) {
     LOG_INFO("Envoi du CODE=%d ...", CODE_MGR_INVA_REQ);
     uint8_t msg_buf[sizeof(dsm_msg_header)];
-    int msg_len = dsm_srlze_mgr_inva_req(page_id, isSync, msg_buf, sizeof(msg_buf));
+    int msg_len = dsm_srlze_mgr_inva_req(page_id, is_sync, msg_buf, sizeof(msg_buf));
     if (msg_len < 0)
         return -1;
     return 0;

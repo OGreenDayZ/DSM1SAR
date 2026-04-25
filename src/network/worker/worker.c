@@ -226,7 +226,7 @@ void dispatch_call_wkr(void *arg) {
     //     uint8_t *data = (uint8_t *)(RANGE_START + payload.page_id *
     //     EFFECTIVE_PAGESIZE);
 
-    //     if (payload.isInvalidate) {
+    //     if (payload.is_invalidate) {
     //         madvise(data, EFFECTIVE_PAGESIZE, MADV_DONTNEED);
     //         LOG_INFO("Page %u invalidée", payload.page_id);
     //     }

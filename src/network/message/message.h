@@ -138,12 +138,12 @@ typedef struct {
 
 typedef struct {
     uint32_t page_id;
-    uint8_t isSync;
+    uint8_t is_sync;
 } dsm_msg_mgr_inva_req;
 
 typedef struct {
     uint32_t page_id;
-    uint8_t isInvalidate;
+    uint8_t is_invalidate;
 } dsm_msg_mgr_data_req;
 typedef struct {
     uint32_t page_id;
@@ -155,14 +155,14 @@ typedef struct {
 
 typedef struct {
     uint32_t page_id;
-    uint8_t isEmpty; // 0 : pas de data, 1 : data
+    uint8_t is_empty; // 0 : pas de data, 1 : data
     uint8_t data[];
 } dsm_msg_wkr_data_ack;
 
 typedef struct {
     uint32_t page_id;
-    uint8_t req_mod;
-    uint8_t isEmpty;
+    uint8_t req_mode;
+    uint8_t is_empty;
     uint8_t data[];
 } dsm_msg_mgr_data_ack;
 
