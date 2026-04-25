@@ -1,13 +1,10 @@
 #ifndef DSM_MESSAGE_H
 #define DSM_MESSAGE_H
 
+#include <linux/userfaultfd.h>
 #include <netinet/in.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <sys/time.h>
 
 #define DSM_MSG_RECV_TIMEOUT_SEC 5
-#define DSM_MSG_TIMEOUT_POLL 100
 #define DSM_MTU_SIZE 1500
 
 typedef enum {
@@ -27,13 +24,13 @@ typedef enum {
     CODE_DISCOVER_WORKER_CONFIG_ACK,
     CODE_DISCOVER_FINALIZE,
 
-    // PAGER : 
-    CODE_WKR_REQ, 
+    // PAGER :
+    CODE_WKR_REQ,
     CODE_WKR_INVA_ACK, // TODO - majda : structure + seria/deseria
     CODE_WKR_DATA_ACK,
 
     CODE_MGR_INVA_REQ,
-    CODE_MGR_DATA_REQ, 
+    CODE_MGR_DATA_REQ,
     CODE_MGR_DATA_ACK,
     CODE_MGR_LOCK_ACK // TODO - majda : structure + seria/deseria
 } dsm_msg_code;
@@ -135,41 +132,39 @@ typedef struct {
 
 /* PAGER */
 typedef struct {
-    uint32_t page_id; 
+    uint32_t page_id;
     uint8_t mode; // @ref page_mode_req
 } dsm_msg_wkr_req;
 
 typedef struct {
     uint32_t page_id;
-    uint8_t isSync; 
+    uint8_t isSync;
 } dsm_msg_mgr_inva_req;
 
 typedef struct {
     uint32_t page_id;
-    uint8_t isInvalidate; 
+    uint8_t isInvalidate;
 } dsm_msg_mgr_data_req;
 typedef struct {
-    uint32_t page_id; 
-} dsm_msg_wkr_inva_ack; 
+    uint32_t page_id;
+} dsm_msg_wkr_inva_ack;
 
 typedef struct {
     uint32_t page_id;
-} dsm_msg_mgr_lock_ack; 
+} dsm_msg_mgr_lock_ack;
 
 typedef struct {
-    uint32_t page_id; 
-    uint8_t isEmpty;  // 0 : pas de data, 1 : data 
-    uint8_t data[]; 
-} dsm_msg_wkr_data_ack; 
+    uint32_t page_id;
+    uint8_t isEmpty; // 0 : pas de data, 1 : data
+    uint8_t data[];
+} dsm_msg_wkr_data_ack;
 
 typedef struct {
-    uint32_t page_id;  
-    uint8_t req_mod; 
+    uint32_t page_id;
+    uint8_t req_mod;
     uint8_t isEmpty;
-    uint8_t data[]; 
-} dsm_msg_mgr_data_ack; 
-
-
+    uint8_t data[];
+} dsm_msg_mgr_data_ack;
 
 #pragma pack(pop)
 
@@ -177,7 +172,7 @@ typedef struct {
  * @note : struct de transmission au thread
  */
 typedef struct {
-    struct sockaddr_in src_addr;
+    struct sockaddr_in src_addr; // callback UDP
     dsm_msg_header header;
     uint8_t *payload;
 } dsm_msg_udp_thread_ctx;
@@ -186,10 +181,17 @@ typedef struct {
  * @note : struct de transmission au thread
  */
 typedef struct {
-    int sock;
+    int sock; // callback TCP
     dsm_msg_header header;
     uint8_t *payload;
 } dsm_msg_tcp_thread_ctx;
+
+/**
+ * @note : struct de transmission au thread
+ */
+typedef struct {
+    struct uffd_msg fault_msg;
+} dsm_msg_uffd_thread_ctx;
 
 int dsm_tcp_send_all(int sock, const uint8_t *buf, size_t len);
 int dsm_tcp_recv_all(int sock, uint8_t *buf, size_t len, struct timeval *tv);

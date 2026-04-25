@@ -5,7 +5,6 @@
 #include "debug/debug.h"
 #include "internal.h"
 #include "network/message/message.h"
-#include "pager/pager.h"
 
 static int serialize_header(dsm_msg_header *header, uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header)) {

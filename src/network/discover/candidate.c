@@ -2,11 +2,10 @@
 
 #include "debug/debug.h"
 #include "internal.h"
-#include "network/discover/net_discover.h"
-#include "network/message/message.h"
+#include "network/manager/manager.h"
 #include "network/message/serializer.h"
 #include "network/network.h"
-#include <unistd.h>
+#include "network/worker/worker.h"
 
 static dsm_candidate_ctx *cand_ctx;
 
@@ -45,6 +44,7 @@ static void cand_ctx_cleanup() {
     dsm_cand_content *pos;
     unsigned int bkt;
     struct dsm_hlist_node *tmp;
+    dsm_node_role my_role = dsm_ctx->config.net.node.role;
 
     dsm_hash_safe_for_each_safe(&cand_ctx->cand_reg, bkt, tmp, pos, node) {
         dsm_node_content *node_content = malloc(sizeof(dsm_node_content));
@@ -53,6 +53,13 @@ static void cand_ctx_cleanup() {
             node_content->tcp_sock = pos->tcp_sock;
             dsm_init_hlist_node(&node_content->node);
             dsm_hash_safe_add(&dsm_ctx->nodes_reg, &node_content->node, node_content->id);
+
+            if (my_role == DSM_ROLE_WORKER) {
+                // Liaison
+                dsm_mgr_to_node_content *shortcut = pos->set_shortcut_mgr;
+                shortcut->to_node_content = node_content;
+            }
+
         } else {
             LOG_ERROR("malloc : node_content");
         }
@@ -229,8 +236,20 @@ static int connect_to_managers(const dsm_msg_dscv_share_reg *share) {
             return -1;
         }
 
+        dsm_mgr_to_node_content *convert_node_content =
+            malloc(sizeof(dsm_mgr_to_node_content));
+        if (!convert_node_content) {
+            LOG_ERROR("Erreur malloc : convert_node_content");
+            free(node_content);
+            return -1;
+        }
+
         node_content->id = reg_node->id;
         node_content->ip = reg_node->ip;
+        node_content->set_shortcut_mgr = convert_node_content;
+
+        convert_node_content->manager_id = i;
+        convert_node_content->node_id = reg_node->id;
 
         if (reg_node->id == 0) {
             cand_ctx->supervisor_role = DSM_ROLE_MANAGER;
@@ -265,6 +284,10 @@ static int connect_to_managers(const dsm_msg_dscv_share_reg *share) {
 
         dsm_init_hlist_node(&node_content->node);
         dsm_hash_safe_add(&cand_ctx->cand_reg, &node_content->node, node_content->id);
+
+        dsm_init_hlist_node(&convert_node_content->node);
+        dsm_hash_safe_add(&dsm_wkr_ctx->managerID_to_nodeID, &convert_node_content->node,
+                          convert_node_content->manager_id);
     }
     return 0;
 }
@@ -315,7 +338,7 @@ static int recv_dscv_share_reg() {
         if (header.code == CODE_DISCOVER_SHARE_REGISTRY_MANAGER) {
             LOG_INFO("Rôle assigné : MANAGER");
             dsm_ctx->config.net.system.nb_managers = share->nb_nodes;
-            if (prepare_nodes_reg(share) < 0) {
+            if (dsm_mgr_ctx_init() || prepare_nodes_reg(share) < 0) {
                 free(share);
                 return -1;
             }
@@ -324,7 +347,7 @@ static int recv_dscv_share_reg() {
             LOG_INFO("Rôle assigné : WORKER");
             dsm_ctx->config.net.system.nb_managers =
                 share->sys_total_nodes - share->nb_nodes;
-            if (connect_to_managers(share) < 0) {
+            if (dsm_wkr_ctx_init() || connect_to_managers(share) < 0) {
                 free(share);
                 return -1;
             }

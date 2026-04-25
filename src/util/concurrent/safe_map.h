@@ -105,12 +105,6 @@ static inline void dsm_safe_map_destroy(dsm_safe_map *m) {
  * aucune entrée n'est trouvée
  * @warning Ne pas faire de break ou return qui échappe au end
  *
- * @example
- *   struct item *obj;
- *   dsm_hash_safe_get(&map, obj, node, key) {
- *       if (obj->val == target) { found = obj; break; }
- *   }
- *   dsm_hash_safe_get_end(&map, key);
  */
 
 /* Voir dsm_hash_safe_get et dsm_hash_safe_get_end comme 2 parties à coller */

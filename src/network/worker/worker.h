@@ -1,0 +1,76 @@
+#ifndef DSM_WORKER_H
+#define DSM_WORKER_H
+
+#include <stdatomic.h>
+#include <stdint.h>
+
+#include "internal.h"
+#include "util/concurrent/safe_map.h"
+
+#define DSM_WKR_NODE_HASH_BITS 4
+#define DSM_WKR_PAGE_HASH_BITS 12
+
+typedef struct {
+
+    unsigned int manager_id;           // key : id local (connu des workers)
+    unsigned int node_id;              // value : id global réel
+    dsm_node_content *to_node_content; // raccourci vers la struct de noeud
+    struct dsm_hlist_node node;
+
+} dsm_mgr_to_node_content; // Pour managerID_to_nodeID
+
+typedef struct {
+
+    unsigned int page_id;
+
+    unsigned int target_count;
+    unsigned int manager_id; // responsable de la barrière
+
+    unsigned int curr_count; // compteur threads arrivés à la barrière
+
+    pthread_cond_t cond;
+
+    struct dsm_hlist_node node;
+} dsm_barrier_content; // Pour barrier_reg
+
+typedef struct {
+
+    unsigned int target_count;
+    pthread_mutex_t targ_c_mutex;
+
+    atomic_uint finalize_count; // compteur threads arrivés à la finalisation
+    pthread_cond_t finalize_cond;
+
+} dsm_sync_finalize;
+
+typedef struct {
+
+    /**
+     * Descripteur userfaultfd du worker courant.
+     * Initialisé par @ref userfaultfd_init, utilisé dans toute la boucle worker.
+     */
+    int uffd;
+    uint64_t range_start;
+
+    // map des managers : manager_id -> node_id
+    dsm_safe_map managerID_to_nodeID;
+
+    // TODO LOCK REG (++) ? ou fusion avec barrier_reg (-- en multithread user) ?
+    dsm_safe_map barrier_reg;
+    dsm_sync_finalize sync_finalize;
+
+} dsm_worker_ctx;
+
+extern dsm_worker_ctx *dsm_wkr_ctx;
+
+int dsm_wkr_ctx_init();
+void dsm_wkr_ctx_cleanup();
+
+long addr_to_page_id(uint64_t addr);
+int get_mgr_node_id_for_page(unsigned long page_id);
+int get_mgr_node_socket_for_page(unsigned long page_id);
+
+void dispatch_call_uffd(void *arg);
+void dispatch_call_wkr(void *arg);
+
+#endif // DSM_WORKER_H

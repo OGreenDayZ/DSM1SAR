@@ -1,16 +1,12 @@
 #include "supervisor.h"
 
 #include <poll.h>
-#include <stdatomic.h>
-#include <stddef.h>
-#include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 #include "debug/debug.h"
-#include "dsm.h"
 #include "internal.h"
 #include "network/discover/spvs_factory.h"
+#include "network/manager/manager.h"
 #include "network/message/serializer.h"
 #include "network/network.h"
 #include "util/atomicity.h"
@@ -116,6 +112,12 @@ static void spvs_ctx_cleanup(dsm_discover_ctx *dscv_ctx) {
                 dsm_init_hlist_node(&node_content->node);
                 dsm_hash_safe_add(&dsm_ctx->nodes_reg, &node_content->node,
                                   node_content->id);
+
+                if (my_role == DSM_ROLE_WORKER) {
+                    // Liaison
+                    dsm_mgr_to_node_content *shortcut = pos->set_shortcut_mgr;
+                    shortcut->to_node_content = node_content;
+                }
             } else {
                 LOG_ERROR("malloc : node_content");
             }
@@ -226,12 +228,21 @@ static int role_assignement() {
         nb_convert_w = needed_w;
     }
 
-    role_check(&dsm_ctx->config.net.node.role, &nb_assign_m, &nb_assign_w, &nb_convert_m,
-               &nb_convert_w);
-    LOG_INFO("Rôle du superviseur : %s",
-             dsm_ctx->config.net.node.role == DSM_ROLE_MANAGER  ? "MANAGER"
-             : dsm_ctx->config.net.node.role == DSM_ROLE_WORKER ? "WORKER"
-                                                                : "UNDEFINED");
+    dsm_node_role *my_role = &dsm_ctx->config.net.node.role;
+    role_check(my_role, &nb_assign_m, &nb_assign_w, &nb_convert_m, &nb_convert_w);
+    LOG_INFO("Rôle du superviseur : %s", *my_role == DSM_ROLE_MANAGER  ? "MANAGER"
+                                         : *my_role == DSM_ROLE_WORKER ? "WORKER"
+                                                                       : "UNDEFINED");
+
+    if (*my_role == DSM_ROLE_MANAGER) {
+        if (dsm_mgr_ctx_init() < 0) {
+            return -1;
+        }
+    } else if (*my_role == DSM_ROLE_WORKER) {
+        if (dsm_wkr_ctx_init() < 0) {
+            return -1;
+        }
+    }
 
     unsigned int bkt;
     dsm_supervising_node *pos;
@@ -294,7 +305,10 @@ static void dispatch_call_tcp(void *arg) {
             break;
 
         case CODE_DISCOVER_MANAGER_READY:
-            if (atomic_load(&spvs_ctx->state) != DSM_SPVS_STATE_MGR_WAITING ||
+            if (/**
+                 * atomic_load compare désactivé à cause du race
+                 */
+                // atomic_load(&spvs_ctx->state) != DSM_SPVS_STATE_MGR_WAITING ||
                 treat_dscv_mgr_ready(spvs_ctx) < 0) {
                 LOG_WARNING("Message non traité : CODE=%d", CODE_DISCOVER_MANAGER_READY);
             }
@@ -632,9 +646,13 @@ static int update_spvs_state(dsm_discover_ctx *dscv_ctx) {
         case DSM_SPVS_STATE_WKR_CONFIGURING:
             expected = dsm_ctx->config.net.system.nb_nodes -
                        dsm_ctx->config.net.system.nb_managers - (is_manager ? 0 : 1);
+
+            // print debug
+            LOG_INFO("Attendu %u workers configurés, actuellement %u", expected,
+                     atomic_load(&spvs_ctx->wkr_config_count));
             if (atomic_load(&spvs_ctx->wkr_config_count) == expected) {
                 atomic_store(&spvs_ctx->state, DSM_SPVS_STATE_FINALIZING);
-                // send finalize dans fin de boucle de dsm_supervising_start
+                // -> send finalize dans fin de boucle de dsm_supervising_start
             }
             return 0;
 
@@ -686,10 +704,11 @@ int dsm_supervising_start(dsm_discover_ctx *dscv_ctx) {
 
         int ret = poll(fds, max_fds, DSM_SPVS_POLL_TIMEOUT_MS);
         if (ret < 0) {
+            LOG_ERROR("poll");
             ret = -1;
             goto exit;
 
-        } else if (ret == 0) { // timeout
+        } else if (ret == 0) { /* timeout */
             continue;
         }
 

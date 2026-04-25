@@ -5,12 +5,13 @@
 
 #include "dsm.h"
 #include "network/discover/net_discover.h"
+#include "network/worker/worker.h"
 #include "util/concurrent/safe_list.h"
 #include "util/concurrent/safe_map.h"
 #include "util/thread_pool.h"
 
 #define DSM_SPVS_POLL_FDS_SERVER 2
-#define DSM_SPVS_POLL_TIMEOUT_MS 1500
+#define DSM_SPVS_POLL_TIMEOUT_MS 500
 
 #define DSM_SPVS_HASH_BITS 4
 
@@ -56,6 +57,12 @@ typedef struct {
     uint16_t manager_port;
     dsm_node_role role;
 
+    /**
+     * Stocké lors du make_share_reg
+     * Utilisé lors du transfert de sockets : spvs_ctx_cleanup
+     * @note : Simplifie le transfert
+     */
+    dsm_mgr_to_node_content *set_shortcut_mgr;
     struct dsm_hlist_node node;
 } dsm_supervising_node; // Dans spvs_reg
 

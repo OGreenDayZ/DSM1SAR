@@ -1,13 +1,10 @@
 #include "dsm.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-
 #include "debug/debug.h"
 #include "internal.h"
 #include "network/network.h"
+#include "network/worker/worker.h"
 #include "pager/pager.h"
-#include "util/concurrent/safe_map.h"
 #include "util/thread_pool.h"
 
 dsm_context *dsm_ctx = NULL;
@@ -92,26 +89,7 @@ static int dsm_ctx_init(const dsm_config *config) {
 
     dsm_ctx->node_id = 0;
 
-    if (config->net.node.role == DSM_ROLE_MANAGER) {
-        if (dsm_safe_map_init(&dsm_ctx->node_ctx.manager_ctx.pages_reg,
-                              DSM_NODE_HASH_BITS) != 0) {
-            LOG_ERROR("Erreur dsm_safe_map_init : manager_ctx.pages_reg");
-            free(dsm_ctx);
-            dsm_ctx = NULL;
-            return DSM_ERROR_CONTEXT_ALLOC;
-        }
-    } else if (config->net.node.role == DSM_ROLE_WORKER) {
-        if (dsm_safe_map_init(&dsm_ctx->node_ctx.worker_ctx.managerID_to_nodeID,
-                              DSM_PAGE_HASH_BITS) != 0) {
-            LOG_ERROR("Erreur dsm_safe_map_init : worker_ctx.managerID_to_nodeID");
-            dsm_safe_map_destroy(&dsm_ctx->nodes_reg);
-            free(dsm_ctx);
-            dsm_ctx = NULL;
-            return DSM_ERROR_CONTEXT_ALLOC;
-        }
-    }
-
-    if (dsm_safe_map_init(&dsm_ctx->nodes_reg, DSM_PAGE_HASH_BITS) != 0) {
+    if (dsm_safe_map_init(&dsm_ctx->nodes_reg, DSM_NODE_HASH_BITS) != 0) {
         LOG_ERROR("Erreur dsm_safe_map_init : nodes_reg");
         dsm_safe_map_destroy(&dsm_ctx->nodes_reg);
         free(dsm_ctx);
@@ -132,10 +110,6 @@ static void dsm_ctx_cleanup() {
     }
 
     dsm_safe_map_destroy(&dsm_ctx->nodes_reg);
-    if (dsm_ctx->config.net.node.role == DSM_ROLE_MANAGER)
-        dsm_safe_map_destroy(&dsm_ctx->node_ctx.manager_ctx.pages_reg);
-    else if (dsm_ctx->config.net.node.role == DSM_ROLE_WORKER)
-        dsm_safe_map_destroy(&dsm_ctx->node_ctx.worker_ctx.managerID_to_nodeID);
 
     free(dsm_ctx);
     dsm_ctx = NULL;
@@ -152,6 +126,17 @@ static void print_nodes_reg() {
     }
 }
 
+static void print_convert_reg() {
+    dsm_mgr_to_node_content *pos;
+    unsigned int bkt;
+    struct dsm_hlist_node *tmp;
+
+    LOG_INFO("Mon Registre de liaison ManagerID -> NodeID :");
+    dsm_hash_safe_for_each_safe(&dsm_wkr_ctx->managerID_to_nodeID, bkt, tmp, pos, node) {
+        LOG_INFO("ManagerID=%u -> NodeID=%u", pos->manager_id, pos->to_node_content->id);
+    }
+}
+
 int dsm_init(const dsm_config *config) {
     LOG_INFO("Initialisation de DSM1SAR...");
     int ret = dsm_ctx_init(config);
@@ -161,6 +146,9 @@ int dsm_init(const dsm_config *config) {
 
     ret = dsm_network_init();
     print_nodes_reg();
+    if (dsm_ctx->config.net.node.role == DSM_ROLE_WORKER) {
+        print_convert_reg();
+    }
     dsm_ctx_cleanup(); // TODO A ENLEVER SI VRAI TEST DEMON !!!!!!
     // TODO SPLIT THREAD AVANT RETURN
     // thread_pool = pool_create(DSM_DEFAULT_NB_THREADS,

@@ -1,16 +1,12 @@
 #include "net_discover.h"
 
-#include <stdint.h>
-#include <stdlib.h>
-#include <time.h>
-#include <unistd.h>
-
 #include "debug/debug.h"
 #include "internal.h"
 #include "network/discover/candidate.h"
 #include "network/discover/supervisor.h"
 #include "network/message/serializer.h"
 #include "network/network.h"
+#include <sys/time.h>
 
 static dsm_discover_ctx *dscv_ctx;
 

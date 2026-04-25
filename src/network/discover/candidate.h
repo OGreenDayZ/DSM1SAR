@@ -2,7 +2,9 @@
 #define DSM_CANDIDATE_H
 
 #include "dsm.h"
+
 #include "network/discover/net_discover.h"
+#include "network/worker/worker.h"
 #include "util/concurrent/safe_map.h"
 
 #define DSM_CAND_HASH_BITS 4
@@ -11,6 +13,12 @@ typedef struct {
     unsigned int id;
     int tcp_sock;
     uint32_t ip;
+    /**
+     * Stocké lors du connect_to_managers
+     * Utilisé lors du transfert de sockets : cand_ctx_cleanup
+     * @note : Simplifie le transfert
+     */
+    dsm_mgr_to_node_content *set_shortcut_mgr;
     struct dsm_hlist_node node;
 } dsm_cand_content; // Dans cand_reg
 

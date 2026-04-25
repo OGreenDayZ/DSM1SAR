@@ -1,11 +1,11 @@
 #include "spvs_factory.h"
 
-#include <unistd.h>
-
 #include "debug/debug.h"
+#include "dsm.h"
 #include "internal.h"
 #include "network/message/serializer.h"
 #include "network/network.h"
+#include "network/worker/worker.h"
 
 static int send_dscv_spvs_data(uint32_t ip_dst, uint16_t port_dst) {
     LOG_INFO("Envoi d'un CODE=%d ...", CODE_DISCOVER_SUPERVISOR_DATA);
@@ -136,10 +136,13 @@ static int make_share_reg(dsm_supervisor_ctx *spvs_ctx, dsm_discover_ctx *dscv_c
     share->sys_total_nodes = dsm_ctx->config.net.system.nb_nodes;
     share->nb_nodes = share_nb;
     size_t index = 0;
-    if (dsm_ctx->config.net.node.role == shared_role) {
+    dsm_node_role *my_role = &dsm_ctx->config.net.node.role;
+    if (*my_role == shared_role) {
         share->nodes[index].id = 0;
         share->nodes[index].ip = dscv_ctx->my_ip;
         share->nodes[index].manager_port = 0; // inutile pour le superviseur
+        /**  Pas de liaison ici, car impossible d'avoir
+         * (my_role == DSM_ROLE_WORKER && shared_role == DSM_ROLE_MANAGER) */
         index++;
     }
 
@@ -156,6 +159,25 @@ static int make_share_reg(dsm_supervisor_ctx *spvs_ctx, dsm_discover_ctx *dscv_c
             share->nodes[index].ip = pos->ip;
             if (shared_role == DSM_ROLE_MANAGER) {
                 share->nodes[index].manager_port = pos->manager_port;
+                if (*my_role == DSM_ROLE_WORKER) {
+                    dsm_mgr_to_node_content *convert_node_content =
+                        malloc(sizeof(dsm_mgr_to_node_content));
+                    if (!convert_node_content) {
+                        LOG_ERROR("Erreur malloc : convert_node_content");
+                        return -1;
+                    }
+                    convert_node_content->manager_id = index;
+                    convert_node_content->node_id = pos->id;
+                    convert_node_content->to_node_content =
+                        NULL; // sera set dans spvs_ctx_cleanup
+
+                    pos->set_shortcut_mgr = convert_node_content;
+
+                    dsm_init_hlist_node(&convert_node_content->node);
+                    dsm_hash_safe_add(&dsm_wkr_ctx->managerID_to_nodeID,
+                                      &convert_node_content->node,
+                                      convert_node_content->manager_id);
+                }
 
             } else {
                 share->nodes[index].manager_port = 0; // inutile pour les workers
