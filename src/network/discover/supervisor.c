@@ -9,7 +9,7 @@
 #include "network/manager/manager.h"
 #include "network/message/serializer.h"
 #include "network/network.h"
-#include "util/atomicity.h"
+#include "util/concurrent/atomicity.h"
 
 static dsm_supervisor_ctx *spvs_ctx;
 
