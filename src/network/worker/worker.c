@@ -238,11 +238,11 @@ static int treat_mgr_data_req(dsm_msg_tcp_thread_ctx *msg_ctx) {
  * @param msg_ctx
  * @return int
  */
-static int treat_mgr_data_ack(dsm_msg_tcp_thread_ctx *msg_ctx) {
-    dsm_msg_mgr_data_ack payload;
-    if (dsm_dsrlze_mgr_data_ack(msg_ctx->payload, sizeof(msg_ctx->payload), &payload) <
+static int treat_mgr_req_ack(dsm_msg_tcp_thread_ctx *msg_ctx) {
+    dsm_msg_mgr_req_ack payload;
+    if (dsm_dsrlze_mgr_req_ack(msg_ctx->payload, sizeof(msg_ctx->payload), &payload) <
         0) {
-        LOG_ERROR("dsm_dsrlze_mgr_data_ack");
+        LOG_ERROR("dsm_dsrlze_mgr_req_ack");
         return -1;
     }
 
@@ -267,7 +267,6 @@ static int treat_mgr_data_ack(dsm_msg_tcp_thread_ctx *msg_ctx) {
     }
     return 0;
 }
-static int treat_mgr_lock_ack();
 
 void dispatch_call_wkr(void *arg) {
     /**
@@ -284,11 +283,11 @@ void dispatch_call_wkr(void *arg) {
         case CODE_WKR_REQ:
             // treat
 
-        case CODE_MGR_DATA_ACK:
+        case CODE_MGR_REQ_ACK:
             // treat
-            LOG_INFO("Reception par le noeud %d du code CODE_MGR_DATA_ACK et traitement.",
+            LOG_INFO("Reception par le noeud %d du code CODE_MGR_REQ_ACK et traitement.",
                      dsm_ctx->node_id);
-            treat_mgr_data_ack(msg_ctx);
+            treat_mgr_req_ack(msg_ctx);
             break;
         case CODE_MGR_INVA_REQ:
             LOG_INFO("Reception par le noeud %d du code CODE_MGR_INVA_REQ et traitement.",

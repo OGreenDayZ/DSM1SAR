@@ -32,8 +32,7 @@ typedef enum {
 
     CODE_MGR_INVA_REQ,
     CODE_MGR_DATA_REQ,
-    CODE_MGR_DATA_ACK,
-    CODE_MGR_LOCK_ACK
+    CODE_MGR_REQ_ACK
 } dsm_msg_code;
 
 /** Lexique
@@ -150,11 +149,6 @@ typedef struct {
     uint32_t page_id;
 } dsm_msg_wkr_inva_ack;
 
-typedef struct {
-    uint32_t page_id;
-    uint8_t is_empty; // 0 : pas de data, 1 : data
-    uint8_t data[]; // si is_empty == 0, pas de data
-} dsm_msg_mgr_lock_ack;
 
 typedef struct {
     uint32_t page_id;
@@ -167,7 +161,7 @@ typedef struct {
     uint8_t req_mode;
     uint8_t is_empty; // 0 : pas de data, 1 : data
     uint8_t data[];
-} dsm_msg_mgr_data_ack;
+} dsm_msg_mgr_req_ack;
 
 #pragma pack(pop)
 

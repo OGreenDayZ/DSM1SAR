@@ -412,18 +412,18 @@ int dsm_srlze_wkr_data_ack(uint32_t page_id, uint8_t *data, uint8_t *buf, size_t
     return offset + EFFECTIVE_PAGESIZE;
 }
 
-int dsm_srlze_mgr_data_ack(uint32_t page_id, uint8_t req_mode, uint8_t is_empty,
-                           uint8_t *data, uint8_t *buf, size_t buf_sz) {
+int dsm_srlze_mgr_req_ack(uint32_t page_id, uint8_t req_mode, uint8_t is_empty,
+                          uint8_t *data, uint8_t *buf, size_t buf_sz) {
 
     size_t data_len = (is_empty ? 0 : EFFECTIVE_PAGESIZE);
-    if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_mgr_data_ack) + data_len) {
+    if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_mgr_req_ack) + data_len) {
         return -1;
     }
 
-    dsm_msg_header header = {.code = CODE_MGR_DATA_ACK,
+    dsm_msg_header header = {.code = CODE_mgr_req_ack,
                              .id = dsm_ctx->node_id,
-                             .payload_len = sizeof(dsm_msg_mgr_data_ack) + data_len};
-    dsm_msg_mgr_data_ack payload = {
+                             .payload_len = sizeof(dsm_msg_mgr_req_ack) + data_len};
+    dsm_msg_mgr_req_ack payload = {
         .page_id = htonl(page_id), .is_empty = is_empty, .req_mode = req_mode};
     int offset = serialize_header(&header, buf, buf_sz);
     if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header))
@@ -436,26 +436,6 @@ int dsm_srlze_mgr_data_ack(uint32_t page_id, uint8_t req_mode, uint8_t is_empty,
     return offset + data_len;
 }
 
-int dsm_srlze_mgr_lock_ack(uint32_t page_id, uint8_t is_empty, uint8_t *data,
-                           uint8_t *buf, size_t buf_sz) {
-    size_t data_len = (is_empty ? 0 : EFFECTIVE_PAGESIZE);
-    if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_mgr_lock_ack) + data_len) {
-        return -1;
-    }
-    dsm_msg_header header = {.code = CODE_MGR_LOCK_ACK,
-                             .id = dsm_ctx->node_id,
-                             .payload_len = sizeof(dsm_msg_mgr_lock_ack) + data_len};
-    dsm_msg_mgr_lock_ack payload = {.page_id = htonl(page_id), .is_empty = is_empty};
-    int offset = serialize_header(&header, buf, buf_sz);
-    if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header))
-        return -1;
-    memcpy(buf + offset, &payload, sizeof(payload));
-    offset += sizeof(payload);
-    if (data_len > 0) {
-        memcpy(buf + offset, data, data_len);
-    }
-    return offset + data_len;
-}
 // FIN PAGER SERIA
 
 int dsm_dsrlze_header(uint8_t *buf, size_t buf_sz, dsm_msg_header *header) {
@@ -705,44 +685,23 @@ int dsm_dsrlze_wkr_data_ack(uint8_t *buf, size_t buf_sz, dsm_msg_wkr_data_ack *m
 }
 
 /**
- * @warning : allouer sizeof(dsm_msg_mgr_data_ack) + EFFECTIVE_PAGESIZE pour msg
+ * @warning : allouer sizeof(dsm_msg_mgr_req_ack) + EFFECTIVE_PAGESIZE pour msg
  * // TODO - majda : voir si on peut pas faire autrement
  */
-int dsm_dsrlze_mgr_data_ack(uint8_t *buf, size_t buf_sz, dsm_msg_mgr_data_ack *msg) {
-    if (buf_sz < sizeof(dsm_msg_mgr_data_ack))
+int dsm_dsrlze_mgr_req_ack(uint8_t *buf, size_t buf_sz, dsm_msg_mgr_req_ack *msg) {
+    if (buf_sz < sizeof(dsm_msg_mgr_req_ack))
         return -1;
-    dsm_msg_mgr_data_ack net_msg;
+    dsm_msg_mgr_req_ack net_msg;
     memcpy(&net_msg, buf, sizeof(net_msg));
     msg->page_id = ntohl(net_msg.page_id);
     msg->req_mode = net_msg.req_mode;
     msg->is_empty = net_msg.is_empty;
 
     if (!msg->is_empty) {
-        if (buf_sz < sizeof(dsm_msg_mgr_data_ack) + EFFECTIVE_PAGESIZE)
+        if (buf_sz < sizeof(dsm_msg_mgr_req_ack) + EFFECTIVE_PAGESIZE)
             return -1;
-        memcpy(msg->data, buf + sizeof(dsm_msg_mgr_data_ack), EFFECTIVE_PAGESIZE);
+        memcpy(msg->data, buf + sizeof(dsm_msg_mgr_req_ack), EFFECTIVE_PAGESIZE);
     }
 
-    return sizeof(dsm_msg_mgr_data_ack) + (msg->is_empty ? 0 : EFFECTIVE_PAGESIZE);
-}
-
-/**
- * @warning : allouer sizeof(dsm_msg_mgr_data_ack) + EFFECTIVE_PAGESIZE pour msg
- * // TODO - majda : voir si on peut pas faire autrement
- */
-int dsm_dsrlze_mgr_lock_ack(uint8_t *buf, size_t buf_sz, dsm_msg_mgr_lock_ack *msg) {
-    if (buf_sz < sizeof(dsm_msg_mgr_lock_ack))
-        return -1;
-    dsm_msg_mgr_lock_ack net_msg;
-    memcpy(&net_msg, buf, sizeof(net_msg));
-    msg->page_id = ntohl(net_msg.page_id);
-    msg->is_empty = net_msg.is_empty;
-
-    if (!msg->is_empty) {
-        if (buf_sz < sizeof(dsm_msg_mgr_lock_ack) + EFFECTIVE_PAGESIZE)
-            return -1;
-        memcpy(msg->data, buf + sizeof(dsm_msg_mgr_lock_ack), EFFECTIVE_PAGESIZE);
-    }
-
-    return sizeof(dsm_msg_mgr_lock_ack) + (msg->is_empty ? 0 : EFFECTIVE_PAGESIZE);
+    return sizeof(dsm_msg_mgr_req_ack) + (msg->is_empty ? 0 : EFFECTIVE_PAGESIZE);
 }
