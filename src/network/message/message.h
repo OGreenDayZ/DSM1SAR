@@ -27,13 +27,13 @@ typedef enum {
 
     // PAGER :
     CODE_WKR_REQ,
-    CODE_WKR_INVA_ACK, // TODO - majda : structure + seria/deseria
+    CODE_WKR_INVA_ACK,
     CODE_WKR_DATA_ACK,
 
     CODE_MGR_INVA_REQ,
     CODE_MGR_DATA_REQ,
     CODE_MGR_DATA_ACK,
-    CODE_MGR_LOCK_ACK // TODO - majda : structure + seria/deseria
+    CODE_MGR_LOCK_ACK
 } dsm_msg_code;
 
 /** Lexique
@@ -158,7 +158,7 @@ typedef struct {
 
 typedef struct {
     uint32_t page_id;
-    uint8_t is_empty; // 0 : pas de data, 1 : data
+    // Pas de champs is_empty, car si on lui demande des données alors il est le propriétaire 
     uint8_t data[];
 } dsm_msg_wkr_data_ack;
 

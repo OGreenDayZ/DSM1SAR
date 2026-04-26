@@ -51,6 +51,7 @@ typedef struct {
      */
     int uffd;
     uint64_t range_start;
+    int local_cursor;
 
     // map des managers : manager_id -> node_id
     dsm_safe_map managerID_to_nodeID;
@@ -74,6 +75,7 @@ void dsm_wkr_ctx_cleanup();
  */
 long addr_to_page_id(uint64_t addr);
 
+long page_id_to_addr(long page_id); 
 /**
  * @brief Recupere le node_id du manager qui gere page_id
  * 

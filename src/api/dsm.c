@@ -2,6 +2,7 @@
 
 #include "debug/debug.h"
 #include "internal.h"
+#include "network/daemon.h"
 #include "network/network.h"
 #include "network/worker/worker.h"
 #include "pager/pager.h"
@@ -148,10 +149,49 @@ int dsm_init(const dsm_config *config) {
     print_nodes_reg();
     if (dsm_ctx->config.net.node.role == DSM_ROLE_WORKER) {
         print_convert_reg();
+        dsm_wkr_ctx_init();
+    } else {
+        print_nodes_reg();
     }
-    dsm_ctx_cleanup(); // TODO A ENLEVER SI VRAI TEST DEMON !!!!!!
+    pthread_t daemon;
+    if (pthread_create(&daemon, NULL, (void *(*)(void *))dsm_daemon_start, NULL) != 0) {
+        LOG_ERROR("Erreur pthread_create : daemon");
+        dsm_ctx_cleanup();
+        return -1;
+    }
+
+    // dsm_ctx_cleanup(); // TODO A ENLEVER SI VRAI TEST DEMON !!!!!!
     // TODO SPLIT THREAD AVANT RETURN
     // thread_pool = pool_create(DSM_DEFAULT_NB_THREADS,
     //   DSM_DEFAULT_QUEUE_SIZE); // TODO : paramètre a revoir
     return ret;
+}
+
+/**
+ * @note si le code user est multi-thread...
+ *
+ * @param len
+ * @return int
+ */
+void *dsm_alloc(size_t len) {
+    if (!dsm_wkr_ctx || dsm_wkr_ctx->range_start == 0) {
+        LOG_ERROR("Worker context non initialisé");
+        return NULL;
+    }
+
+    // Calcul de l'adresse de retour
+    uintptr_t debut = (uintptr_t)dsm_wkr_ctx->range_start + dsm_wkr_ctx->local_cursor;
+
+    LOG_INFO("Allocation de %lu octets à l'adresse %p", len, (void *)debut);
+
+    dsm_wkr_ctx->local_cursor += len;
+    return (void *)debut;
+}
+
+int dsm_get_node_id() {
+    return dsm_ctx->node_id;
+}
+
+int dsm_get_role() {
+    return dsm_ctx->config.net.node.role;
 }

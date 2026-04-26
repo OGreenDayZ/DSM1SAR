@@ -30,8 +30,7 @@ int dsm_srlze_wkr_req(uint32_t page_id, uint8_t mode, uint8_t *buf, size_t buf_s
 int dsm_srlze_mgr_inva_req(uint32_t page_id, uint8_t is_sync, uint8_t *buf, size_t buf_sz);
 int dsm_srlze_mgr_data_req(uint32_t page_id, uint8_t is_invalidate, uint8_t *buf, size_t buf_sz);
 int dsm_srlze_wkr_inva_ack(uint32_t page_id, uint8_t *buf, size_t buf_sz);
-int dsm_srlze_wkr_data_ack(uint32_t page_id, uint8_t is_empty, uint8_t *data, uint8_t *buf,
-                           size_t buf_sz);
+int dsm_srlze_wkr_data_ack(uint32_t page_id, uint8_t *data, uint8_t *buf, size_t buf_sz);
 int dsm_srlze_mgr_data_ack(uint32_t page_id,uint8_t req_mode, uint8_t is_empty, uint8_t* data, 
                             uint8_t* buf, size_t buf_sz) ;
 int dsm_srlze_mgr_lock_ack(uint32_t page_id,uint8_t is_empty, uint8_t* data ,uint8_t* buf, size_t buf_sz); 

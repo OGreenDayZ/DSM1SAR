@@ -392,26 +392,24 @@ int dsm_srlze_wkr_inva_ack(uint32_t page_id, uint8_t *buf, size_t buf_sz) {
     return offset + sizeof(payload);
 }
 
-int dsm_srlze_wkr_data_ack(uint32_t page_id, uint8_t is_empty, uint8_t *data,
-                           uint8_t *buf, size_t buf_sz) {
-    size_t data_len = (is_empty ? 0 : EFFECTIVE_PAGESIZE);
-    if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_wkr_data_ack) + data_len) {
+int dsm_srlze_wkr_data_ack(uint32_t page_id, uint8_t *data, uint8_t *buf, size_t buf_sz) {
+    if (buf_sz <
+        sizeof(dsm_msg_header) + sizeof(dsm_msg_wkr_data_ack) + EFFECTIVE_PAGESIZE) {
         return -1;
     }
 
     dsm_msg_header header = {.code = CODE_WKR_DATA_ACK,
                              .id = dsm_ctx->node_id,
-                             .payload_len = sizeof(dsm_msg_wkr_data_ack) + data_len};
-    dsm_msg_wkr_data_ack payload = {.page_id = htonl(page_id), .is_empty = is_empty};
+                             .payload_len =
+                                 sizeof(dsm_msg_wkr_data_ack) + EFFECTIVE_PAGESIZE};
+    dsm_msg_wkr_data_ack payload = {.page_id = htonl(page_id)};
     int offset = serialize_header(&header, buf, buf_sz);
     if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header))
         return -1;
     memcpy(buf + offset, &payload, sizeof(payload));
     offset += sizeof(payload);
-    if (data_len > 0) {
-        memcpy(buf + offset, data, data_len);
-    }
-    return offset + data_len;
+    memcpy(buf + offset, data, EFFECTIVE_PAGESIZE);
+    return offset + EFFECTIVE_PAGESIZE;
 }
 
 int dsm_srlze_mgr_data_ack(uint32_t page_id, uint8_t req_mode, uint8_t is_empty,
@@ -698,15 +696,12 @@ int dsm_dsrlze_wkr_data_ack(uint8_t *buf, size_t buf_sz, dsm_msg_wkr_data_ack *m
     dsm_msg_wkr_data_ack net_msg;
     memcpy(&net_msg, buf, sizeof(net_msg));
     msg->page_id = ntohl(net_msg.page_id);
-    msg->is_empty = net_msg.is_empty;
 
-    if (!msg->is_empty) {
-        if (buf_sz < sizeof(dsm_msg_wkr_data_ack) + EFFECTIVE_PAGESIZE)
-            return -1;
-        memcpy(msg->data, buf + sizeof(dsm_msg_wkr_data_ack), EFFECTIVE_PAGESIZE);
-    }
+    if (buf_sz < sizeof(dsm_msg_wkr_data_ack) + EFFECTIVE_PAGESIZE)
+        return -1;
+    memcpy(msg->data, buf + sizeof(dsm_msg_wkr_data_ack), EFFECTIVE_PAGESIZE);
 
-    return sizeof(dsm_msg_wkr_data_ack) + (msg->is_empty ? 0 : EFFECTIVE_PAGESIZE);
+    return sizeof(dsm_msg_wkr_data_ack) + EFFECTIVE_PAGESIZE;
 }
 
 /**

@@ -8,6 +8,8 @@
 #include "pager/pager.h"
 
 #include <linux/userfaultfd.h>
+#include <string.h>
+#include <sys/mman.h>
 
 dsm_worker_ctx *dsm_wkr_ctx = NULL;
 
@@ -50,6 +52,7 @@ int dsm_wkr_ctx_init() {
         LOG_ERROR("pthread_cond_init : finalize_cond");
         return -1;
     }
+    dsm_wkr_ctx->local_cursor = 0;
 
     return 0;
 }
@@ -65,6 +68,12 @@ long addr_to_page_id(uint64_t addr) {
     return (addr - dsm_wkr_ctx->range_start) / EFFECTIVE_PAGESIZE;
 }
 
+long page_id_to_addr(long page_id) {
+    if (page_id < 0 || page_id >= EFFECTIVE_NB_PAGES) {
+        return -1;
+    }
+    return dsm_wkr_ctx->range_start + page_id * EFFECTIVE_PAGESIZE;
+}
 static unsigned int hash_page_to_mgr(unsigned long page_id) {
     return page_id % dsm_ctx->config.net.system.nb_managers;
 }
@@ -128,6 +137,9 @@ static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
          * prévenir le manager pour qu'il invalide la page chez les autres workers,
          * puis retirer la protection d'écriture localement.
          */
+        LOG_INFO("Pagefault en écriture sur la page %d, envoi d'une requete WRITE_REQ au "
+                 "manager",
+                 page_id);
         return send_wkr_req(page_id, WRITE_REQ, fd_sock_mgr);
     }
     /*
@@ -163,8 +175,69 @@ void dispatch_call_uffd(void *arg) {
     free(msg_ctx);
 }
 
-static int treat_mgr_inva_req();
-static int treat_mgr_data_req();
+/**
+ * @brief Traitement d'une demande d'invalidation
+ *
+ * @return int
+ */
+static int treat_mgr_inva_req(dsm_msg_tcp_thread_ctx *msg_ctx) {
+    dsm_msg_mgr_inva_req payload;
+    if (dsm_dsrlze_mgr_inva_req(msg_ctx->payload, sizeof(msg_ctx->payload), &payload) <
+        0) {
+        LOG_ERROR("dsm_dsrlze_mgr_inva_req");
+        return -1;
+    }
+    void *addr = (void *)page_id_to_addr(payload.page_id);
+    if (madvise(addr, EFFECTIVE_PAGESIZE, MADV_DONTNEED) < 0) {
+        LOG_ERROR("madvise");
+        return -1;
+    }
+    if (payload.is_sync) {
+        // faut repondre
+    }
+    return 0;
+}
+
+/**
+ * @brief Traitement de la reception d'une demande de données de la part d'un manager
+ *
+ * @return int
+ */
+static int treat_mgr_data_req(dsm_msg_tcp_thread_ctx *msg_ctx) {
+    dsm_msg_mgr_data_req payload;
+    if (dsm_dsrlze_mgr_data_req(msg_ctx->payload, sizeof(msg_ctx->payload), &payload) <
+        0) {
+        LOG_ERROR("dsm_dsrlze_mgr_data_req");
+        return -1;
+    }
+
+    void *zero_page = calloc(1, EFFECTIVE_PAGESIZE);
+    void *addr = (void *)page_id_to_addr(payload.page_id);
+    /**
+     * envoyer dsm_msg_wkr_data_ack
+     */
+    int ret = send_wkr_data_ack(payload.page_id, (uint8_t *)addr, msg_ctx->sock);
+    free(zero_page);
+    if (payload.is_invalidate) {
+        /**
+         * On invalide la page
+         */
+        if (madvise(addr, EFFECTIVE_PAGESIZE, MADV_DONTNEED) < 0) {
+            LOG_ERROR("madvise");
+            return -1;
+        }
+    }
+
+    return ret;
+}
+/**
+ * @brief Traitement de la reception des données apres une requete.
+ *
+ * TODO - majda : gerer LOCK et UNLOCK
+ *
+ * @param msg_ctx
+ * @return int
+ */
 static int treat_mgr_data_ack(dsm_msg_tcp_thread_ctx *msg_ctx) {
     dsm_msg_mgr_data_ack payload;
     if (dsm_dsrlze_mgr_data_ack(msg_ctx->payload, sizeof(msg_ctx->payload), &payload) <
@@ -217,61 +290,20 @@ void dispatch_call_wkr(void *arg) {
                      dsm_ctx->node_id);
             treat_mgr_data_ack(msg_ctx);
             break;
+        case CODE_MGR_INVA_REQ:
+            LOG_INFO("Reception par le noeud %d du code CODE_MGR_INVA_REQ et traitement.",
+                     dsm_ctx->node_id);
+            treat_mgr_inva_req(msg_ctx);
+            break;
+        case CODE_MGR_DATA_REQ:
+            treat_mgr_data_req(msg_ctx);
+            LOG_INFO("Reception par le noeud %d du code CODE_MGR_DATA_REQ et traitement.",
+                     dsm_ctx->node_id);
+            break;
 
         default:
             LOG_WARNING("Code de message TCP inconnu ou non traitable: %d", code);
     }
-
-    // Ancien taff
-    // if (code == CODE_PAGER_MANAGER_ACK) {
-    //     dsm_msg_pgr_mgr_ack payload;
-    //     if (dsm_dsrlze_pgr_mgr_ack(pbuf, buf_size, &payload) < 0)
-    //         return -1;
-
-    //     if (payload.flags & MGR_ACK_DATA) {
-    //         /* Données reçues avec l'ACK */
-    //         if (payload.mode == READ_REQ) {
-    //             /* TODO : reception d'une reponse a une requete en lecture */
-    //         } else if (payload.mode == WRITE_REQ) {
-    //             /* mode = 0 : on ne reprotège pas en écriture ici */
-    //             pager_copy(payload.page_id, (__u64)payload.data, 0);
-    //         }
-    //     } else {
-    //         /* Pas de données */
-    //         if (payload.mode == READ_REQ) {
-    //             // initialiser page avec des 0
-    //             void *data = malloc(EFFECTIVE_PAGESIZE);
-    //             memset(data, 0, EFFECTIVE_PAGESIZE);
-    //             pager_copy(payload.page_id, (__u64)data, 0);
-    //             free(data);
-    //         } else if (payload.mode == WRITE_REQ) {
-    //             pager_writeprotect(payload.page_id);
-    //         }
-    //     }
-
-    //     if (payload.flags & MGR_INVALIDATE) {
-    //         /* TODO : invalider la page */
-    //     }
-
-    //     if (payload.flags & PGR_SYNC) {
-    //         /* TODO : répondre au manager */
-    //     }
-
-    // } else if (code == CODE_MGR_DATA_REQ) {
-    //     dsm_msg_mgr_data_req payload;
-    //     if (dsm_dsrlze_mgr_data_req(pbuf, buf_size, &payload) < 0)
-    //         return -1;
-
-    //     uint8_t *data = (uint8_t *)(RANGE_START + payload.page_id *
-    //     EFFECTIVE_PAGESIZE);
-
-    //     if (payload.is_invalidate) {
-    //         madvise(data, EFFECTIVE_PAGESIZE, MADV_DONTNEED);
-    //         LOG_INFO("Page %u invalidée", payload.page_id);
-    //     }
-
-    //     return send_pgr_data(payload.page_id, data);
-    // }
 
     free(msg_ctx->payload);
     free(msg_ctx);

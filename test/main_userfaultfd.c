@@ -1,15 +1,22 @@
 #include "dsm.h"
 #include "internal.h"
-#include "pager/pager.h"
+
+#include "debug/debug.h"
+#include "dsm.h"
+#include <string.h>
+#include <unistd.h>
 
 int main(int argc, char const *argv[]) {
-    dsm_config dsm_config;
-    dsm_get_default_config(&dsm_config);
-    dsm_config.net.system.nb_nodes = 5;
-    dsm_config.net.system.nb_managers = 2;
-    dsm_init(&dsm_config);
-    // pager_init(2);
-    // PAGE_TABLE;
+
+    dsm_config config;
+    dsm_get_default_config(&config);
+
+    config.net.system.nb_nodes = 3;
+    config.net.system.nb_managers = 1;
+
+    // config.net.node.role = DSM_ROLE_MANAGER; // Collision
+    dsm_init(&config);
+
     printf("%ld\n", EFFECTIVE_PAGESIZE);
     return 0;
 }
