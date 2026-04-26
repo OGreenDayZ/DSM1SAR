@@ -3,8 +3,13 @@
 
 #include "network/message/message.h"
 
+#include "util/concurrent/drain_queue.h"
 #include "util/concurrent/safe_list.h"
 #include "util/concurrent/safe_map.h"
+#include <bits/pthreadtypes.h>
+#include <stdatomic.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #define DSM_MGR_PAGE_HASH_BITS 12
 
@@ -18,7 +23,7 @@ typedef enum {
     PAGE_R,
     PAGE_RW,
     PAGE_LOCKED
-} dsm_page_mode_poss;
+} page_mode_poss;
 
 /**
  * Entrée de la liste des workers détenant une copie d'une page.
@@ -31,47 +36,42 @@ typedef enum {
 typedef struct {
     int worker_id;
     struct dsm_list_head node;
-} reader_info; // liste des workers qui ont la page (Pour "readers")
+} dsm_reader_info; // Pour readers
 
 typedef struct {
-    // WIP !!!
 
-    // unsigned int node_id; // author
-    // page_mode_req mode;
     int sock;              // callback
     dsm_msg_header header; // callback
-    dsm_msg_wkr_req req;
+    dsm_msg_wkr_req info;
 
-} dsm_request_content; // Pour dsm_request_node
+    dsm_dq_node node;
+} dsm_request_content; // Pour pending_reqs
+
+typedef struct { // Reset à chaque nouveau traitement de requête (en tête de la queue)
+
+    pthread_mutex_t
+        lock; // Obligatoire pour chaque write, déterminera l'unique sender-finaliseur
+
+    unsigned int missing_acks;
+    bool is_missing_data;
+    size_t data_size;
+    uint8_t *data;
+
+} pending_reqs_head_ctx;
 
 typedef struct {
-    // WIP !!!
 
-    dsm_request_content req;
-    bool wait_ack;
+    unsigned int page_id; /**< Identifiant de la page (clé de hashmap). */
+    page_mode_poss mode;  /**< Mode de possession par le propriétaire actuel. */
 
-    struct dsm_list_head node;
-} dsm_request_node; // Pour pending_reqs
+    int owner_id;          /**< ID du nœud propriétaire (-1 si aucun). */
+    dsm_safe_list readers; /**< Liste des workers ayant une copie en lecture */
 
-/**
- * @brief Entrée de la table des pages gérées par un manager.
- *
- * Une instance de @c dsm_page_content est créée par le manager lors du premier
- * accès en écriture à une page. Elle est stockée dans @ref pages_reg
- * (hashmap indexée par @c id) et conservée jusqu'à la fin de la session.
- */
-typedef struct {
+    dsm_drain_queue pending_reqs; /**< Liste des requêtes en attente sur cette page */
+    pending_reqs_head_ctx
+        head_req_ctx; /**< Contexte spécifique à la requête en tête de la queue */
 
-    unsigned int page_id;    /**< Identifiant de la page (clé de hashmap). */
-    dsm_page_mode_poss mode; /**< Mode de possession par le propriétaire actuel. */
-    int owner_id;            /**< ID du nœud propriétaire (-1 si aucun). */
-    dsm_safe_list readers;   /**< Liste des workers ayant une copie en lecture
-                              *   (@ref reader_info). */
-
-    dsm_safe_list pending_reqs; /**< Liste des requêtes en attente sur cette page */
-    // TODO ALGO
-
-    struct dsm_hlist_node node; /**< Nœud d'ancrage dans la hashmap @ref pages_reg. */
+    struct dsm_hlist_node node; /**< Nœud d'ancrage dans la hashmap */
 } dsm_page_content;             // Pour pages_reg
 
 typedef struct {
