@@ -23,6 +23,12 @@ typedef enum {
     UNLOCK_REQ /**< Libération du verrou exclusif. */
 } page_mode_req;
 
+typedef enum {
+    NOT_EMPTY, 
+    EMPTY_INIT, 
+    PROMOTE_ONLY
+} data_info;
+
 /**
  * Initialise le descripteur userfaultfd pour le worker courant.
  *

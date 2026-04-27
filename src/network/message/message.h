@@ -133,7 +133,12 @@ typedef struct {
 /* PAGER */
 typedef struct {
     uint32_t page_id;
-    uint8_t mode; // @ref page_mode_req
+    /**
+     * @warning est en réalité un enum @c page_mode_req 
+     * Lors de la serialisation et deserialisation un cast est effectué from uint8_t -> uint32_t 
+     * Attention a ne pas dépasser 255 et a toujours mettre des entiers non signés. 
+     */
+    uint8_t mode; 
 } dsm_msg_wkr_req;
 
 typedef struct {
@@ -158,8 +163,18 @@ typedef struct {
 
 typedef struct {
     uint32_t page_id;
+    /**
+     * @warning est en réalité un enum @c page_mode_req 
+     * Lors de la serialisation et deserialisation un cast est effectué from uint8_t -> uint32_t 
+     * Attention a ne pas dépasser 255 et a toujours mettre des entiers non signés. 
+     */
     uint8_t req_mode;
-    uint8_t is_empty; // 0 : pas de data, 1 : data
+    /**
+     * @warning est en réalité un enum @c data_info 
+     * Lors de la serialisation et deserialisation un cast est effectué from uint8_t -> uint32_t 
+     * Attention a ne pas dépasser 255 et a toujours mettre des entiers non signés. 
+     */
+    uint8_t is_empty;
     uint8_t data[];
 } dsm_msg_mgr_req_ack;
 

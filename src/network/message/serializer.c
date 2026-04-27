@@ -6,6 +6,7 @@
 #include "debug/debug.h"
 #include "internal.h"
 #include "network/message/message.h"
+#include "pager/pager.h"
 
 static int serialize_header(dsm_msg_header *header, uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header)) {
@@ -415,12 +416,12 @@ int dsm_srlze_wkr_data_ack(uint32_t page_id, uint8_t *data, uint8_t *buf, size_t
 int dsm_srlze_mgr_req_ack(uint32_t page_id, uint8_t req_mode, uint8_t is_empty,
                           uint8_t *data, uint8_t *buf, size_t buf_sz) {
 
-    size_t data_len = (is_empty ? 0 : EFFECTIVE_PAGESIZE);
+    size_t data_len = ((is_empty == NOT_EMPTY) ? 0 : EFFECTIVE_PAGESIZE);
     if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_mgr_req_ack) + data_len) {
         return -1;
     }
 
-    dsm_msg_header header = {.code = CODE_mgr_req_ack,
+    dsm_msg_header header = {.code = CODE_MGR_REQ_ACK,
                              .id = dsm_ctx->node_id,
                              .payload_len = sizeof(dsm_msg_mgr_req_ack) + data_len};
     dsm_msg_mgr_req_ack payload = {

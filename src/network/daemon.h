@@ -2,7 +2,7 @@
 #define DSM_DAEMON_H
 
 #include "util/concurrent/safe_list.h"
-#include "util/thread_pool.h"
+#include "util/concurrent/thread_pool.h"
 
 #define DSM_DMN_TIMEOUT_POLL 100
 
