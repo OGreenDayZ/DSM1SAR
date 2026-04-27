@@ -34,6 +34,12 @@ typedef struct {
 } dsm_barrier_content; // Pour barrier_reg
 
 typedef struct {
+    unsigned int page_id; 
+
+    int locked; // 0 : la page n'est pas encore locked - 1 : la page est locked 
+
+} dsm_lock_entry; 
+typedef struct {
 
     unsigned int target_count;
     pthread_mutex_t targ_c_mutex;
@@ -58,13 +64,23 @@ typedef struct {
 
     // TODO LOCK REG (++) ? ou fusion avec barrier_reg (-- en multithread user) ?
     dsm_safe_map barrier_reg;
-    dsm_sync_finalize sync_finalize;
+    dsm_sync_finalize sync_finalize; // Lié au code user multithread
 
 } dsm_worker_ctx;
 
 extern dsm_worker_ctx *dsm_wkr_ctx;
 
+/**
+ * @brief 
+ * 
+ * @return int 
+ */
 int dsm_wkr_ctx_init();
+
+/**
+ * @brief 
+ * 
+ */
 void dsm_wkr_ctx_cleanup();
 
 /**
@@ -91,8 +107,18 @@ int get_mgr_node_id_for_page(unsigned long page_id);
  * @return int fd de la socket du manager, ou -1 en cas d'erreur 
  */
 int get_mgr_node_socket_for_page(unsigned long page_id);
-
+/**
+ * @brief 
+ * 
+ * @param arg 
+ */
 void dispatch_call_uffd(void *arg);
+
+/**
+ * @brief 
+ * 
+ * @param arg 
+ */
 void dispatch_call_wkr(void *arg);
 
 #endif // DSM_WORKER_H

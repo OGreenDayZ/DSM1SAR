@@ -79,3 +79,25 @@ int pager_copy(int uffd, int page_id, __u64 src, int mode) {
     }
     return 0;
 }
+
+int pager_destroy() {
+    struct uffdio_range range = {.start = dsm_wkr_ctx->range_start,
+                                 .len = EFFECTIVE_PAGESIZE * EFFECTIVE_NB_PAGES};
+    if (ioctl(dsm_wkr_ctx->uffd, UFFDIO_UNREGISTER, &range)) {
+        LOG_ERROR("ioctl unregister pager_destroy");
+        return -1;
+    }
+
+    if (close(dsm_wkr_ctx->uffd)) {
+        LOG_ERROR("close uffd pager_destroy");
+        return -1;
+    }
+
+    if (munmap((void *)dsm_wkr_ctx->range_start,
+               EFFECTIVE_PAGESIZE * EFFECTIVE_NB_PAGES)) {
+        LOG_ERROR("munmap pager_destroy");
+        return -1;
+    }
+
+    return 0;
+}

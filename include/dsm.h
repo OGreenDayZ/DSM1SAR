@@ -69,7 +69,23 @@ typedef enum {
 /* --- Fonctions --- */
 void dsm_get_default_config(dsm_config *config);
 int dsm_init(const dsm_config *config);
+
 void *dsm_alloc(size_t len); 
+/**
+ * @brief Envoie une requete de LOCK sur la page qui contient addr  
+ * 
+ * @param addr 
+ * @return int : 0 en cas de succés, -1 en cas d'erreur  
+ */
+int dsm_lock(void* addr);
+
+/**
+ * @brief Envoie une requete de UNLOCK sur la page qui contient addr  
+ * 
+ * @param addr 
+ * @return int : 0 en cas de succés, -1 en cas d'erreur  
+ */
+int dsm_unlock(void* addr); 
 // lock, unlock de page addr
 int dsm_barrier(void);
 int dsm_barrier_advanced(unsigned int threads_count, unsigned int manager_id);
@@ -77,4 +93,5 @@ int dsm_finalize(void);
 int dsm_finalize_advanced(unsigned int threads_count);
 int dsm_get_node_id(); 
 int dsm_get_role(); 
+
 #endif // DSM1SAR_H

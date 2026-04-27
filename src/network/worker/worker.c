@@ -123,11 +123,18 @@ int get_mgr_node_socket_for_page(unsigned long page_id) {
  * normalement les non static suffisent ?
  */
 static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
+    printf(
+        "[treat_uffd_pagefault] je suis dans la fonction de traitement du pagefault\n");
     __u64 addr = fault_msg->arg.pagefault.address;
     int page_id = addr_to_page_id(addr);
     int flags = fault_msg->arg.pagefault.flags;
     int fd_sock_mgr = get_mgr_node_socket_for_page(page_id);
 
+    printf("[treat_uffd_pagefault] je check les flags.\n");
+    printf("[treat_uffd_pagefault] UFFD_PAGEFAULT_FLAG_WRITE : %d\n",
+           flags & UFFD_PAGEFAULT_FLAG_WRITE);
+    printf("[treat_uffd_pagefault] UFFD_PAGEFAULT_FLAG_WP : %d\n",
+           flags & UFFD_PAGEFAULT_FLAG_WP);
     if (flags & UFFD_PAGEFAULT_FLAG_WRITE || flags & UFFD_PAGEFAULT_FLAG_WP) {
         /**
          * Accés en écriture à une page non présente en mémoire :
@@ -140,12 +147,22 @@ static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
         LOG_INFO("Pagefault en écriture sur la page %d, envoi d'une requete WRITE_REQ au "
                  "manager",
                  page_id);
+        printf("[treat_uffd_pagefault] Pagefault en écriture sur la page %d, envoi d'une "
+               "requete WRITE_REQ au "
+               "manager\n",
+               page_id);
         return send_wkr_req(page_id, WRITE_REQ, fd_sock_mgr);
     }
     /*
      * Accés a une page non présente en lecture :
      * envoyer une requete au manager qui gere cette page
      */
+    printf("[treat_uffd_pagefault] Pagefault en lecture sur la page %d, envoi d'une "
+           "requete READ_REQ au "
+           "manager\n",
+           page_id);
+    printf("[treat_uffd_pagefault] flags : %d, should be empty\n", flags);
+
     return send_wkr_req(page_id, READ_REQ, fd_sock_mgr);
 }
 
@@ -155,7 +172,7 @@ void dispatch_call_uffd(void *arg) {
 
     switch (fault_msg->event) {
         case UFFD_EVENT_PAGEFAULT:
-
+            printf("[dispatch_call_uffd] Reception d'une pagefault\n");
             if (treat_uffd_pagefault(fault_msg) < 0) {
                 LOG_ERROR("Erreur lors du traitement du pagefault");
             }
@@ -193,7 +210,10 @@ static int treat_mgr_inva_req(dsm_msg_tcp_thread_ctx *msg_ctx) {
         return -1;
     }
     if (payload.is_sync) {
-        // faut repondre
+        /**
+         * Faut repondre avec msg_wkr_inva_ack
+         */
+        return send_wkr_inva_ack(payload.page_id, msg_ctx->sock);
     }
     return 0;
 }
@@ -213,11 +233,7 @@ static int treat_mgr_data_req(dsm_msg_tcp_thread_ctx *msg_ctx) {
 
     void *zero_page = calloc(1, EFFECTIVE_PAGESIZE);
     void *addr = (void *)page_id_to_addr(payload.page_id);
-    /**
-     * envoyer dsm_msg_wkr_data_ack
-     */
-    int ret = send_wkr_data_ack(payload.page_id, (uint8_t *)addr, msg_ctx->sock);
-    free(zero_page);
+
     if (payload.is_invalidate) {
         /**
          * On invalide la page
@@ -227,7 +243,11 @@ static int treat_mgr_data_req(dsm_msg_tcp_thread_ctx *msg_ctx) {
             return -1;
         }
     }
-
+    /**
+     * envoyer dsm_msg_wkr_data_ack
+     */
+    int ret = send_wkr_data_ack(payload.page_id, (uint8_t *)addr, msg_ctx->sock);
+    free(zero_page);
     return ret;
 }
 /**
@@ -240,32 +260,46 @@ static int treat_mgr_data_req(dsm_msg_tcp_thread_ctx *msg_ctx) {
  */
 static int treat_mgr_req_ack(dsm_msg_tcp_thread_ctx *msg_ctx) {
     dsm_msg_mgr_req_ack payload;
+    void *zero_page =
+        calloc(1, EFFECTIVE_PAGESIZE); // alloue une plage de EFFECTIVE_PAGESIZE
+                                       // contigue initialisée à 0
     if (dsm_dsrlze_mgr_req_ack(msg_ctx->payload, sizeof(msg_ctx->payload), &payload) <
         0) {
         LOG_ERROR("dsm_dsrlze_mgr_req_ack");
         return -1;
     }
 
-    if (payload.is_empty) {
-        // Ya des données
-        if (pager_copy(dsm_wkr_ctx->uffd, payload.page_id, (__u64)payload.data,
-                       (payload.req_mode == WRITE_REQ) ? 0 : UFFDIO_COPY_MODE_WP) < 0) {
-            return -1;
-        }
-    } else {
-        // pas de données
-        /**
-         * @note possible d'avoir pas de données sur une requete READ ?
-         */
-        void *zero_page =
-            calloc(1, EFFECTIVE_PAGESIZE); // alloue une plage de EFFECTIVE_PAGESIZE
-                                           // contigue initialisée à 0
-        if (pager_copy(dsm_wkr_ctx->uffd, payload.page_id, (__u64)zero_page,
-                       (payload.req_mode == WRITE_REQ) ? 0 : UFFDIO_COPY_MODE_WP) < 0) {
-            return -1;
-        }
+    switch (payload.is_empty) {
+        case EMPTY_INIT:
+            if (pager_copy(dsm_wkr_ctx->uffd, payload.page_id, (__u64)zero_page,
+                           (payload.req_mode == WRITE_REQ || payload.req_mode == LOCK_REQ)
+                               ? 0
+                               : UFFDIO_COPY_MODE_WP) < 0) {
+                goto error;
+            }
+            break;
+        case NOT_EMPTY:
+            if (pager_copy(dsm_wkr_ctx->uffd, payload.page_id, (__u64)payload.data,
+                           (payload.req_mode == WRITE_REQ || payload.req_mode == LOCK_REQ)
+                               ? 0
+                               : UFFDIO_COPY_MODE_WP) < 0) {
+                goto error;
+            }
+            break;
+        case PROMOTE_ONLY:
+            if (pager_writeprotect(dsm_wkr_ctx->uffd, payload.page_id) < 0) {
+                goto error;
+            }
+            break;
+        default:
+            break;
     }
+
+    free(zero_page);
     return 0;
+error:
+    free(zero_page);
+    return -1;
 }
 
 void dispatch_call_wkr(void *arg) {

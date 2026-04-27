@@ -4,9 +4,10 @@
 #include "internal.h"
 #include "network/daemon.h"
 #include "network/network.h"
+#include "network/pager/pager_msg.h"
 #include "network/worker/worker.h"
 #include "pager/pager.h"
-#include "util/thread_pool.h"
+#include "util/concurrent/thread_pool.h"
 
 dsm_context *dsm_ctx = NULL;
 
@@ -167,12 +168,8 @@ int dsm_init(const dsm_config *config) {
     return ret;
 }
 
-/**
- * @note si le code user est multi-thread...
- *
- * @param len
- * @return int
- */
+// TODO - majda : est ce que le comportement peut changer si le code user est multi-thread
+// ?
 void *dsm_alloc(size_t len) {
     if (!dsm_wkr_ctx || dsm_wkr_ctx->range_start == 0) {
         LOG_ERROR("Worker context non initialisé");
@@ -183,11 +180,30 @@ void *dsm_alloc(size_t len) {
     uintptr_t debut = (uintptr_t)dsm_wkr_ctx->range_start + dsm_wkr_ctx->local_cursor;
 
     LOG_INFO("Allocation de %lu octets à l'adresse %p", len, (void *)debut);
-
+    printf("[dsm_alloc] Allocation de %lu octets à l'adresse %p\n", len, (void *)debut);
     dsm_wkr_ctx->local_cursor += len;
     return (void *)debut;
 }
 
+int dsm_lock(void *addr) {
+    unsigned int page_id = addr_to_page_id((uint64_t)addr);
+    int fd_sock = get_mgr_node_socket_for_page(page_id);
+    // TODO : faut faire dormir le thread user en attendant de recevoir la réponse du
+    // manager
+    return send_wkr_req(page_id, LOCK_REQ, fd_sock);
+}
+
+int dsm_unlock(void *addr) {
+    unsigned int page_id = addr_to_page_id((uint64_t)addr);
+    int fd_sock = get_mgr_node_socket_for_page(page_id);
+    return send_wkr_req(page_id, UNLOCK_REQ, fd_sock);
+}
+
+/**
+ * @note TODO - majda : a voir si c'est vraiment utile
+ *
+ * @return int
+ */
 int dsm_get_node_id() {
     return dsm_ctx->node_id;
 }

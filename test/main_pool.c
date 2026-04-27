@@ -6,7 +6,7 @@
  * Execution   : ./test_thread_pool
  */
 
-#include "util/thread_pool.h"
+#include "util/concurrent/thread_pool.h"
 #include <assert.h>
 #include <pthread.h>
 #include <stdatomic.h>

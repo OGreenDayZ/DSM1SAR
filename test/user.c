@@ -35,26 +35,34 @@ int main() {
             printf("[Nœud %d] J'initialise les données...\n", my_id);
             for (int i = 0; i < 100; i++) {
                 // Ici, userfaultfd intercepte l'écriture
-                // Le manager invalide les copies et donne l'accès en écriture au Nœud 0
                 LOG_INFO("Nœud %d écrit à l'index %d", my_id, i);
                 printf("[Nœud %d] Ecriture de la donnée index %d : %d\n", my_id, i,
                        i * 2);
                 shared_data[i] = i * 2;
             }
+        } else {
+            printf("[Noeud %d] Je veux afficher la valeur de la variable partagé \n",
+                   my_id);
+            printf("[Noeud %d] Je veux afficher la valeur de la variable partagé : %d\n",
+                   my_id, shared_data[0]);
         }
 
         // 3. Synchronisation
         // On attend que le Nœud 0 ait fini d'écrire.
-        printf("[Nœud %d] Attente à la barrière...\n", my_id);
+        // printf("[Nœud %d] Attente à la barrière...\n", my_id);
         // dsm_barrier();
-
         if (my_id != 1) {
-            // Ici, au moment de la lecture, une faute de page (MISSING) survient.
+            sleep(30);
+            return 0;
+        }
+        if (my_id != 1) {
+            // Ici, au moment de la lecture, une faute de page survient.
             // Le daemon attrape la faute, demande la page au Manager,
             // qui la récupère chez le Nœud 0.
             printf("[Nœud %d] Lecture de la donnée index 50 : %d\n", my_id,
                    shared_data[50]);
         }
+    } else if (dsm_get_role() == DSM_ROLE_MANAGER) {
     }
 
     // 4. Nettoyage

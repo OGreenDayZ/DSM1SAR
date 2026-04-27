@@ -39,7 +39,7 @@ typedef enum {
  * UFFDIO_REGISTER_MODE_WP).
  *
  * @return Le descripteur userfaultfd (>= 0) en cas de succès.
- * @return -1 en cas d'erreur, errno positionné.
+ * @return -1 en cas d'erreur.
  */
 int userfaultfd_init(int *out_uffd, uint64_t *out_range_start);
 /**
@@ -51,7 +51,7 @@ int userfaultfd_init(int *out_uffd, uint64_t *out_range_start);
  * @param page_id  page_id de la page à protéger en écriture.
  *
  * @return 0 en cas de succès.
- * @return -1 en cas d'erreur, errno positionné.
+ * @return -1 en cas d'erreur.
  */
 int pager_writeprotect(int uffd, int page_id);
 
@@ -75,7 +75,12 @@ int pager_writeprotect(int uffd, int page_id);
  */
 int pager_copy(int uffd, int page_id, __u64 src, int mode);
 
-// TODO majda
+/**
+ * Libère toute les ressources alloué par le pager. 
+ * 
+ * @return 0 en cas de succés. 
+ * @return -1 en cas d'erreur. 
+ */
 int pager_destroy();
 
 #endif // DSM_PAGER_H
