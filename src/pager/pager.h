@@ -43,17 +43,15 @@ typedef enum {
  */
 int userfaultfd_init(int *out_uffd, uint64_t *out_range_start);
 /**
- * Active la protection en écriture sur une page déjà présente en mémoire.
- *
- * Utilisé par le worker pour rétrograder une page de RW à R. Toute écriture
- * ultérieure sur cette page déclenchera une faute UFFD_PAGEFAULT_FLAG_WP.
+ * Active ou désactive la protection en écriture sur une page déjà présente en mémoire.
  *
  * @param page_id  page_id de la page à protéger en écriture.
+ * @param protection 0 = désactiver la protection, UFFDIO_WRITEPROTECT_MODE_WP = active la protection. 
  *
  * @return 0 en cas de succès.
  * @return -1 en cas d'erreur.
  */
-int pager_writeprotect(int uffd, int page_id);
+int pager_protect(int uffd, int page_id, int protection); 
 
 /**
  * Copie une page dans la plage surveillée par userfaultfd.

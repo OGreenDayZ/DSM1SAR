@@ -1,5 +1,9 @@
 #include "safe_list.h"
 
+void dsm_safe_list_lock(dsm_safe_list *list) {
+    pthread_rwlock_wrlock(&list->lock);
+}
+
 int dsm_safe_list_init(dsm_safe_list *list) {
     dsm_list_init(&list->head);
     return pthread_rwlock_init(&list->lock, NULL);

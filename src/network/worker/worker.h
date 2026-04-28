@@ -6,6 +6,7 @@
 
 #include "internal.h"
 #include "util/concurrent/safe_map.h"
+#include "util/concurrent/safe_list.h"
 
 #define DSM_WKR_NODE_HASH_BITS 4
 #define DSM_WKR_PAGE_HASH_BITS 12
@@ -35,10 +36,12 @@ typedef struct {
 
 typedef struct {
     unsigned int page_id; 
+    int locked; // 0 : la page n'est pas encore locked & 1 : la page est locked 
 
-    int locked; // 0 : la page n'est pas encore locked - 1 : la page est locked 
-
-} dsm_lock_entry; 
+    pthread_mutex_t mutex; // mutex pour protéger l'accès à locked
+    pthread_cond_t cond; 
+    dsm_list_head node;
+} dsm_lock_entry; // Pour locks_reg
 typedef struct {
 
     unsigned int target_count;
@@ -61,8 +64,7 @@ typedef struct {
 
     // map des managers : manager_id -> node_id
     dsm_safe_map managerID_to_nodeID;
-
-    // TODO LOCK REG (++) ? ou fusion avec barrier_reg (-- en multithread user) ?
+    dsm_safe_list locks_reg; 
     dsm_safe_map barrier_reg;
     dsm_sync_finalize sync_finalize; // Lié au code user multithread
 

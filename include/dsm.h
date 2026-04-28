@@ -70,7 +70,20 @@ typedef enum {
 void dsm_get_default_config(dsm_config *config);
 int dsm_init(const dsm_config *config);
 
+/**
+ * @brief Alloue un segment de mémoire dans l'espace d'adressage global partagé. 
+ * 
+ * @warning Cette fonction doit être appelée de manière déterministe avant toute divergence 
+ * du flux d'exécution (fork, création de threads ou logique spécifique aux nœuds). 
+ * Pour garantir la cohérence de l'espace global, chaque nœud doit effectuer les mêmes 
+ * appels d'allocation dans le même ordre.
+ * 
+ * @param len Taille de l'allocation en octets.
+ * @return void* Un pointeur vers la zone allouée, ou NULL en cas d'erreur.
+ */
 void *dsm_alloc(size_t len); 
+
+
 /**
  * @brief Envoie une requete de LOCK sur la page qui contient addr  
  * 

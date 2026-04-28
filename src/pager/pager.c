@@ -58,10 +58,10 @@ error1:
     return -1;
 }
 
-int pager_writeprotect(int uffd, int page_id) {
+int pager_protect(int uffd, int page_id, int protection) {
     __u64 page = dsm_wkr_ctx->range_start + page_id * EFFECTIVE_PAGESIZE;
     struct uffdio_writeprotect wp = {.range = {.start = page, .len = EFFECTIVE_PAGESIZE},
-                                     .mode = 0};
+                                     .mode = protection};
     if (ioctl(uffd, UFFDIO_WRITEPROTECT, &wp)) {
         LOG_ERROR("ioctl write-protect");
         return -1;

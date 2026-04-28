@@ -7,7 +7,9 @@
 #include "network/pager/pager_msg.h"
 #include "network/worker/worker.h"
 #include "pager/pager.h"
+#include "util/concurrent/safe_list.h"
 #include "util/concurrent/thread_pool.h"
+#include <pthread.h>
 
 dsm_context *dsm_ctx = NULL;
 
@@ -169,10 +171,18 @@ int dsm_init(const dsm_config *config) {
 }
 
 // TODO - majda : est ce que le comportement peut changer si le code user est multi-thread
+// OUI ma yakak
 // ?
 void *dsm_alloc(size_t len) {
     if (!dsm_wkr_ctx || dsm_wkr_ctx->range_start == 0) {
         LOG_ERROR("Worker context non initialisé");
+        return NULL;
+    }
+
+    // Verification que la plage alloué est valide, et qu'elle reste dans les limites de
+    // la mémoire alloué
+    if (dsm_wkr_ctx->local_cursor > EFFECTIVE_NB_PAGES * EFFECTIVE_PAGESIZE) {
+        LOG_ERROR("Adresse d'allocation dépasse la taille de la mémoire alloué");
         return NULL;
     }
 
@@ -181,22 +191,62 @@ void *dsm_alloc(size_t len) {
 
     LOG_INFO("Allocation de %lu octets à l'adresse %p", len, (void *)debut);
     printf("[dsm_alloc] Allocation de %lu octets à l'adresse %p\n", len, (void *)debut);
+
+    // Avancement du cursor local
     dsm_wkr_ctx->local_cursor += len;
+
     return (void *)debut;
 }
 
 int dsm_lock(void *addr) {
     unsigned int page_id = addr_to_page_id((uint64_t)addr);
     int fd_sock = get_mgr_node_socket_for_page(page_id);
-    // TODO : faut faire dormir le thread user en attendant de recevoir la réponse du
-    // manager
-    return send_wkr_req(page_id, LOCK_REQ, fd_sock);
+    dsm_lock_entry *entry = malloc(sizeof(dsm_lock_entry));
+    if (!entry)
+        return -1;
+
+    // Ajouter le lock a locks_reg
+    entry->page_id = page_id;
+    entry->locked = 0; // la page n'est pas encore verouiller
+    if (pthread_mutex_init(&entry->mutex, NULL) < 0) {
+        LOG_ERROR("[dsm_lock] erreur lors de l'initialisation du mutex entry->mutex");
+        return -1;
+    }
+    if (pthread_cond_init(&entry->cond, NULL) < 0) {
+        LOG_ERROR("[dsm_lock] erreur lors de l'initialisation du mutex entry->cond");
+        return -1;
+    }
+
+    pthread_mutex_lock(&entry->mutex);
+    // Ajoute du lock dans la liste
+    dsm_safe_list_add_tail(&dsm_wkr_ctx->locks_reg, &entry->node);
+
+    // Envoie de la requete au manager
+    if (send_wkr_req(page_id, LOCK_REQ, fd_sock) < 0) {
+        pthread_mutex_unlock(&entry->mutex);
+        return -1;
+    }
+    printf("[dsm_lock] Je suis un thread user du noeud %d et je vais attendre de me "
+           "faire reveiller "
+           "apres un lock.\n",
+           dsm_ctx->node_id);
+    while (entry->locked == 0)
+        pthread_cond_wait(&entry->cond, &entry->mutex);
+    pthread_mutex_unlock(&entry->mutex);
+    // Apres avoir fini l'attente on libere toute les ressources alloué.
+    pthread_mutex_destroy(&entry->mutex);
+    pthread_cond_destroy(&entry->cond);
+    dsm_safe_list_del(&dsm_wkr_ctx->locks_reg, &entry->node);
+    return 0;
 }
 
 int dsm_unlock(void *addr) {
     unsigned int page_id = addr_to_page_id((uint64_t)addr);
     int fd_sock = get_mgr_node_socket_for_page(page_id);
-    return send_wkr_req(page_id, UNLOCK_REQ, fd_sock);
+    if (send_wkr_req(page_id, UNLOCK_REQ, fd_sock) < 0) {
+        return -1;
+    }
+    return 0;
 }
 
 /**

@@ -6,8 +6,10 @@
 #include "network/message/serializer.h"
 #include "network/pager/pager_msg.h"
 #include "pager/pager.h"
+#include "util/concurrent/safe_list.h"
 
 #include <linux/userfaultfd.h>
+#include <pthread.h>
 #include <string.h>
 #include <sys/mman.h>
 
@@ -37,6 +39,11 @@ int dsm_wkr_ctx_init() {
         return -1;
     }
 
+    if (dsm_safe_list_init(&dsm_wkr_ctx->locks_reg) < 0) {
+        LOG_ERROR("[dsm_wkr_ctx_init] List init error");
+        return -1;
+    }
+
     if (dsm_safe_map_init(&dsm_wkr_ctx->barrier_reg, DSM_WKR_PAGE_HASH_BITS) < 0) {
         return -1;
     }
@@ -52,8 +59,8 @@ int dsm_wkr_ctx_init() {
         LOG_ERROR("pthread_cond_init : finalize_cond");
         return -1;
     }
-    dsm_wkr_ctx->local_cursor = 0;
 
+    dsm_wkr_ctx->local_cursor = 0;
     return 0;
 }
 
@@ -117,11 +124,6 @@ int get_mgr_node_socket_for_page(unsigned long page_id) {
     return content->to_node_content->tcp_sock;
 }
 
-/**
- * TODO MAJDA : c'est ton ancien handle_pagefault_worker
- * readapter en utilisant les fonctions au dessus pr les pageID et managerID,
- * normalement les non static suffisent ?
- */
 static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
     printf(
         "[treat_uffd_pagefault] je suis dans la fonction de traitement du pagefault\n");
@@ -287,11 +289,37 @@ static int treat_mgr_req_ack(dsm_msg_tcp_thread_ctx *msg_ctx) {
             }
             break;
         case PROMOTE_ONLY:
-            if (pager_writeprotect(dsm_wkr_ctx->uffd, payload.page_id) < 0) {
+            if (pager_protect(dsm_wkr_ctx->uffd, payload.page_id, 0) < 0) {
                 goto error;
             }
             break;
         default:
+            break;
+    }
+    dsm_lock_entry *pos, *n;
+    dsm_lock_entry *entry = NULL;
+    switch (payload.req_mode) {
+        case LOCK_REQ:
+            // Parcourir la liste pour trouver le bon lock_entry
+            dsm_safe_list_for_each_entry_safe(&dsm_wkr_ctx->locks_reg, pos, n, node) {
+                if (pos->page_id == payload.page_id) {
+                    entry = pos;
+                    break;
+                }
+            }
+            if (entry) {
+                pthread_mutex_lock(&entry->mutex);
+                entry->locked = 1;
+                pthread_cond_signal(&entry->cond);
+                pthread_mutex_unlock(&entry->mutex);
+            }
+            break;
+        case UNLOCK_REQ:
+            // pas de ca ici
+        case WRITE_REQ:
+            // maybe or maybe not, but i think not
+            break;
+        case READ_REQ:
             break;
     }
 
