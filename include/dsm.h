@@ -81,7 +81,7 @@ int dsm_init(const dsm_config *config);
  * @param len Taille de l'allocation en octets.
  * @return void* Un pointeur vers la zone allouée, ou NULL en cas d'erreur.
  */
-void *dsm_alloc(size_t len); 
+void *dsm_alloc(void); 
 
 
 /**

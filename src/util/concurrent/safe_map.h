@@ -101,13 +101,14 @@ static inline void dsm_safe_map_destroy(dsm_safe_map *m) {
     } while (0)
 
 /**
+ * @brief Itère sur les entrées d'une hash map thread-safe correspondant à une clé.
+ * 
  * @warning TOUJOURS appeler dsm_hash_safe_get_end après la boucle, même si
  * aucune entrée n'est trouvée
  * @warning Ne pas faire de break ou return qui échappe au end
  *
+ * @note Voir dsm_hash_safe_get et dsm_hash_safe_get_end comme 2 parties à coller
  */
-
-/* Voir dsm_hash_safe_get et dsm_hash_safe_get_end comme 2 parties à coller */
 #define dsm_hash_safe_get(m, obj, member, key)                                           \
     do {                                                                                 \
         unsigned int __get_bkt = __DSM_SAFE_BKT((m), (key));                             \

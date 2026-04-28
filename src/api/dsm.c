@@ -170,79 +170,91 @@ int dsm_init(const dsm_config *config) {
     return ret;
 }
 
-// TODO - majda : est ce que le comportement peut changer si le code user est multi-thread
-// OUI ma yakak
-// ?
-void *dsm_alloc(size_t len) {
+void *dsm_alloc(void) {
     if (!dsm_wkr_ctx || dsm_wkr_ctx->range_start == 0) {
         LOG_ERROR("Worker context non initialisé");
         return NULL;
     }
 
-    // Verification que la plage alloué est valide, et qu'elle reste dans les limites de
-    // la mémoire alloué
-    if (dsm_wkr_ctx->local_cursor > EFFECTIVE_NB_PAGES * EFFECTIVE_PAGESIZE) {
+    if (dsm_wkr_ctx->page_counter > EFFECTIVE_NB_PAGES) {
         LOG_ERROR("Adresse d'allocation dépasse la taille de la mémoire alloué");
         return NULL;
     }
 
-    // Calcul de l'adresse de retour
-    uintptr_t debut = (uintptr_t)dsm_wkr_ctx->range_start + dsm_wkr_ctx->local_cursor;
+    uintptr_t debut = (uintptr_t)dsm_wkr_ctx->range_start + dsm_wkr_ctx->page_counter;
+
+    addr_to_page_id(debut);
 
     LOG_INFO("Allocation de %lu octets à l'adresse %p", len, (void *)debut);
-    printf("[dsm_alloc] Allocation de %lu octets à l'adresse %p\n", len, (void *)debut);
+    printf("[dsm_alloc] Allocation de la page %d à l'adresse %p\n",
+           dsm_wkr_ctx->page_counter, (void *)debut);
 
-    // Avancement du cursor local
-    dsm_wkr_ctx->local_cursor += len;
+    dsm_wkr_ctx->page_counter++;
+
+    // Initialisation des entrées de la map requests_reg
+    dsm_requests_reg_entry *map_entry = malloc(sizeof(dsm_requests_reg_entry));
+    dsm_requests_reg_entry *obj;
+
+    map_entry->page_id = addr_to_page_id(debut);
+
+    if (dsm_safe_list_init(&map_entry->list_req) < 0) {
+        LOG_ERROR("[dsm_alloc] dsm_safe_list_init");
+        free(map_entry);
+        return NULL;
+    }
+
+    // Ajout de l'entrée pour cette page dans la map
+    int inserted = dsm_hash_safe_add_unique(&dsm_wkr_ctx->requests_reg, &map_entry->node,
+                                            obj, node, page_id, map_entry->page_id);
+    if (inserted == 0) {
+        // L'entrée existe deja pas besoin d'une nouvelle
+        dsm_safe_list_destroy(&map_entry->list_req);
+        free(map_entry);
+    }
 
     return (void *)debut;
 }
 
+// TODO - majda : est ce que faut ajouter cette requete dans la map de requete ??
 int dsm_lock(void *addr) {
     unsigned int page_id = addr_to_page_id((uint64_t)addr);
     int fd_sock = get_mgr_node_socket_for_page(page_id);
-    dsm_lock_entry *entry = malloc(sizeof(dsm_lock_entry));
-    if (!entry)
-        return -1;
 
-    // Ajouter le lock a locks_reg
+    // Je veux lock la page
+    // Je dors sur le mutex de ma liste de lock
+    // et j'attends qu'on me reveille
+    dsm_locks_reg_entry *entry = malloc(sizeof(dsm_locks_reg_entry));
     entry->page_id = page_id;
-    entry->locked = 0; // la page n'est pas encore verouiller
+    entry->locked = 0;
+
     if (pthread_mutex_init(&entry->mutex, NULL) < 0) {
-        LOG_ERROR("[dsm_lock] erreur lors de l'initialisation du mutex entry->mutex");
+        LOG_ERROR("[dsm_lock] pthread_mutex_init &entry->mutex");
         return -1;
     }
+
     if (pthread_cond_init(&entry->cond, NULL) < 0) {
-        LOG_ERROR("[dsm_lock] erreur lors de l'initialisation du mutex entry->cond");
+        LOG_ERROR("[dsm_lock] pthread_mutex_init &entry->mutex");
         return -1;
     }
 
     pthread_mutex_lock(&entry->mutex);
-    // Ajoute du lock dans la liste
     dsm_safe_list_add_tail(&dsm_wkr_ctx->locks_reg, &entry->node);
 
-    // Envoie de la requete au manager
+    // PROTECTION
     if (send_wkr_req(page_id, LOCK_REQ, fd_sock) < 0) {
         pthread_mutex_unlock(&entry->mutex);
         return -1;
     }
-    printf("[dsm_lock] Je suis un thread user du noeud %d et je vais attendre de me "
-           "faire reveiller "
-           "apres un lock.\n",
-           dsm_ctx->node_id);
     while (entry->locked == 0)
         pthread_cond_wait(&entry->cond, &entry->mutex);
     pthread_mutex_unlock(&entry->mutex);
-    // Apres avoir fini l'attente on libere toute les ressources alloué.
-    pthread_mutex_destroy(&entry->mutex);
-    pthread_cond_destroy(&entry->cond);
-    dsm_safe_list_del(&dsm_wkr_ctx->locks_reg, &entry->node);
     return 0;
 }
 
 int dsm_unlock(void *addr) {
     unsigned int page_id = addr_to_page_id((uint64_t)addr);
     int fd_sock = get_mgr_node_socket_for_page(page_id);
+    // PROTECTION
     if (send_wkr_req(page_id, UNLOCK_REQ, fd_sock) < 0) {
         return -1;
     }

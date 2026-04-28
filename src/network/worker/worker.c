@@ -39,12 +39,18 @@ int dsm_wkr_ctx_init() {
         return -1;
     }
 
-    if (dsm_safe_list_init(&dsm_wkr_ctx->locks_reg) < 0) {
-        LOG_ERROR("[dsm_wkr_ctx_init] List init error");
+    if (dsm_safe_map_init(&dsm_wkr_ctx->requests_reg, DSM_WKR_PAGE_HASH_BITS) < 0) {
+        LOG_ERROR("[dsm_wkr_ctx_init] dsm_safe_map_init dsm_wkr_ctx->requests_reg");
         return -1;
     }
 
     if (dsm_safe_map_init(&dsm_wkr_ctx->barrier_reg, DSM_WKR_PAGE_HASH_BITS) < 0) {
+        LOG_ERROR("[dsm_wkr_ctx_init] dsm_safe_map_init dsm_wkr_ctx->barrier_reg");
+        return -1;
+    }
+
+    if (dsm_safe_list_init(&dsm_wkr_ctx->locks_reg) < 0) {
+        LOG_ERROR("[dsm_wkr_ctx_init] dsm_safe_list_init dsm_wkr_ctx->locks_reg");
         return -1;
     }
 
@@ -60,7 +66,7 @@ int dsm_wkr_ctx_init() {
         return -1;
     }
 
-    dsm_wkr_ctx->local_cursor = 0;
+    dsm_wkr_ctx->page_counter = 0;
     return 0;
 }
 
@@ -124,6 +130,7 @@ int get_mgr_node_socket_for_page(unsigned long page_id) {
     return content->to_node_content->tcp_sock;
 }
 
+// TODO majda - protéger les envoies des WKR_REQ
 static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
     printf(
         "[treat_uffd_pagefault] je suis dans la fonction de traitement du pagefault\n");
@@ -153,6 +160,24 @@ static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
                "requete WRITE_REQ au "
                "manager\n",
                page_id);
+        get_mgr_id_for_page(page_id);
+        // Je dois ici ajouter la requete a la liste de requests_reg
+        // avec mode_req = WRITE_REQ
+        dsm_requests_reg_entry *entry_map, *entry_parcours = NULL;
+        dsm_requests_reg_list_entry *to_be_added =
+            malloc(sizeof(dsm_requests_reg_list_entry));
+
+        dsm_hash_safe_get(&dsm_wkr_ctx->requests_reg, entry_map, node, page_id) {
+            entry_map = entry_parcours;
+        }
+        dsm_hash_safe_get_end(&dsm_wkr_ctx->requests_reg, page_id);
+        if (entry_map == NULL) {
+            // Pas de requete en cours pour cette page
+            // J'ajoute la requete
+            to_be_added->mode_req = WRITE_REQ;
+            dsm_safe_list_add_tail(&entry_map->list_req, &to_be_added->node);
+        }
+        // TODO majda - add the lock to send
         return send_wkr_req(page_id, WRITE_REQ, fd_sock_mgr);
     }
     /*
@@ -165,6 +190,7 @@ static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
            page_id);
     printf("[treat_uffd_pagefault] flags : %d, should be empty\n", flags);
 
+    // TODO majda - add the lock to send
     return send_wkr_req(page_id, READ_REQ, fd_sock_mgr);
 }
 
@@ -215,7 +241,10 @@ static int treat_mgr_inva_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
         /**
          * Faut repondre avec msg_wkr_inva_ack
          */
-        return send_wkr_inva_ack(payload.page_id, msg_ctx->sock);
+        pthread_mutex_lock(msg_ctx->send_lock);
+        int ret = send_wkr_inva_ack(payload.page_id, msg_ctx->sock);
+        pthread_mutex_unlock(msg_ctx->send_lock);
+        return ret;
     }
     return 0;
 }
@@ -248,7 +277,9 @@ static int treat_mgr_data_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     /**
      * envoyer dsm_msg_wkr_data_ack
      */
+    pthread_mutex_lock(msg_ctx->send_lock);
     int ret = send_wkr_data_ack(payload.page_id, (uint8_t *)addr, msg_ctx->sock);
+    pthread_mutex_unlock(msg_ctx->send_lock);
     free(zero_page);
     return ret;
 }
@@ -265,6 +296,8 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     void *zero_page =
         calloc(1, EFFECTIVE_PAGESIZE); // alloue une plage de EFFECTIVE_PAGESIZE
                                        // contigue initialisée à 0
+    dsm_locks_reg_entry *entry, *n;
+
     if (dsm_dsrlze_mgr_req_ack(msg_ctx->payload, sizeof(msg_ctx->payload), &payload) <
         0) {
         LOG_ERROR("dsm_dsrlze_mgr_req_ack");
@@ -296,22 +329,26 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
         default:
             break;
     }
-    dsm_lock_entry *pos, *n;
-    dsm_lock_entry *entry = NULL;
+
+    // TODO majda - revoir
     switch (payload.req_mode) {
         case LOCK_REQ:
-            // Parcourir la liste pour trouver le bon lock_entry
-            dsm_safe_list_for_each_entry_safe(&dsm_wkr_ctx->locks_reg, pos, n, node) {
-                if (pos->page_id == payload.page_id) {
-                    entry = pos;
+            // Utilisation de locks_reg
+            // Ici on a reçu une reponse a une demande de lock
+            // On doit s'assurer qu'on débloque le bon thread avec locks_reg
+            // locks_reg est une liste FIFO, donc on est sur que le 1er thread qui a
+            // envoyé sa requete est le 1er a être réveillé
+            // donc on parcours la liste a la recherche de la 1ere demande de lock associé
+            // a cette page
+            dsm_safe_list_for_each_entry_safe(&dsm_wkr_ctx->locks_reg, entry, n, node) {
+                if (entry->page_id == payload.page_id) {
+                    pthread_mutex_lock(&entry->mutex);
+                    entry->locked = 1;
+                    pthread_cond_signal(&entry->cond);
+                    pthread_mutex_unlock(&entry->mutex);
+                    dsm_safe_list_unlock(&dsm_wkr_ctx->locks_reg);
                     break;
                 }
-            }
-            if (entry) {
-                pthread_mutex_lock(&entry->mutex);
-                entry->locked = 1;
-                pthread_cond_signal(&entry->cond);
-                pthread_mutex_unlock(&entry->mutex);
             }
             break;
         case UNLOCK_REQ:

@@ -5,8 +5,10 @@
 #include <stdint.h>
 
 #include "internal.h"
+#include "pager/pager.h"
 #include "util/concurrent/safe_map.h"
 #include "util/concurrent/safe_list.h"
+#include "util/hlist.h"
 
 #define DSM_WKR_NODE_HASH_BITS 4
 #define DSM_WKR_PAGE_HASH_BITS 12
@@ -21,7 +23,6 @@ typedef struct {
 } dsm_mgr_to_node_content; // Pour managerID_to_nodeID
 
 typedef struct {
-
     unsigned int page_id;
 
     unsigned int target_count;
@@ -34,14 +35,8 @@ typedef struct {
     struct dsm_hlist_node node;
 } dsm_barrier_content; // Pour barrier_reg
 
-typedef struct {
-    unsigned int page_id; 
-    int locked; // 0 : la page n'est pas encore locked & 1 : la page est locked 
+// Entry de la liste
 
-    pthread_mutex_t mutex; // mutex pour protéger l'accès à locked
-    pthread_cond_t cond; 
-    dsm_list_head node;
-} dsm_lock_entry; // Pour locks_reg
 typedef struct {
 
     unsigned int target_count;
@@ -53,22 +48,45 @@ typedef struct {
 } dsm_sync_finalize;
 
 typedef struct {
+    page_mode_req mode_req; // Le max requete faite pour cette page
+    dsm_list_head node; 
+} dsm_requests_reg_list_entry; // entrée de list_req
 
+typedef struct {
+    unsigned int page_id; // clé    
+    dsm_safe_list list_req; 
+    struct dsm_hlist_node node; // pour la map requests_reg
+} dsm_requests_reg_entry; // entrée de requests_reg
+
+typedef struct {
+    unsigned int page_id; 
+    int locked; // 0 : la page n'est pas encore locked & 1 : la page est locked 
+    // Le mutex est la car c'est la page qu'on protège 
+    pthread_mutex_t mutex; // mutex pour protéger l'accès à locked
+    pthread_cond_t cond; 
+
+    dsm_list_head node; 
+} dsm_locks_reg_entry;
+typedef struct {
     /**
      * Descripteur userfaultfd du worker courant.
      * Initialisé par @ref userfaultfd_init, utilisé dans toute la boucle worker.
      */
     int uffd;
     uint64_t range_start;
-    int local_cursor;
-
+    int page_counter;
+    // Pas de lock pour page_counter psq on considere que l'user est
+    // eduqué et qu'il fera ses allocation avant de crée des threads
     // map des managers : manager_id -> node_id
     dsm_safe_map managerID_to_nodeID;
-    dsm_safe_list locks_reg; 
+    dsm_safe_map requests_reg;  
+    dsm_safe_list locks_reg; // enregistre les locks sur les pages, par thread 
     dsm_safe_map barrier_reg;
     dsm_sync_finalize sync_finalize; // Lié au code user multithread
 
 } dsm_worker_ctx;
+
+// J'ai besoin d'une 
 
 extern dsm_worker_ctx *dsm_wkr_ctx;
 
