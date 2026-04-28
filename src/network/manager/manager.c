@@ -1,7 +1,10 @@
 #include "manager.h"
+
 #include "debug/debug.h"
+#include "network/manager/mgr_factory.h"
 #include "network/message/serializer.h"
 #include "pager/pager.h"
+#include "util/concurrent/safe_list.h"
 
 dsm_manager_ctx *dsm_mgr_ctx = NULL;
 
@@ -36,7 +39,6 @@ static dsm_request_content *make_req_content(dsm_msg_tcpss_thread_ctx *msg_ctx,
         return NULL;
     }
 
-    req_content->sock = msg_ctx->sock;
     req_content->header = msg_ctx->header;
     req_content->info = *req;
     dsm_dq_node_init(&req_content->node);
@@ -61,7 +63,7 @@ static dsm_page_content *make_page_content(unsigned int page_id) {
 
     pthread_mutex_init(&page_content->head_req_ctx.lock, NULL);
     page_content->head_req_ctx.missing_acks = 0;
-    page_content->head_req_ctx.is_missing_data = false;
+    page_content->head_req_ctx.promotion_only = false;
     page_content->head_req_ctx.data_size = 0;
     page_content->head_req_ctx.data = NULL;
 
@@ -110,21 +112,115 @@ static int push_req(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
 }
 
 static int treat_wkr_read_req(dsm_page_content *page_content,
-                              dsm_request_content *req_content, bool *is_req_completed) {
-    // TODO
+                              dsm_request_content *req_content, bool *req_completed) {
+
+    switch (page_content->mode) {
+
+        case PAGE_INIT:
+            if (treat_read_req_poss_init(page_content, req_content, req_completed) < 0) {
+                return -1;
+            }
+            break;
+
+        case PAGE_R:
+            if (treat_read_req_poss_r(page_content, req_content, req_completed) < 0) {
+                return -1;
+            }
+            break;
+
+        case PAGE_RW:
+            if (treat_read_req_poss_rw(page_content, req_content, req_completed) < 0) {
+                return -1;
+            }
+            break;
+
+        case PAGE_LOCKED:
+            LOG_ERROR("Erreur Algo : LOCKED sans UNLOCK_REQ ?!");
+            return -1;
+
+        default:
+            LOG_ERROR("Mode de possession de page inconnu : %d", page_content->mode);
+            return -1;
+    }
     return 0;
 }
 
 static int treat_wkr_write_req(dsm_page_content *page_content,
-                               dsm_request_content *req_content, bool *is_req_completed) {
-    // TODO
+                               dsm_request_content *req_content, bool *req_completed) {
+
+    switch (page_content->mode) {
+
+        case PAGE_INIT:
+            if (treat_write_req_poss_init(page_content, req_content, req_completed) < 0) {
+                return -1;
+            }
+            break;
+
+        case PAGE_R:
+            if (treat_write_req_poss_r(page_content, req_content, req_completed) < 0) {
+                return -1;
+            }
+            break;
+
+        case PAGE_RW:
+            if (treat_write_req_poss_rw(page_content, req_content, req_completed) < 0) {
+                return -1;
+            }
+            break;
+
+        case PAGE_LOCKED:
+            LOG_ERROR("Erreur Algo : LOCKED sans UNLOCK_REQ ?!");
+            return -1;
+
+        default:
+            LOG_ERROR("Mode de possession de page inconnu : %d", page_content->mode);
+            return -1;
+    }
     return 0;
 }
 
 static int treat_wkr_lock_req(dsm_page_content *page_content,
-                              dsm_request_content *req_content, bool *is_req_completed) {
-    // TODO
+                              dsm_request_content *req_content, bool *req_completed) {
+
+    switch (page_content->mode) {
+
+        case PAGE_INIT:
+            if (treat_lock_req_poss_init(page_content, req_content, req_completed) < 0) {
+                return -1;
+            }
+            break;
+
+        case PAGE_R:
+            if (treat_lock_req_poss_r(page_content, req_content, req_completed) < 0) {
+                return -1;
+            }
+            break;
+
+        case PAGE_RW:
+            if (treat_lock_req_poss_rw(page_content, req_content, req_completed) < 0) {
+                return -1;
+            }
+            break;
+
+        case PAGE_LOCKED:
+            LOG_ERROR("Erreur Algo : LOCKED sans UNLOCK_REQ ?!");
+            return -1;
+
+        default:
+            LOG_ERROR("Mode de possession de page inconnu : %d", page_content->mode);
+            return -1;
+    }
     return 0;
+}
+
+static void reset_head_req_ctx(dsm_page_content *page_content) {
+    page_content->head_req_ctx.missing_acks = 0;
+    page_content->head_req_ctx.promotion_only = false;
+    page_content->head_req_ctx.data_size = 0;
+    if (page_content->head_req_ctx.data) {
+        free(page_content->head_req_ctx.data);
+    }
+    page_content->head_req_ctx.data = NULL;
 }
 
 /**
@@ -162,8 +258,16 @@ static int drain_reqs(dsm_page_content *page_content) {
                 return -1;
         }
 
+        if (!req_completed) {
+            break;
+        }
+
+        /**
+         * @warning : On ne pop que si elle est finalisée !
+         */
         int empty = dsm_dq_pop(&page_content->pending_reqs);
-        if (!req_completed || empty) {
+        if (empty) {
+            reset_head_req_ctx(page_content);
             break;
         }
     }
@@ -193,7 +297,7 @@ static int treat_wkr_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
 
     } else if (req.mode == UNLOCK_REQ) {
     } else {
-        LOG_WARNING("Mode de requête de page inconnu : %d", req.mode);
+        LOG_ERROR("Mode de requête de page inconnu : %d", req.mode);
         return -1;
     }
 

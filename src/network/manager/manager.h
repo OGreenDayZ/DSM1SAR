@@ -6,10 +6,6 @@
 #include "util/concurrent/drain_queue.h"
 #include "util/concurrent/safe_list.h"
 #include "util/concurrent/safe_map.h"
-#include <bits/pthreadtypes.h>
-#include <stdatomic.h>
-#include <stddef.h>
-#include <stdint.h>
 
 #define DSM_MGR_PAGE_HASH_BITS 12
 
@@ -35,13 +31,12 @@ typedef enum {
  * @param node       Nœud d'ancrage dans la liste `dsm_page_content.workers`.
  */
 typedef struct {
-    int worker_id;
+    unsigned int worker_id;
     struct dsm_list_head node;
 } dsm_reader_info; // Pour readers
 
 typedef struct {
 
-    int sock;              // callback
     dsm_msg_header header; // callback
     dsm_msg_wkr_req info;
 
@@ -50,11 +45,11 @@ typedef struct {
 
 typedef struct { // Reset à chaque nouveau traitement de requête (en tête de la queue)
 
-    pthread_mutex_t
-        lock; // Obligatoire pour chaque write, déterminera l'unique sender-finaliseur
+    pthread_mutex_t lock; /** Obligatoire pour chaque write (sauf drainer avec le front),
+                           * déterminera l'unique sender-finaliseur */
 
-    unsigned int missing_acks;
-    bool is_missing_data;
+    unsigned int missing_acks; // somme data + inva
+    bool promotion_only;       // utilisé quand data_size == 0
     size_t data_size;
     uint8_t *data;
 
@@ -69,6 +64,12 @@ typedef struct {
     dsm_safe_list readers; /**< Liste des workers ayant une copie en lecture */
 
     dsm_drain_queue pending_reqs; /**< Liste des requêtes en attente sur cette page */
+
+    /**
+     * @warning : Il n'est utilisé que dans le cadre d'une requête bloquante
+     * @warning : Initialisé lors de sa création
+     * @warning : Réinitialisé à chaque fin de traitement de requête (pop de la queue)
+     */
     pending_reqs_head_ctx
         head_req_ctx; /**< Contexte spécifique à la requête en tête de la queue */
 
