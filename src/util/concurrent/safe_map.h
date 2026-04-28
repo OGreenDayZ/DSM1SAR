@@ -203,4 +203,46 @@ static inline size_t dsm_safe_map_count(dsm_safe_map *m) {
     return total;
 }
 
+/**
+ * @brief insert-if-absent
+ * @return 1 si inséré, 0 si la clé existait déjà
+ *
+ * @warning La vérification et l'insertion sont atomiques
+            On évite donc de faire un "contains + add" qui n'est pas atomique
+ *
+ * @example
+ * dsm_supervising_node *obj;
+ * dsm_supervising_node *new_node = make_node(id_node);
+ *
+ * if (!dsm_hash_safe_add_unique(&spvs_ctx->spvs_reg,
+ *                               &new_node->hnode,
+ *                               obj,
+ *                               hnode,
+ *                               id,
+ *                               id_node
+ *                               )) {
+ *     free(new_node); // doublon
+ * }
+ *
+ */
+#define dsm_hash_safe_add_unique(m, node, obj, member, key_field, key)                   \
+    ({                                                                                   \
+        unsigned int __bkt = __DSM_SAFE_BKT((m), (key));                                 \
+        int __inserted = 0;                                                              \
+        pthread_rwlock_wrlock(__DSM_SAFE_LOCK((m), __bkt));                              \
+        int __found = 0;                                                                 \
+        dsm_hlist_for_each_entry(obj, __DSM_SAFE_HEAD((m), __bkt), member) {             \
+            if ((obj)->key_field == (key)) {                                             \
+                __found = 1;                                                             \
+                break;                                                                   \
+            }                                                                            \
+        }                                                                                \
+        if (!__found) {                                                                  \
+            dsm_hlist_add_head((node), __DSM_SAFE_HEAD((m), __bkt));                     \
+            __inserted = 1;                                                              \
+        }                                                                                \
+        pthread_rwlock_unlock(__DSM_SAFE_LOCK((m), __bkt));                              \
+        __inserted;                                                                      \
+    })
+
 #endif /* DSM_SAFE_MAP_H */

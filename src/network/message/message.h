@@ -27,12 +27,13 @@ typedef enum {
 
     // PAGER :
     CODE_WKR_REQ,
-    CODE_WKR_INVA_ACK,
     CODE_WKR_DATA_ACK,
+    CODE_WKR_INVA_ACK,
 
-    CODE_MGR_INVA_REQ,
+    CODE_MGR_REQ_ACK,
     CODE_MGR_DATA_REQ,
-    CODE_MGR_REQ_ACK
+    CODE_MGR_INVA_REQ,
+
 } dsm_msg_code;
 
 /** Lexique
@@ -134,11 +135,12 @@ typedef struct {
 typedef struct {
     uint32_t page_id;
     /**
-     * @warning est en réalité un enum @c page_mode_req 
-     * Lors de la serialisation et deserialisation un cast est effectué from uint8_t -> uint32_t 
-     * Attention a ne pas dépasser 255 et a toujours mettre des entiers non signés. 
+     * @warning est en réalité un enum @c page_mode_req
+     * Lors de la serialisation et deserialisation un cast est effectué from uint8_t ->
+     * uint32_t Attention a ne pas dépasser 255 et a toujours mettre des entiers non
+     * signés.
      */
-    uint8_t mode; 
+    uint8_t mode;
 } dsm_msg_wkr_req;
 
 typedef struct {
@@ -154,31 +156,35 @@ typedef struct {
     uint32_t page_id;
 } dsm_msg_wkr_inva_ack;
 
-
 typedef struct {
     uint32_t page_id;
-    // Pas de champs is_empty, car si on lui demande des données alors il est le propriétaire 
+    // Pas de champs is_empty, car si on lui demande des données alors il est le
+    // propriétaire
     uint8_t data[];
 } dsm_msg_wkr_data_ack;
 
 typedef struct {
     uint32_t page_id;
     /**
-     * @warning est en réalité un enum @c page_mode_req 
-     * Lors de la serialisation et deserialisation un cast est effectué from uint8_t -> uint32_t 
-     * Attention a ne pas dépasser 255 et a toujours mettre des entiers non signés. 
+     * @warning est en réalité un enum @c page_mode_req
+     * Lors de la serialisation et deserialisation un cast est effectué from uint8_t ->
+     * uint32_t Attention a ne pas dépasser 255 et a toujours mettre des entiers non
+     * signés.
      */
     uint8_t req_mode;
     /**
-     * @warning est en réalité un enum @c data_info 
-     * Lors de la serialisation et deserialisation un cast est effectué from uint8_t -> uint32_t 
-     * Attention a ne pas dépasser 255 et a toujours mettre des entiers non signés. 
+     * @warning est en réalité un enum @c data_info
+     * Lors de la serialisation et deserialisation un cast est effectué from uint8_t ->
+     * uint32_t Attention a ne pas dépasser 255 et a toujours mettre des entiers non
+     * signés.
      */
     uint8_t is_empty;
     uint8_t data[];
 } dsm_msg_mgr_req_ack;
 
 #pragma pack(pop)
+
+/** @note Contexte pour les threads créés lors du DISCOVERY */
 
 /**
  * @note : struct de transmission au thread
@@ -198,12 +204,25 @@ typedef struct {
     uint8_t *payload;
 } dsm_msg_tcp_thread_ctx;
 
+/** @note Contexte pour les threads créés par le daemon */
+
 /**
  * @note : struct de transmission au thread
  */
 typedef struct {
     struct uffd_msg fault_msg;
 } dsm_msg_uffd_thread_ctx;
+
+/**
+ * @note : struct de transmission au thread
+ * @note : tcpss == TCP Send Sync
+ */
+typedef struct {
+    int sock;                   // callback TCP
+    pthread_mutex_t *send_lock; // callback mutex
+    dsm_msg_header header;
+    uint8_t *payload;
+} dsm_msg_tcpss_thread_ctx;
 
 int dsm_tcp_send_all(int sock, const uint8_t *buf, size_t len);
 int dsm_tcp_recv_all(int sock, uint8_t *buf, size_t len, struct timeval *tv);
