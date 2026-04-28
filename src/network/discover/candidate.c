@@ -49,6 +49,11 @@ static void cand_ctx_cleanup() {
     dsm_hash_safe_for_each_safe(&cand_ctx->cand_reg, bkt, tmp, pos, node) {
         dsm_node_content *node_content = malloc(sizeof(dsm_node_content));
         if (node_content) {
+            if (pthread_mutex_init(&node_content->send_lock, NULL) < 0) {
+                LOG_ERROR("pthread_mutex_init : node_content->send_lock");
+                free(node_content);
+                return;
+            }
             node_content->id = pos->id;
             node_content->tcp_sock = pos->tcp_sock;
             dsm_init_hlist_node(&node_content->node);

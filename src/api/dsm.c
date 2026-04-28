@@ -6,7 +6,7 @@
 #include "network/network.h"
 #include "network/worker/worker.h"
 #include "pager/pager.h"
-#include "util/thread_pool.h"
+#include "util/concurrent/thread_pool.h"
 
 dsm_context *dsm_ctx = NULL;
 

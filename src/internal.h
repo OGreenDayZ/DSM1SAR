@@ -14,7 +14,12 @@
 /* dsm_node_content correspond au contenu d'un noeud du système,
  * ne pas confondre avec le node d'une liste */
 typedef struct {
-    unsigned int id;            // key : node_id
+    unsigned int id; // key : node_id
+    /**
+     * @warning : C'est un lock uniquement pour send,
+     * car seul le daemon n'a le droit de recv
+     */
+    pthread_mutex_t send_lock;
     int tcp_sock;               // socket de communication avec ce node
     struct dsm_hlist_node node; // "node" pour la liste de la hashmap
 } dsm_node_content;

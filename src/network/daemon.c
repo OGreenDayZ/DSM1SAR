@@ -96,7 +96,7 @@ static int handle_socket_event(int recv_sock) {
 
     int ret = 0;
 
-    dsm_msg_tcp_thread_ctx *msg_ctx = malloc(sizeof(dsm_msg_tcp_thread_ctx));
+    dsm_msg_tcpss_thread_ctx *msg_ctx = malloc(sizeof(dsm_msg_tcpss_thread_ctx));
     if (!msg_ctx) {
         LOG_ERROR("malloc : msg_ctx");
         return -1;
@@ -108,6 +108,16 @@ static int handle_socket_event(int recv_sock) {
         ret = -1;
         goto exit_err_ctx;
     }
+
+    unsigned int node_id = msg_ctx->header.id;
+    dsm_node_content *content;
+    dsm_hash_safe_get(&dsm_ctx->nodes_reg, content, node, node_id) {
+        if (content->id == node_id &&
+            content->tcp_sock == recv_sock) { // Pas forcement utile la 2ème condition
+            msg_ctx->send_lock = &content->send_lock;
+        }
+    }
+    dsm_hash_safe_get_end(&dsm_ctx->nodes_reg, node_id);
 
     msg_ctx->payload = malloc(msg_ctx->header.payload_len);
     if (!msg_ctx->payload) {

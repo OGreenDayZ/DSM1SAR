@@ -20,6 +20,7 @@
  * Le manager met à jour ce champ à chaque transfert de propriété.
  */
 typedef enum {
+    PAGE_INIT, // page nouvellement créée, jamais reçu/traitée de requête dessus
     PAGE_R,
     PAGE_RW,
     PAGE_LOCKED
@@ -57,7 +58,7 @@ typedef struct { // Reset à chaque nouveau traitement de requête (en tête de 
     size_t data_size;
     uint8_t *data;
 
-} pending_reqs_head_ctx;
+} pending_reqs_head_ctx; // Pour dsm_page_content
 
 typedef struct {
 

@@ -11,7 +11,7 @@
  * @details :
  *   - dsm_dq_push() retourne 1 si l'élément est en tête de queue
  *     -> le thread appelant doit devenir drainer.
- *   - dsm_dq_pop() retourne 1 si la queue est maintenant vide
+ *   - dsm_dq_pop() retourne 1 si la queue est maintenant/devient vide
  *     -> le drainer doit retourner dans son pool.
  *
  */
@@ -27,6 +27,10 @@ typedef struct {
     dsm_dq_node *tail;
     pthread_mutex_t lock;
 } dsm_drain_queue;
+
+static inline void dsm_dq_node_init(dsm_dq_node *node) {
+    node->next = NULL;
+}
 
 static inline int dsm_dq_init(dsm_drain_queue *q) {
     q->head = NULL;

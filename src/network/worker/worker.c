@@ -180,7 +180,7 @@ void dispatch_call_uffd(void *arg) {
  *
  * @return int
  */
-static int treat_mgr_inva_req(dsm_msg_tcp_thread_ctx *msg_ctx) {
+static int treat_mgr_inva_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     dsm_msg_mgr_inva_req payload;
     if (dsm_dsrlze_mgr_inva_req(msg_ctx->payload, sizeof(msg_ctx->payload), &payload) <
         0) {
@@ -203,7 +203,7 @@ static int treat_mgr_inva_req(dsm_msg_tcp_thread_ctx *msg_ctx) {
  *
  * @return int
  */
-static int treat_mgr_data_req(dsm_msg_tcp_thread_ctx *msg_ctx) {
+static int treat_mgr_data_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     dsm_msg_mgr_data_req payload;
     if (dsm_dsrlze_mgr_data_req(msg_ctx->payload, sizeof(msg_ctx->payload), &payload) <
         0) {
@@ -238,7 +238,7 @@ static int treat_mgr_data_req(dsm_msg_tcp_thread_ctx *msg_ctx) {
  * @param msg_ctx
  * @return int
  */
-static int treat_mgr_req_ack(dsm_msg_tcp_thread_ctx *msg_ctx) {
+static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     dsm_msg_mgr_req_ack payload;
     if (dsm_dsrlze_mgr_req_ack(msg_ctx->payload, sizeof(msg_ctx->payload), &payload) <
         0) {
@@ -275,7 +275,7 @@ void dispatch_call_wkr(void *arg) {
      * header
      * payload
      */
-    dsm_msg_tcp_thread_ctx *msg_ctx = (dsm_msg_tcp_thread_ctx *)arg;
+    dsm_msg_tcpss_thread_ctx *msg_ctx = (dsm_msg_tcpss_thread_ctx *)arg;
 
     int code = msg_ctx->header.code;
 
