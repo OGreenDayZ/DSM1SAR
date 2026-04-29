@@ -65,4 +65,6 @@ int treat_lock_req_poss_r(dsm_page_content *page_content,
 int treat_lock_req_poss_rw(dsm_page_content *page_content,
                            dsm_request_content *req_content, bool *req_completed);
 
+/******************/
+
 #endif // DSM_MGR_FACTORY_H

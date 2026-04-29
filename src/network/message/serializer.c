@@ -413,7 +413,7 @@ int dsm_srlze_wkr_data_ack(uint32_t page_id, uint8_t *data, uint8_t *buf, size_t
 int dsm_srlze_mgr_req_ack(uint32_t page_id, uint8_t req_mode, uint8_t is_empty,
                           uint8_t *data, uint8_t *buf, size_t buf_sz) {
 
-    size_t data_len = ((is_empty == NOT_EMPTY) ? 0 : EFFECTIVE_PAGESIZE);
+    size_t data_len = ((is_empty == NOT_EMPTY) ? EFFECTIVE_PAGESIZE : 0);
     if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_mgr_req_ack) + data_len) {
         return -1;
     }
@@ -554,8 +554,7 @@ int dsm_dsrlze_dscv_share_reg(uint8_t *buf, size_t buf_sz, dsm_msg_dscv_share_re
         return -1;
     }
 
-    *msg =
-        malloc(sizeof(dsm_msg_dscv_share_reg) + net_msg.nb_nodes * sizeof(dsm_reg_node));
+    *msg = malloc(needed_sz);
     if (!*msg) {
         LOG_ERROR("malloc : msg");
         return -1;
@@ -664,42 +663,55 @@ int dsm_dsrlze_wkr_inva_ack(uint8_t *buf, size_t buf_sz, dsm_msg_wkr_inva_ack *m
     return sizeof(dsm_msg_wkr_inva_ack);
 }
 
-/**
- * @warning : allouer sizeof(dsm_msg_wkr_data_ack) + EFFECTIVE_PAGESIZE pour msg
- * // TODO - majda : voir si on peut pas faire autrement
- */
-int dsm_dsrlze_wkr_data_ack(uint8_t *buf, size_t buf_sz, dsm_msg_wkr_data_ack *msg) {
-    if (buf_sz < sizeof(dsm_msg_wkr_data_ack))
+int dsm_dsrlze_wkr_data_ack(uint8_t *buf, size_t buf_sz, dsm_msg_wkr_data_ack **msg) {
+    size_t needed_sz = sizeof(dsm_msg_wkr_data_ack) + EFFECTIVE_PAGESIZE;
+    if (buf_sz < needed_sz) {
         return -1;
-    dsm_msg_wkr_data_ack net_msg;
-    memcpy(&net_msg, buf, sizeof(net_msg));
-    msg->page_id = ntohl(net_msg.page_id);
-
-    if (buf_sz < sizeof(dsm_msg_wkr_data_ack) + EFFECTIVE_PAGESIZE)
-        return -1;
-    memcpy(msg->data, buf + sizeof(dsm_msg_wkr_data_ack), EFFECTIVE_PAGESIZE);
-
-    return sizeof(dsm_msg_wkr_data_ack) + EFFECTIVE_PAGESIZE;
-}
-
-/**
- * @warning : allouer sizeof(dsm_msg_mgr_req_ack) + EFFECTIVE_PAGESIZE pour msg
- * // TODO - majda : voir si on peut pas faire autrement
- */
-int dsm_dsrlze_mgr_req_ack(uint8_t *buf, size_t buf_sz, dsm_msg_mgr_req_ack *msg) {
-    if (buf_sz < sizeof(dsm_msg_mgr_req_ack))
-        return -1;
-    dsm_msg_mgr_req_ack net_msg;
-    memcpy(&net_msg, buf, sizeof(net_msg));
-    msg->page_id = ntohl(net_msg.page_id);
-    msg->req_mode = net_msg.req_mode;
-    msg->is_empty = net_msg.is_empty;
-
-    if (!msg->is_empty) {
-        if (buf_sz < sizeof(dsm_msg_mgr_req_ack) + EFFECTIVE_PAGESIZE)
-            return -1;
-        memcpy(msg->data, buf + sizeof(dsm_msg_mgr_req_ack), EFFECTIVE_PAGESIZE);
     }
 
-    return sizeof(dsm_msg_mgr_req_ack) + (msg->is_empty ? 0 : EFFECTIVE_PAGESIZE);
+    dsm_msg_wkr_data_ack net_msg;
+    memcpy(&net_msg, buf, sizeof(net_msg));
+    net_msg.page_id = ntohl(net_msg.page_id);
+
+    *msg = malloc(needed_sz);
+    if (!*msg) {
+        LOG_ERROR("malloc : msg");
+        return -1;
+    }
+    memcpy(*msg, &net_msg, sizeof(net_msg));
+    memcpy((*msg)->data, buf + sizeof(net_msg), EFFECTIVE_PAGESIZE);
+
+    return needed_sz;
+}
+
+int dsm_dsrlze_mgr_req_ack(uint8_t *buf, size_t buf_sz, dsm_msg_mgr_req_ack **msg) {
+    if (buf_sz < sizeof(dsm_msg_mgr_req_ack)) {
+        return -1;
+    }
+
+    dsm_msg_mgr_req_ack net_msg;
+    memcpy(&net_msg, buf, sizeof(net_msg));
+    net_msg.page_id = ntohl(net_msg.page_id);
+    net_msg.req_mode = net_msg.req_mode;
+    net_msg.is_empty = net_msg.is_empty;
+
+    size_t data_len = (net_msg.is_empty == NOT_EMPTY) ? EFFECTIVE_PAGESIZE : 0;
+
+    size_t needed_sz = sizeof(dsm_msg_mgr_req_ack) + data_len;
+    if (buf_sz < needed_sz) {
+        return -1;
+    }
+
+    *msg = malloc(needed_sz);
+    if (!*msg) {
+        LOG_ERROR("malloc : msg");
+        return -1;
+    }
+
+    memcpy(*msg, &net_msg, sizeof(net_msg));
+    if (data_len > 0) {
+        memcpy((*msg)->data, buf + sizeof(net_msg), data_len);
+    }
+
+    return needed_sz;
 }

@@ -239,32 +239,36 @@ static int treat_mgr_data_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
  * @return int
  */
 static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
-    dsm_msg_mgr_req_ack payload;
-    if (dsm_dsrlze_mgr_req_ack(msg_ctx->payload, sizeof(msg_ctx->payload), &payload) <
-        0) {
-        LOG_ERROR("dsm_dsrlze_mgr_req_ack");
-        return -1;
-    }
+    dsm_msg_mgr_req_ack *payload; /** @a  TODO ADAPTER AU NVO DESERIA + SIZEOF ATTENTION
+                                     (CELLES D'EN HAUT AUSSI)*/
 
-    if (payload.is_empty) {
-        // Ya des données
-        if (pager_copy(dsm_wkr_ctx->uffd, payload.page_id, (__u64)payload.data,
-                       (payload.req_mode == WRITE_REQ) ? 0 : UFFDIO_COPY_MODE_WP) < 0) {
-            return -1;
-        }
-    } else {
-        // pas de données
-        /**
-         * @note possible d'avoir pas de données sur une requete READ ?
-         */
-        void *zero_page =
-            calloc(1, EFFECTIVE_PAGESIZE); // alloue une plage de EFFECTIVE_PAGESIZE
-                                           // contigue initialisée à 0
-        if (pager_copy(dsm_wkr_ctx->uffd, payload.page_id, (__u64)zero_page,
-                       (payload.req_mode == WRITE_REQ) ? 0 : UFFDIO_COPY_MODE_WP) < 0) {
-            return -1;
-        }
-    }
+    // if (dsm_dsrlze_mgr_req_ack(msg_ctx->payload, sizeof(msg_ctx->payload), &payload) <
+    //     0) {
+    //     LOG_ERROR("dsm_dsrlze_mgr_req_ack");
+    //     return -1;
+    // }
+
+    // if (payload.is_empty) {
+    //     // Ya des données
+    //     if (pager_copy(dsm_wkr_ctx->uffd, payload.page_id, (__u64)payload.data,
+    //                    (payload.req_mode == WRITE_REQ) ? 0 : UFFDIO_COPY_MODE_WP) < 0)
+    //                    {
+    //         return -1;
+    //     }
+    // } else {
+    //     // pas de données
+    //     /**
+    //      * @note possible d'avoir pas de données sur une requete READ ?
+    //      */
+    //     void *zero_page =
+    //         calloc(1, EFFECTIVE_PAGESIZE); // alloue une plage de EFFECTIVE_PAGESIZE
+    //                                        // contigue initialisée à 0
+    //     if (pager_copy(dsm_wkr_ctx->uffd, payload.page_id, (__u64)zero_page,
+    //                    (payload.req_mode == WRITE_REQ) ? 0 : UFFDIO_COPY_MODE_WP) < 0)
+    //                    {
+    //         return -1;
+    //     }
+    // }
     return 0;
 }
 
@@ -287,7 +291,8 @@ void dispatch_call_wkr(void *arg) {
             // treat
             LOG_INFO("Reception par le noeud %d du code CODE_MGR_REQ_ACK et traitement.",
                      dsm_ctx->node_id);
-            treat_mgr_req_ack(msg_ctx);
+            treat_mgr_req_ack(
+                msg_ctx); /** @a TODO Ne pas oublier de < 0 check, c'est pas du void */
             break;
         case CODE_MGR_INVA_REQ:
             LOG_INFO("Reception par le noeud %d du code CODE_MGR_INVA_REQ et traitement.",

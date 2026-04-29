@@ -17,6 +17,6 @@ int main(int argc, char const *argv[]) {
     // config.net.node.role = DSM_ROLE_MANAGER; // Collision
     dsm_init(&config);
 
-    printf("%ld\n", EFFECTIVE_PAGESIZE);
+    printf("%d\n", EFFECTIVE_PAGESIZE);
     return 0;
 }

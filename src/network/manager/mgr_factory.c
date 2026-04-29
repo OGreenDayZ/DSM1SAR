@@ -422,10 +422,12 @@ int treat_lock_req_poss_init(dsm_page_content *page_content,
         dsm_hash_safe_get_end(&dsm_ctx->nodes_reg, pos->worker_id);
 
         if (ret < 0) {
+            pthread_mutex_unlock(&page_content->head_req_ctx.lock);
             return -1;
         }
 
         if (!found) {
+            pthread_mutex_unlock(&page_content->head_req_ctx.lock);
             LOG_ERROR("Erreur Algo : Noeud lecteur de la page non trouvé ?!");
             return -1;
         }
@@ -507,10 +509,12 @@ int treat_lock_req_poss_r(dsm_page_content *page_content,
             dsm_hash_safe_get_end(&dsm_ctx->nodes_reg, pos->worker_id);
 
             if (ret < 0) {
+                pthread_mutex_unlock(&page_content->head_req_ctx.lock);
                 return -1;
             }
 
             if (!found) {
+                pthread_mutex_unlock(&page_content->head_req_ctx.lock);
                 LOG_ERROR("Erreur Algo : Noeud lecteur de la page non trouvé ?!");
                 return -1;
             }
@@ -535,6 +539,7 @@ int treat_lock_req_poss_r(dsm_page_content *page_content,
             inva_ack_count++;
 
             if (ret < 0) {
+                pthread_mutex_unlock(&page_content->head_req_ctx.lock);
                 return -1;
             }
         }
@@ -549,6 +554,7 @@ int treat_lock_req_poss_r(dsm_page_content *page_content,
         pthread_mutex_unlock(&owner_node->send_lock);
 
         if (ret < 0) {
+            pthread_mutex_unlock(&page_content->head_req_ctx.lock);
             return -1;
         }
 
@@ -621,6 +627,7 @@ int treat_lock_req_poss_rw(dsm_page_content *page_content,
         pthread_mutex_unlock(&owner_node->send_lock);
 
         if (ret < 0) {
+            pthread_mutex_unlock(&page_content->head_req_ctx.lock);
             return -1;
         }
 

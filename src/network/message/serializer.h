@@ -27,12 +27,14 @@ int dsm_srlze_dscv_finalize(uint8_t *buf, size_t buf_sz);
 
 // PAGER :
 int dsm_srlze_wkr_req(uint32_t page_id, uint8_t mode, uint8_t *buf, size_t buf_sz);
-int dsm_srlze_mgr_inva_req(uint32_t page_id, uint8_t is_sync, uint8_t *buf, size_t buf_sz);
-int dsm_srlze_mgr_data_req(uint32_t page_id, uint8_t is_invalidate, uint8_t *buf, size_t buf_sz);
+int dsm_srlze_mgr_inva_req(uint32_t page_id, uint8_t is_sync, uint8_t *buf,
+                           size_t buf_sz);
+int dsm_srlze_mgr_data_req(uint32_t page_id, uint8_t is_invalidate, uint8_t *buf,
+                           size_t buf_sz);
 int dsm_srlze_wkr_inva_ack(uint32_t page_id, uint8_t *buf, size_t buf_sz);
 int dsm_srlze_wkr_data_ack(uint32_t page_id, uint8_t *data, uint8_t *buf, size_t buf_sz);
-int dsm_srlze_mgr_req_ack(uint32_t page_id,uint8_t req_mode, uint8_t is_empty, uint8_t* data, 
-                            uint8_t* buf, size_t buf_sz) ;
+int dsm_srlze_mgr_req_ack(uint32_t page_id, uint8_t req_mode, uint8_t is_empty,
+                          uint8_t *data, uint8_t *buf, size_t buf_sz);
 /**
  * @note: Pas de fonction de désérialisation pour les messages sans payload,
  *        le dsm_dsrlze_header suffit
@@ -52,6 +54,6 @@ int dsm_dsrlze_wkr_req(uint8_t *buf, size_t buf_sz, dsm_msg_wkr_req *msg);
 int dsm_dsrlze_mgr_inva_req(uint8_t *buf, size_t buf_sz, dsm_msg_mgr_inva_req *msg);
 int dsm_dsrlze_mgr_data_req(uint8_t *buf, size_t buf_sz, dsm_msg_mgr_data_req *msg);
 int dsm_dsrlze_wkr_inva_ack(uint8_t *buf, size_t buf_sz, dsm_msg_wkr_inva_ack *msg);
-int dsm_dsrlze_wkr_data_ack(uint8_t *buf, size_t buf_sz, dsm_msg_wkr_data_ack *msg);
-int dsm_dsrlze_mgr_req_ack(uint8_t *buf, size_t buf_sz, dsm_msg_mgr_req_ack *msg); 
+int dsm_dsrlze_wkr_data_ack(uint8_t *buf, size_t buf_sz, dsm_msg_wkr_data_ack **msg);
+int dsm_dsrlze_mgr_req_ack(uint8_t *buf, size_t buf_sz, dsm_msg_mgr_req_ack **msg);
 #endif // DSM_SERIALIZER_H
