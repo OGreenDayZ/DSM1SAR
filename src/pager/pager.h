@@ -16,11 +16,11 @@
  * Indique l'intention du worker lorsqu'il demande l'accès à une page.
  */
 typedef enum {
+    UNLOCK_REQ, /**< Libération du verrou exclusif. */
     READ_REQ,  /**< Demande d'accès en lecture. */
     WRITE_REQ, /**< Demande d'accès en écriture (implique l'invalidation
                 *   de la page chez les autres workers). */
     LOCK_REQ,  /**< Demande de verrouillage exclusif. */
-    UNLOCK_REQ /**< Libération du verrou exclusif. */
 } page_mode_req;
 
 typedef enum {

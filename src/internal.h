@@ -21,7 +21,7 @@ typedef struct {
      */
     pthread_mutex_t send_lock;
     int tcp_sock;               // socket de communication avec ce node
-    struct dsm_hlist_node node; // "node" pour la liste de la hashmap
+    struct dsm_hlist_node node; // "node" pour la liste de la hashmap nodes_reg
 } dsm_node_content;
 
 typedef struct {

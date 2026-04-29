@@ -56,6 +56,22 @@ void *thread_work(void *arg) {
     return NULL;
 }
 
+void *thread_work_1(void *arg) {
+    thread_arg_t *t_arg = (thread_arg_t *)arg;
+    int tid = t_arg->thread_id;
+    int nid = t_arg->node_id;
+    int *data = t_arg->shared_data;
+    if (nid == 1) {
+        printf("[Nœud %d - Thread %d] Tentative de lecture...\n", nid, tid);
+        printf("[Nœud %d - Thread %d] Valeur lue : data[%d] = %d\n", nid, tid, tid,
+               data[tid]);
+    } else {
+        // printf("[Nœud %d - Thread %d] Tentative de lecture distante...\n", nid, tid);
+        // printf("[Nœud %d - Thread %d] Valeur lue : %d\n", nid, tid, data[tid]);
+    }
+    return NULL;
+}
+
 int main() {
     dsm_config config;
     dsm_get_default_config(&config);
@@ -71,7 +87,7 @@ int main() {
     int *shared_memory = NULL;
 
     if (dsm_get_role() == DSM_ROLE_WORKER) {
-        shared_memory = (int *)dsm_alloc(sizeof(int) * 100);
+        shared_memory = (int *)dsm_alloc();
 
         pthread_t threads[NB_THREADS_PER_NODE];
         thread_arg_t args[NB_THREADS_PER_NODE];
@@ -80,7 +96,7 @@ int main() {
             args[i].thread_id = i;
             args[i].node_id = my_id;
             args[i].shared_data = shared_memory;
-            pthread_create(&threads[i], NULL, thread_work, &args[i]);
+            pthread_create(&threads[i], NULL, thread_work_1, &args[i]);
         }
 
         for (int i = 0; i < NB_THREADS_PER_NODE; i++) {

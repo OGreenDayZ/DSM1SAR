@@ -24,7 +24,7 @@ int main() {
     // Ils reçoivent TOUS le même pointeur virtuel vers la zone surveillée.
     int *shared_data = NULL;
     if (dsm_get_role() == DSM_ROLE_WORKER)
-        shared_data = (int *)dsm_alloc(sizeof(int) * 100);
+        shared_data = (int *)dsm_alloc();
 
     // On récupère l'ID du nœud (souvent stocké dans dsm_ctx)
     // Supposons que dsm_get_node_id() existe dans ton API

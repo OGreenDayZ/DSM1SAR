@@ -17,6 +17,7 @@ typedef struct {
 
     unsigned int manager_id;           // key : id local (connu des workers)
     unsigned int node_id;              // value : id global réel
+
     dsm_node_content *to_node_content; // raccourci vers la struct de noeud
     struct dsm_hlist_node node;
 
@@ -49,6 +50,9 @@ typedef struct {
 
 typedef struct {
     page_mode_req mode_req; // Le max requete faite pour cette page
+    int started; // flag pour dire si la requete est en cours de traitement ou pas
+    // 0 -> non, 1 -> oui 
+    int dont_do; // 0 -> do , 1 -> dont_do
     dsm_list_head node; 
 } dsm_requests_reg_list_entry; // entrée de list_req
 

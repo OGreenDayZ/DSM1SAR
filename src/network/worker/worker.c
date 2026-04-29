@@ -8,6 +8,7 @@
 #include "pager/pager.h"
 #include "util/concurrent/safe_list.h"
 
+#include <bits/pthreadtypes.h>
 #include <linux/userfaultfd.h>
 #include <pthread.h>
 #include <string.h>
@@ -130,68 +131,140 @@ int get_mgr_node_socket_for_page(unsigned long page_id) {
     return content->to_node_content->tcp_sock;
 }
 
-// TODO majda - protéger les envoies des WKR_REQ
+pthread_mutex_t get_mgr_send_lock_for_page(unsigned long page_id) {
+    int manager_id = get_mgr_id_for_page(page_id);
+    dsm_node_content *entry = NULL, *obj;
+    dsm_hash_safe_get(&dsm_ctx->nodes_reg, obj, node, manager_id) {
+        if (obj->id == manager_id) {
+            entry = obj;
+            break;
+        }
+    }
+    dsm_hash_safe_get_end(&dsm_ctx->nodes_reg, manager_id);
+    return entry->send_lock;
+}
+
+// TODO - majda : revoir, est ce que j'ajoute tout le temps la requete, ou si il existe
+// une requete dont started = 1, alors ne pas ajouter la requete
+// Il faut supprimer la requete et des qu'elle est fini donc qu'on recoit un ack pour elle
+// Ne pas ajouter la requete tout le temps !!!
+dsm_requests_reg_list_entry *add_request(unsigned long page_id, page_mode_req mode) {
+    dsm_requests_reg_entry *entry_map, *entry_parcours = NULL;
+    dsm_requests_reg_list_entry *to_be_added =
+        malloc(sizeof(dsm_requests_reg_list_entry));
+
+    dsm_hash_safe_get(&dsm_wkr_ctx->requests_reg, entry_parcours, node, page_id) {
+        entry_map = entry_parcours;
+    }
+    dsm_hash_safe_get_end(&dsm_wkr_ctx->requests_reg, page_id);
+    // if (entry_map == NULL) {
+    // Pas de requete en cours pour cette page
+    // J'ajoute la requete
+    printf("[add_request] je vais ajouter la requete\n");
+    to_be_added->mode_req = mode;
+    to_be_added->started = 0;
+    to_be_added->dont_do = 0;
+    dsm_safe_list_add_tail(&entry_map->list_req, &to_be_added->node);
+    // }
+
+    return to_be_added;
+}
+
+/**
+ * @brief
+ *
+ * @param page_id
+ * @param mode
+ * @return int 0 si ca existe pas, 1 si ca existe
+ */
+// TODO - majda : revoir la logique
+int has_higher_priority_pending(unsigned long page_id, page_mode_req mode) {
+    dsm_requests_reg_entry *entry_map, *entry_parcours = NULL;
+    int higher_exist = 0; // faux
+    dsm_requests_reg_list_entry *req_pos;
+
+    dsm_hash_safe_get(&dsm_wkr_ctx->requests_reg, entry_parcours, node, page_id) {
+        entry_map = entry_parcours;
+    }
+    dsm_hash_safe_get_end(&dsm_wkr_ctx->requests_reg, page_id);
+
+    // On parcourt la liste de requete a la recherche de la requete la + ancienne qui est
+    // started et qui a une priorité + elevé que req
+    // Hiérarchie -> LOCK > WRITE > READ > UNLOCK
+    if (!entry_map)
+        return 0;
+
+    // On verrouille la liste pour la parcourir en sécurité
+    dsm_safe_list_for_each_entry(&entry_map->list_req, req_pos, node) {
+
+        // LOGIQUE D'ANNULATION (dont_do)
+        // // mode = le mode de la nouvelle requete, req_pos->mode_req = la requete
+        // pending if (mode == WRITE_REQ &&
+        //     (req_pos->mode_req == READ_REQ && req_pos->started == 0)) {
+        //     req_pos->dont_do = 1; // On annule le futur READ au profit de notre WRITE
+        // }
+
+        if (mode == req_pos->mode_req ||
+            (mode == req_pos->mode_req && req_pos->started == 1)) {
+            higher_exist = 1;
+            dsm_safe_list_unlock(&entry_map->list_req);
+            break;
+        }
+        printf("[has_higher_priority_pending] Il existe pas de requete + prioritaire ou "
+               "en cours d'exécution\n");
+        // LOGIQUE DE PRIORITÉ (Bloquer l'envoi)
+        // if (req_pos->started && !req_pos->dont_do) {
+        //     if (mode == READ_REQ &&
+        //         (req_pos->mode_req == READ_REQ || req_pos->mode_req == WRITE_REQ ||
+        //          req_pos->mode_req == LOCK_REQ))
+        //         higher_exist = 1;
+        //     if (mode == WRITE_REQ &&
+        //         (req_pos->mode_req == WRITE_REQ || req_pos->mode_req == LOCK_REQ))
+        //         higher_exist = 1;
+        // }
+    }
+    return higher_exist;
+}
+
 static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
-    printf(
-        "[treat_uffd_pagefault] je suis dans la fonction de traitement du pagefault\n");
     __u64 addr = fault_msg->arg.pagefault.address;
     int page_id = addr_to_page_id(addr);
     int flags = fault_msg->arg.pagefault.flags;
     int fd_sock_mgr = get_mgr_node_socket_for_page(page_id);
+    pthread_mutex_t send_lock = get_mgr_send_lock_for_page(page_id);
+    dsm_requests_reg_list_entry *req_entry;
+    int ret = 0;
 
-    printf("[treat_uffd_pagefault] je check les flags.\n");
-    printf("[treat_uffd_pagefault] UFFD_PAGEFAULT_FLAG_WRITE : %d\n",
-           flags & UFFD_PAGEFAULT_FLAG_WRITE);
-    printf("[treat_uffd_pagefault] UFFD_PAGEFAULT_FLAG_WP : %d\n",
-           flags & UFFD_PAGEFAULT_FLAG_WP);
-    if (flags & UFFD_PAGEFAULT_FLAG_WRITE || flags & UFFD_PAGEFAULT_FLAG_WP) {
-        /**
-         * Accés en écriture à une page non présente en mémoire :
-         * prévenir le manager de cette écriture, pour recuperer les données de la page
-         * OU
-         * Accès en écriture sur une page présente et protégée en écriture :
-         * prévenir le manager pour qu'il invalide la page chez les autres workers,
-         * puis retirer la protection d'écriture localement.
-         */
-        LOG_INFO("Pagefault en écriture sur la page %d, envoi d'une requete WRITE_REQ au "
-                 "manager",
-                 page_id);
-        printf("[treat_uffd_pagefault] Pagefault en écriture sur la page %d, envoi d'une "
-               "requete WRITE_REQ au "
-               "manager\n",
-               page_id);
-        get_mgr_id_for_page(page_id);
-        // Je dois ici ajouter la requete a la liste de requests_reg
-        // avec mode_req = WRITE_REQ
-        dsm_requests_reg_entry *entry_map, *entry_parcours = NULL;
-        dsm_requests_reg_list_entry *to_be_added =
-            malloc(sizeof(dsm_requests_reg_list_entry));
+    page_mode_req mode = (flags & (UFFD_PAGEFAULT_FLAG_WRITE | UFFD_PAGEFAULT_FLAG_WP))
+                             ? WRITE_REQ
+                             : READ_REQ;
 
-        dsm_hash_safe_get(&dsm_wkr_ctx->requests_reg, entry_map, node, page_id) {
-            entry_map = entry_parcours;
-        }
-        dsm_hash_safe_get_end(&dsm_wkr_ctx->requests_reg, page_id);
-        if (entry_map == NULL) {
-            // Pas de requete en cours pour cette page
-            // J'ajoute la requete
-            to_be_added->mode_req = WRITE_REQ;
-            dsm_safe_list_add_tail(&entry_map->list_req, &to_be_added->node);
-        }
-        // TODO majda - add the lock to send
-        return send_wkr_req(page_id, WRITE_REQ, fd_sock_mgr);
-    }
-    /*
-     * Accés a une page non présente en lecture :
-     * envoyer une requete au manager qui gere cette page
-     */
-    printf("[treat_uffd_pagefault] Pagefault en lecture sur la page %d, envoi d'une "
-           "requete READ_REQ au "
-           "manager\n",
+    const char *mode_str = (mode == WRITE_REQ) ? "écriture" : "lecture";
+
+    printf("[treat_uffd_pagefault] Traitement pagefault en %s (page %d)\n", mode_str,
            page_id);
-    printf("[treat_uffd_pagefault] flags : %d, should be empty\n", flags);
+    printf("[treat_uffd_pagefault] UFFD_PAGEFAULT_FLAG_WRITE : %d, WP : %d\n",
+           flags & UFFD_PAGEFAULT_FLAG_WRITE, flags & UFFD_PAGEFAULT_FLAG_WP);
 
-    // TODO majda - add the lock to send
-    return send_wkr_req(page_id, READ_REQ, fd_sock_mgr);
+    pthread_mutex_lock(&send_lock);
+
+    if (has_higher_priority_pending(page_id, mode) == 1) {
+        printf("[treat_uffd_pagefault] Il existe une requête + prioritaire, annulation "
+               "de l'envoi.\n");
+        req_entry = add_request(page_id, mode);
+        req_entry->dont_do = 1; // On marque comme "à ne pas faire"
+        req_entry->started =
+            1; // Mais on marque started pour que les threads suivants attendent cet ID
+    } else {
+        printf("[treat_uffd_pagefault] Envoi d'une requête %s au manager\n", mode_str);
+        req_entry = add_request(page_id, mode);
+        req_entry->dont_do = 0;
+        req_entry->started = 1;
+        ret = send_wkr_req(page_id, mode, fd_sock_mgr);
+    }
+
+    pthread_mutex_unlock(&send_lock);
+    return ret;
 }
 
 void dispatch_call_uffd(void *arg) {
@@ -227,7 +300,8 @@ void dispatch_call_uffd(void *arg) {
  */
 static int treat_mgr_inva_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     dsm_msg_mgr_inva_req payload;
-    if (dsm_dsrlze_mgr_inva_req(msg_ctx->payload, sizeof(msg_ctx->payload), &payload) <
+
+    if (dsm_dsrlze_mgr_inva_req(msg_ctx->payload, msg_ctx->header.payload_len, &payload) <
         0) {
         LOG_ERROR("dsm_dsrlze_mgr_inva_req");
         return -1;
@@ -256,7 +330,7 @@ static int treat_mgr_inva_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
  */
 static int treat_mgr_data_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     dsm_msg_mgr_data_req payload;
-    if (dsm_dsrlze_mgr_data_req(msg_ctx->payload, sizeof(msg_ctx->payload), &payload) <
+    if (dsm_dsrlze_mgr_data_req(msg_ctx->payload, msg_ctx->header.payload_len, &payload) <
         0) {
         LOG_ERROR("dsm_dsrlze_mgr_data_req");
         return -1;
@@ -298,7 +372,7 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
                                        // contigue initialisée à 0
     dsm_locks_reg_entry *entry, *n;
 
-    if (dsm_dsrlze_mgr_req_ack(msg_ctx->payload, sizeof(msg_ctx->payload), &payload) <
+    if (dsm_dsrlze_mgr_req_ack(msg_ctx->payload, msg_ctx->header.payload_len, &payload) <
         0) {
         LOG_ERROR("dsm_dsrlze_mgr_req_ack");
         return -1;
@@ -355,6 +429,7 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
             // pas de ca ici
         case WRITE_REQ:
             // maybe or maybe not, but i think not
+            // WEEE je dois supprimer les entrés de la requests_pending_list
             break;
         case READ_REQ:
             break;
