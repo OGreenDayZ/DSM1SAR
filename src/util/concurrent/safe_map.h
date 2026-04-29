@@ -246,4 +246,23 @@ static inline size_t dsm_safe_map_count(dsm_safe_map *m) {
         __inserted;                                                                      \
     })
 
+/**
+ * @brief Vérifie si une clé existe dans la map
+ * @return 1 si trouvé, 0 sinon.
+ */
+#define dsm_hash_safe_contains(m, obj, member, key_field, key)                           \
+    ({                                                                                   \
+        unsigned int __bkt = __DSM_SAFE_BKT((m), (key));                                 \
+        int __found = 0;                                                                 \
+        pthread_rwlock_rdlock(__DSM_SAFE_LOCK((m), __bkt));                              \
+        dsm_hlist_for_each_entry(obj, __DSM_SAFE_HEAD((m), __bkt), member) {             \
+            if ((obj)->key_field == (key)) {                                             \
+                __found = 1;                                                             \
+                break;                                                                   \
+            }                                                                            \
+        }                                                                                \
+        pthread_rwlock_unlock(__DSM_SAFE_LOCK((m), __bkt));                              \
+        __found;                                                                         \
+    })
+
 #endif /* DSM_SAFE_MAP_H */

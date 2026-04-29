@@ -366,7 +366,7 @@ static int treat_mgr_data_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
  * @return int
  */
 static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
-    dsm_msg_mgr_req_ack payload;
+    dsm_msg_mgr_req_ack *payload;
     void *zero_page =
         calloc(1, EFFECTIVE_PAGESIZE); // alloue une plage de EFFECTIVE_PAGESIZE
                                        // contigue initialisée à 0
@@ -461,7 +461,8 @@ void dispatch_call_wkr(void *arg) {
             // treat
             LOG_INFO("Reception par le noeud %d du code CODE_MGR_REQ_ACK et traitement.",
                      dsm_ctx->node_id);
-            treat_mgr_req_ack(msg_ctx);
+            treat_mgr_req_ack(
+                msg_ctx); /** @a TODO Ne pas oublier de < 0 check, c'est pas du void */
             break;
         case CODE_MGR_INVA_REQ:
             LOG_INFO("Reception par le noeud %d du code CODE_MGR_INVA_REQ et traitement.",

@@ -1,13 +1,14 @@
 #ifndef DSM_SPVS_FACTORY_H
 #define DSM_SPVS_FACTORY_H
 
+/**
+ * @file : sous fichier de supervisor.c, pour les IO
+ * @note : les fonctions "treat" de ce fichier sont invoquées après les recv sur les
+ * sockets
+ */
+
 #include "network/discover/supervisor.h"
 #include "network/message/message.h"
-
-/**
- * @note : sous fichier de supervisor.c, pour les IO
- * @note les fonctions "treat" de ce fichier sont invoquées après les recv sur les sockets
- */
 
 int treat_dscv_init(dsm_msg_udp_thread_ctx *msg_ctx, dsm_supervisor_ctx *spvs_ctx);
 int send_dscv_join_ack(int dest_sock, unsigned int assigned_id);

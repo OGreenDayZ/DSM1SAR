@@ -1,7 +1,15 @@
 #include "manager.h"
+
+#include <string.h>
+#include <unistd.h>
+
 #include "debug/debug.h"
+#include "internal.h"
+#include "network/manager/mgr_factory.h"
 #include "network/message/serializer.h"
+#include "network/pager/pager_msg.h"
 #include "pager/pager.h"
+#include "util/concurrent/safe_list.h"
 
 dsm_manager_ctx *dsm_mgr_ctx = NULL;
 
@@ -36,7 +44,6 @@ static dsm_request_content *make_req_content(dsm_msg_tcpss_thread_ctx *msg_ctx,
         return NULL;
     }
 
-    req_content->sock = msg_ctx->sock;
     req_content->header = msg_ctx->header;
     req_content->info = *req;
     dsm_dq_node_init(&req_content->node);
@@ -61,7 +68,7 @@ static dsm_page_content *make_page_content(unsigned int page_id) {
 
     pthread_mutex_init(&page_content->head_req_ctx.lock, NULL);
     page_content->head_req_ctx.missing_acks = 0;
-    page_content->head_req_ctx.is_missing_data = false;
+    page_content->head_req_ctx.promotion_only = false;
     page_content->head_req_ctx.data_size = 0;
     page_content->head_req_ctx.data = NULL;
 
@@ -83,7 +90,7 @@ static dsm_request_content *req_content_of(dsm_dq_node *n) {
  *            qui sont protégés par leurs propres mécanismes de synchronisation.
  */
 static int push_req(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
-                    bool *is_drainer, dsm_page_content **out_page_content) {
+                    dsm_page_content **out_page_content, bool *is_drainer) {
 
     dsm_page_content *obj;
     dsm_page_content *page_content = make_page_content(req->page_id);
@@ -110,21 +117,115 @@ static int push_req(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
 }
 
 static int treat_wkr_read_req(dsm_page_content *page_content,
-                              dsm_request_content *req_content, bool *is_req_completed) {
-    // TODO
+                              dsm_request_content *req_content, bool *req_completed) {
+
+    switch (page_content->mode) {
+
+        case PAGE_INIT:
+            if (treat_read_req_poss_init(page_content, req_content, req_completed) < 0) {
+                return -1;
+            }
+            break;
+
+        case PAGE_R:
+            if (treat_read_req_poss_r(page_content, req_content, req_completed) < 0) {
+                return -1;
+            }
+            break;
+
+        case PAGE_RW:
+            if (treat_read_req_poss_rw(page_content, req_content, req_completed) < 0) {
+                return -1;
+            }
+            break;
+
+        case PAGE_LOCKED:
+            LOG_ERROR("Erreur Algo : LOCKED sans UNLOCK_REQ ?!");
+            return -1;
+
+        default:
+            LOG_ERROR("Mode de possession de page inconnu : %d", page_content->mode);
+            return -1;
+    }
     return 0;
 }
 
 static int treat_wkr_write_req(dsm_page_content *page_content,
-                               dsm_request_content *req_content, bool *is_req_completed) {
-    // TODO
+                               dsm_request_content *req_content, bool *req_completed) {
+
+    switch (page_content->mode) {
+
+        case PAGE_INIT:
+            if (treat_write_req_poss_init(page_content, req_content, req_completed) < 0) {
+                return -1;
+            }
+            break;
+
+        case PAGE_R:
+            if (treat_write_req_poss_r(page_content, req_content, req_completed) < 0) {
+                return -1;
+            }
+            break;
+
+        case PAGE_RW:
+            if (treat_write_req_poss_rw(page_content, req_content, req_completed) < 0) {
+                return -1;
+            }
+            break;
+
+        case PAGE_LOCKED:
+            LOG_ERROR("Erreur Algo : LOCKED sans UNLOCK_REQ ?!");
+            return -1;
+
+        default:
+            LOG_ERROR("Mode de possession de page inconnu : %d", page_content->mode);
+            return -1;
+    }
     return 0;
 }
 
 static int treat_wkr_lock_req(dsm_page_content *page_content,
-                              dsm_request_content *req_content, bool *is_req_completed) {
-    // TODO
+                              dsm_request_content *req_content, bool *req_completed) {
+
+    switch (page_content->mode) {
+
+        case PAGE_INIT:
+            if (treat_lock_req_poss_init(page_content, req_content, req_completed) < 0) {
+                return -1;
+            }
+            break;
+
+        case PAGE_R:
+            if (treat_lock_req_poss_r(page_content, req_content, req_completed) < 0) {
+                return -1;
+            }
+            break;
+
+        case PAGE_RW:
+            if (treat_lock_req_poss_rw(page_content, req_content, req_completed) < 0) {
+                return -1;
+            }
+            break;
+
+        case PAGE_LOCKED:
+            LOG_ERROR("Erreur Algo : LOCKED sans UNLOCK_REQ ?!");
+            return -1;
+
+        default:
+            LOG_ERROR("Mode de possession de page inconnu : %d", page_content->mode);
+            return -1;
+    }
     return 0;
+}
+
+static void reset_head_req_ctx(dsm_page_content *page_content) {
+    page_content->head_req_ctx.missing_acks = 0;
+    page_content->head_req_ctx.promotion_only = false;
+    page_content->head_req_ctx.data_size = 0;
+    if (page_content->head_req_ctx.data) {
+        free(page_content->head_req_ctx.data);
+    }
+    page_content->head_req_ctx.data = NULL;
 }
 
 /**
@@ -162,11 +263,72 @@ static int drain_reqs(dsm_page_content *page_content) {
                 return -1;
         }
 
+        if (!req_completed) {
+            break;
+        }
+
+        /**
+         * @warning : On ne pop que si elle est finalisée !
+         */
         int empty = dsm_dq_pop(&page_content->pending_reqs);
-        if (!req_completed || empty) {
+        if (empty) {
+            reset_head_req_ctx(page_content);
             break;
         }
     }
+    return 0;
+}
+
+static dsm_page_content *find_page_content(uint32_t page_id) {
+    dsm_page_content *page_content = NULL;
+    if (!dsm_hash_safe_contains(&dsm_mgr_ctx->pages_reg, page_content, node, page_id,
+                                page_id)) {
+        return NULL;
+    } else {
+        return page_content;
+    }
+}
+
+static int try_unlock(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
+                      dsm_page_content **out_page_content, bool *is_drainer) {
+
+    *out_page_content = find_page_content(req->page_id);
+    if (!*out_page_content) {
+        LOG_ERROR("Page %u non trouvée pour UNLOCK_REQ ?!", req->page_id);
+        return -1;
+    }
+
+    if ((*out_page_content)->mode != PAGE_LOCKED) {
+        LOG_ERROR("UNLOCK_REQ sur une page qui n'est pas LOCKED ?! (page_id=%u, mode=%d)",
+                  req->page_id, (*out_page_content)->mode);
+        return -1;
+    }
+
+    dsm_dq_node *front = dsm_dq_front(&(*out_page_content)->pending_reqs);
+    if (!front) {
+        LOG_ERROR("UNLOCK_REQ sur une page sans requête ?!", req->page_id);
+        return -1;
+    }
+
+    dsm_request_content *front_req_content = req_content_of(front);
+    if (front_req_content->info.mode != LOCK_REQ) {
+        LOG_ERROR(
+            "UNLOCK_REQ sur une page dont la requête en tête n'est pas un LOCK_REQ ?!"
+            "(page_id=%u, front_req_mode=%d)",
+            req->page_id, front_req_content->info.mode);
+        return -1;
+    }
+
+    if (front_req_content->header.id != msg_ctx->header.id) {
+        LOG_ERROR("UNLOCK_REQ par un worker qui n'est pas celui de la requête en tête ?!"
+                  "(page_id=%u, front_req_worker_id=%u, unlock_req_worker_id=%u)",
+                  req->page_id, front_req_content->header.id, msg_ctx->header.id);
+        return -1;
+    }
+
+    *is_drainer = !dsm_dq_pop(&(*out_page_content)->pending_reqs);
+    reset_head_req_ctx((*out_page_content));
+
     return 0;
 }
 
@@ -178,42 +340,249 @@ static int treat_wkr_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
         return -1;
     }
 
+    bool is_drainer = false;
+    dsm_page_content *page_content;
     if (req.mode == READ_REQ || req.mode == WRITE_REQ || req.mode == LOCK_REQ) {
-        bool is_drainer;
-        dsm_page_content *page_content;
-        if (push_req(msg_ctx, &req, &is_drainer, &page_content) < 0) {
+
+        if (push_req(msg_ctx, &req, &page_content, &is_drainer) < 0) {
             return -1;
         }
 
-        if (is_drainer) {
-            if (drain_reqs(page_content) < 0) {
-                return -1;
-            }
+    } else if (req.mode == UNLOCK_REQ) {
+        if (try_unlock(msg_ctx, &req, &page_content, &is_drainer) < 0) {
+            return -1;
         }
 
-    } else if (req.mode == UNLOCK_REQ) {
     } else {
-        LOG_WARNING("Mode de requête de page inconnu : %d", req.mode);
+        LOG_ERROR("Mode de requête de page inconnu : %d", req.mode);
         return -1;
+    }
+
+    if (is_drainer) {
+        LOG_INFO("Drain-Début pour la page %u", page_content->page_id);
+        if (drain_reqs(page_content) < 0) {
+            return -1;
+        }
+        LOG_INFO("Drain-Fin pour la page %u", page_content->page_id);
     }
 
     LOG_INFO("Succès du traitement du CODE=%d", CODE_WKR_REQ);
     return 0;
 }
 
+/**
+ * @warning : Toujours appeler cette fonction après avoir lock le head_req_ctx de la page
+ *
+ */
+static int try_send_req_ack(dsm_page_content *page_content, bool *is_drainer) {
+    pending_reqs_head_ctx *head_ctx = &page_content->head_req_ctx;
+    if (head_ctx->missing_acks > 0) {
+        return 0;
+    }
+
+    dsm_request_content *req_content =
+        req_content_of(dsm_dq_front(&page_content->pending_reqs));
+    if (!req_content) {
+        LOG_ERROR("Erreur Algo : Requête en tête de la page non trouvée ?!");
+        return -1;
+    }
+
+    unsigned int cb_id = req_content->header.id;
+    dsm_node_content *node_content;
+    dsm_node_content *cb_node = NULL;
+
+    dsm_hash_safe_get(&dsm_ctx->nodes_reg, node_content, node, cb_id) {
+        if (node_content->id == cb_id) {
+            cb_node = node_content;
+        }
+    }
+    dsm_hash_safe_get_end(&dsm_ctx->nodes_reg, cb_id);
+
+    if (!cb_node) {
+        LOG_ERROR("Erreur Algo : Noeud cible de la requete non trouvé ?!");
+        return -1;
+    }
+
+    int ret = 0;
+    pthread_mutex_lock(&cb_node->send_lock);
+    if (head_ctx->data_size == 0) {
+        if (head_ctx->promotion_only) {
+            ret = send_mgr_req_ack(page_content->page_id, req_content->info.mode,
+                                   PROMOTE_ONLY, NULL, cb_node->tcp_sock);
+        } else {
+            ret = send_mgr_req_ack(page_content->page_id, req_content->info.mode,
+                                   EMPTY_INIT, NULL, cb_node->tcp_sock);
+        }
+    } else {
+        ret = send_mgr_req_ack(page_content->page_id, req_content->info.mode, NOT_EMPTY,
+                               head_ctx->data, cb_node->tcp_sock);
+    }
+    pthread_mutex_unlock(&cb_node->send_lock);
+
+    if (ret < 0) {
+        return -1;
+    }
+
+    *is_drainer = !dsm_dq_pop(&page_content->pending_reqs);
+    reset_head_req_ctx(page_content);
+
+    return 0;
+}
+
+static int inject_data(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_data_ack *data_ack,
+                       dsm_page_content **out_page_content, bool *is_drainer) {
+
+    *out_page_content = find_page_content(data_ack->page_id);
+    if (!*out_page_content) {
+        LOG_ERROR("Page %u non trouvée pour DATA_ACK ?!", data_ack->page_id);
+        return -1;
+    }
+
+    /**
+     * @warning : owner_id n'est pas == -1, vérification faite avant l'appel à inject_data
+     */
+    if ((unsigned int)(*out_page_content)->owner_id == msg_ctx->header.id) {
+        LOG_ERROR("Erreur Algo : DATA_ACK d'un worker qui est proprio de la page ?! "
+                  "(page_id=%u, worker_id=%u)",
+                  data_ack->page_id, msg_ctx->header.id);
+        return -1;
+    }
+
+    pthread_mutex_lock(&(*out_page_content)->head_req_ctx.lock);
+    if ((*out_page_content)->head_req_ctx.missing_acks == 0) {
+        LOG_ERROR("Erreur Algo : DATA_ACK reçu alors que la requête en tête n'attend pas "
+                  "d'ACK ?! (page_id=%u, worker_id=%u)",
+                  data_ack->page_id, msg_ctx->header.id);
+        goto unlock_return;
+    }
+
+    if ((*out_page_content)->head_req_ctx.promotion_only) {
+        LOG_ERROR(
+            "Erreur Algo : DATA_ACK reçu alors que la requête en tête n'attend que des "
+            "ACK d'invalidation ?! (page_id=%u, worker_id=%u)",
+            data_ack->page_id, msg_ctx->header.id);
+        goto unlock_return;
+    }
+
+    if ((*out_page_content)->head_req_ctx.data_size != 0) {
+        LOG_ERROR(
+            "Erreur Algo : DATA_ACK reçu alors que la requête en tête a déjà reçu des "
+            "données ?! (page_id=%u, worker_id=%u)",
+            data_ack->page_id, msg_ctx->header.id);
+        goto unlock_return;
+    }
+
+    (*out_page_content)->head_req_ctx.missing_acks--;
+    (*out_page_content)->head_req_ctx.data_size = EFFECTIVE_PAGESIZE;
+
+    (*out_page_content)->head_req_ctx.data = malloc(EFFECTIVE_PAGESIZE);
+    if (!(*out_page_content)->head_req_ctx.data) {
+        LOG_ERROR("malloc data page pour inject_data");
+        goto unlock_return;
+    }
+    memcpy((*out_page_content)->head_req_ctx.data, data_ack->data, EFFECTIVE_PAGESIZE);
+
+    try_send_req_ack(*out_page_content, is_drainer);
+
+    pthread_mutex_unlock(&(*out_page_content)->head_req_ctx.lock);
+
+    return 0;
+
+unlock_return:
+    pthread_mutex_unlock(&(*out_page_content)->head_req_ctx.lock);
+    return -1;
+}
+
+static int inject_inva(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_inva_ack *inva_ack,
+                       dsm_page_content **out_page_content, bool *is_drainer) {
+
+    *out_page_content = find_page_content(inva_ack->page_id);
+    if (!*out_page_content) {
+        LOG_ERROR("Page %u non trouvée pour INVA_ACK ?!", inva_ack->page_id);
+        return -1;
+    }
+
+    /**
+     * @warning : owner_id n'est pas == -1, vérification faite avant l'appel à inject_data
+     */
+    if ((unsigned int)(*out_page_content)->owner_id == msg_ctx->header.id) {
+        LOG_ERROR("Erreur Algo : INVA_ACK d'un worker qui est proprio de la page ?! "
+                  "(page_id=%u, worker_id=%u)",
+                  inva_ack->page_id, msg_ctx->header.id);
+        return -1;
+    }
+
+    pthread_mutex_lock(&(*out_page_content)->head_req_ctx.lock);
+    if ((*out_page_content)->head_req_ctx.missing_acks == 0) {
+        LOG_ERROR("Erreur Algo : INVA_ACK reçu alors que la requête en tête n'attend pas "
+                  "d'ACK ?! (page_id=%u, worker_id=%u)",
+                  inva_ack->page_id, msg_ctx->header.id);
+        goto unlock_return;
+    }
+
+    (*out_page_content)->head_req_ctx.missing_acks--;
+
+    try_send_req_ack(*out_page_content, is_drainer);
+
+    pthread_mutex_unlock(&(*out_page_content)->head_req_ctx.lock);
+
+    return 0;
+
+unlock_return:
+    pthread_mutex_unlock(&(*out_page_content)->head_req_ctx.lock);
+    return -1;
+}
+
 static int treat_wkr_data_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     LOG_INFO("Traitement d'un CODE=%d ...", CODE_WKR_DATA_ACK);
 
-    // TODO
+    dsm_msg_wkr_data_ack *data_ack;
+    if (dsm_dsrlze_wkr_data_ack(msg_ctx->payload, msg_ctx->header.payload_len,
+                                &data_ack) < 0) {
+        return -1;
+    }
+
+    bool is_drainer = false;
+    dsm_page_content *page_content;
+    if (inject_data(msg_ctx, data_ack, &page_content, &is_drainer) < 0) {
+        return -1;
+    }
+
+    if (is_drainer) {
+        LOG_INFO("Drain-Début pour la page %u", page_content->page_id);
+        if (drain_reqs(page_content) < 0) {
+            return -1;
+        }
+        LOG_INFO("Drain-Fin pour la page %u", page_content->page_id);
+    }
 
     LOG_INFO("Succès du traitement du CODE=%d", CODE_WKR_DATA_ACK);
+    free(data_ack);
     return 0;
 }
 
 static int treat_wkr_inva_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     LOG_INFO("Traitement d'un CODE=%d ...", CODE_WKR_INVA_ACK);
 
-    // TODO
+    dsm_msg_wkr_inva_ack inva_ack;
+    if (dsm_dsrlze_wkr_inva_ack(msg_ctx->payload, msg_ctx->header.payload_len,
+                                &inva_ack) < 0) {
+        return -1;
+    }
+
+    bool is_drainer = false;
+    dsm_page_content *page_content;
+    if (inject_inva(msg_ctx, &inva_ack, &page_content, &is_drainer) < 0) {
+        return -1;
+    }
+
+    if (is_drainer) {
+        LOG_INFO("Drain-Début pour la page %u", page_content->page_id);
+        if (drain_reqs(page_content) < 0) {
+            return -1;
+        }
+        LOG_INFO("Drain-Fin pour la page %u", page_content->page_id);
+    }
 
     LOG_INFO("Succès du traitement du CODE=%d", CODE_WKR_INVA_ACK);
     return 0;

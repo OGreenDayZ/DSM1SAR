@@ -39,9 +39,8 @@ extern dsm_context *dsm_ctx; // Initialisé dans dsm.c
 /** ALIAS */
 
 /** Taille effective d'une page (en octets), lue depuis le contexte DSM. */
-#define EFFECTIVE_PAGESIZE dsm_ctx->config.pager.nb_pages
-
+#define EFFECTIVE_NB_PAGES dsm_ctx->config.pager.nb_pages
 /** Nombre effectif de pages, lu depuis le contexte DSM. */
-#define EFFECTIVE_NB_PAGES dsm_ctx->config.pager.page_size
+#define EFFECTIVE_PAGESIZE dsm_ctx->config.pager.page_size
 
 #endif // DSM_INTERNAL_H
