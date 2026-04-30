@@ -40,7 +40,7 @@ int dsm_tcp_recv_all(int sock, uint8_t *buf, size_t len, struct timeval *tv) {
             return -1;
         } else if (recv_len == 0) {
             LOG_WARNING("connection closed by peer");
-            return -2;
+            return DSM_ERR_TCP_CONN_CLOSE;
         }
         total_recv += recv_len;
     }

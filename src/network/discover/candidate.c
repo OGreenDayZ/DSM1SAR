@@ -630,7 +630,7 @@ int dsm_candidate_start(dsm_discover_ctx *dscv_ctx, uint32_t spvs_ip,
         goto exit;
     } else if (ret == 1) {
         // TODO propagation
-        return DSM_ERROR_SYSTEM_FULL;
+        return -DSM_ERROR_SYSTEM_FULL;
     }
 
     if (send_dscv_role_wish() < 0) {

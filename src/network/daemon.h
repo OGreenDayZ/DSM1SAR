@@ -22,7 +22,6 @@ typedef struct {
                                      * @warning : READ-ONLY pour tous sauf le main thread
                                      */
 
-    // dsm_safe_list poll_fds_update; // Pour les finalize, à voir...
     dsm_thread_pool *pool;
 
 } dsm_daemon_ctx;

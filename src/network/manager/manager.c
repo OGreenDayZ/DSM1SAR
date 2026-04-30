@@ -31,6 +31,12 @@ int dsm_mgr_ctx_init() {
         return -1;
     }
 
+    unsigned int nb_workers =
+        dsm_ctx->config.net.system.nb_nodes - dsm_ctx->config.net.system.nb_managers;
+    pthread_mutex_init(&dsm_mgr_ctx->sync.lock, NULL);
+    dsm_mgr_ctx->sync.missing_barr_reqs = nb_workers;
+    dsm_mgr_ctx->sync.missing_fina_reqs = nb_workers;
+
     return 0;
 }
 
