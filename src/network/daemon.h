@@ -8,7 +8,7 @@
 
 /** Lexique
  * @dmn : Daemon
-*/
+ */
 
 typedef enum {
     DSM_DMN_STATE_ONGOING,

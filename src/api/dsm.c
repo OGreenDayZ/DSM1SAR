@@ -10,6 +10,7 @@
 #include "util/concurrent/safe_list.h"
 #include "util/concurrent/thread_pool.h"
 #include <pthread.h>
+#include <stdlib.h>
 
 dsm_context *dsm_ctx = NULL;
 
@@ -141,6 +142,14 @@ static void print_convert_reg() {
     }
 }
 
+void *daemon_thread_start(void *arg) {
+    LOG_INFO("Worker : Démarrage du daemon de DSM...");
+    if (dsm_daemon_start() < 0) {
+        LOG_ERROR("Erreur dsm_daemon_start");
+    }
+    return NULL;
+}
+
 int dsm_init(const dsm_config *config) {
     LOG_INFO("Initialisation de DSM1SAR...");
     int ret = dsm_ctx_init(config);
@@ -149,24 +158,28 @@ int dsm_init(const dsm_config *config) {
     }
 
     ret = dsm_network_init();
+
+    dsm_node_role role = dsm_ctx->config.net.node.role;
+
     print_nodes_reg();
+
     if (dsm_ctx->config.net.node.role == DSM_ROLE_WORKER) {
         print_convert_reg();
-        dsm_wkr_ctx_init();
-    } else {
-        print_nodes_reg();
-    }
-    pthread_t daemon;
-    if (pthread_create(&daemon, NULL, (void *(*)(void *))dsm_daemon_start, NULL) != 0) {
-        LOG_ERROR("Erreur pthread_create : daemon");
-        dsm_ctx_cleanup();
-        return -1;
+        if (pthread_create(&dsm_wkr_ctx->daemon, NULL, daemon_thread_start, NULL) != 0) {
+            LOG_ERROR("Erreur pthread_create : daemon");
+            dsm_ctx_cleanup();
+            return -1;
+        }
     }
 
-    // dsm_ctx_cleanup(); // TODO A ENLEVER SI VRAI TEST DEMON !!!!!!
-    // TODO SPLIT THREAD AVANT RETURN
-    // thread_pool = pool_create(DSM_DEFAULT_NB_THREADS,
-    //   DSM_DEFAULT_QUEUE_SIZE); // TODO : paramètre a revoir
+    else if (role == DSM_ROLE_MANAGER) {
+        LOG_INFO("Manager : Démarrage du daemon de DSM...");
+        if (dsm_daemon_start() < 0) {
+            LOG_ERROR("Erreur dsm_daemon_start");
+        }
+        dsm_ctx_cleanup();
+    }
+
     return ret;
 }
 

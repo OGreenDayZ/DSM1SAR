@@ -6,8 +6,8 @@
 
 #include "internal.h"
 #include "pager/pager.h"
-#include "util/concurrent/safe_map.h"
 #include "util/concurrent/safe_list.h"
+#include "util/concurrent/safe_map.h"
 #include "util/hlist.h"
 
 #define DSM_WKR_NODE_HASH_BITS 4
@@ -15,8 +15,8 @@
 
 typedef struct {
 
-    unsigned int manager_id;           // key : id local (connu des workers)
-    unsigned int node_id;              // value : id global réel
+    unsigned int manager_id; // key : id local (connu des workers)
+    unsigned int node_id;    // value : id global réel
 
     dsm_node_content *to_node_content; // raccourci vers la struct de noeud
     struct dsm_hlist_node node;
@@ -52,25 +52,25 @@ typedef struct {
 typedef struct {
     page_mode_req mode_req; // Le max requete faite pour cette page
     int started; // flag pour dire si la requete est en cours de traitement ou pas
-    // 0 -> non, 1 -> oui 
+    // 0 -> non, 1 -> oui
     int dont_do; // 0 -> do , 1 -> dont_do
-    dsm_list_head node; 
+    dsm_list_head node;
 } dsm_requests_reg_list_entry; // entrée de list_req
 
 typedef struct {
-    unsigned int page_id; // clé    
-    dsm_safe_list list_req; 
+    unsigned int page_id; // clé
+    dsm_safe_list list_req;
     struct dsm_hlist_node node; // pour la map requests_reg
-} dsm_requests_reg_entry; // entrée de requests_reg
+} dsm_requests_reg_entry;       // entrée de requests_reg
 
 typedef struct {
-    unsigned int page_id; 
-    int locked; // 0 : la page n'est pas encore locked & 1 : la page est locked 
-    // Le mutex est la car c'est la page qu'on protège 
+    unsigned int page_id;
+    int locked; // 0 : la page n'est pas encore locked & 1 : la page est locked
+    // Le mutex est la car c'est la page qu'on protège
     pthread_mutex_t mutex; // mutex pour protéger l'accès à locked
-    pthread_cond_t cond; 
+    pthread_cond_t cond;
 
-    dsm_list_head node; 
+    dsm_list_head node;
 } dsm_locks_reg_entry;
 typedef struct {
     /**
@@ -84,27 +84,29 @@ typedef struct {
     // eduqué et qu'il fera ses allocation avant de crée des threads
     // map des managers : manager_id -> node_id
     dsm_safe_map managerID_to_nodeID;
-    dsm_safe_map requests_reg;  
-    dsm_safe_list locks_reg; // enregistre les locks sur les pages, par thread 
-    dsm_safe_map barrier_reg; // TODO REWORK !!
+    dsm_safe_map requests_reg;
+    dsm_safe_list locks_reg;         // enregistre les locks sur les pages, par thread
+    dsm_safe_map barrier_reg;        // TODO REWORK !!
     dsm_sync_finalize sync_finalize; // TODO REWORK !!
+
+    pthread_t daemon;
 
 } dsm_worker_ctx;
 
-// J'ai besoin d'une 
+// J'ai besoin d'une
 
 extern dsm_worker_ctx *dsm_wkr_ctx;
 
 /**
- * @brief 
- * 
- * @return int 
+ * @brief
+ *
+ * @return int
  */
 int dsm_wkr_ctx_init();
 
 /**
- * @brief 
- * 
+ * @brief
+ *
  */
 void dsm_wkr_ctx_cleanup();
 
@@ -133,16 +135,16 @@ int get_mgr_node_id_for_page(unsigned long page_id);
  */
 int get_mgr_node_socket_for_page(unsigned long page_id);
 /**
- * @brief 
- * 
- * @param arg 
+ * @brief
+ *
+ * @param arg
  */
 void dispatch_call_uffd(void *arg);
 
 /**
- * @brief 
- * 
- * @param arg 
+ * @brief
+ *
+ * @param arg
  */
 void dispatch_call_wkr(void *arg);
 
