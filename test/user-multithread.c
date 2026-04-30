@@ -62,9 +62,17 @@ void *thread_work_1(void *arg) {
     int nid = t_arg->node_id;
     int *data = t_arg->shared_data;
     if (nid == 1) {
+        if (tid == 1) {
+            printf("[Nœud %d - Thread %d] J'écris dans la DSM...\n", nid, tid);
+            for (int i = 0; i < 10; i++) {
+                data[i] =
+                    i * 100; // Déclenche potentiellement une faute de page (écriture)
+            }
+        }
         printf("[Nœud %d - Thread %d] Tentative de lecture...\n", nid, tid);
         printf("[Nœud %d - Thread %d] Valeur lue : data[%d] = %d\n", nid, tid, tid,
                data[tid]);
+
     } else {
         // printf("[Nœud %d - Thread %d] Tentative de lecture distante...\n", nid, tid);
         // printf("[Nœud %d - Thread %d] Valeur lue : %d\n", nid, tid, data[tid]);

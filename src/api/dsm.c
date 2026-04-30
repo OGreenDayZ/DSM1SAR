@@ -185,7 +185,8 @@ void *dsm_alloc(void) {
 
     addr_to_page_id(debut);
 
-    LOG_INFO("Allocation de %lu octets à l'adresse %p", len, (void *)debut);
+    LOG_INFO("Allocation de %lu octets à l'adresse %p", EFFECTIVE_PAGESIZE,
+             (void *)debut);
     printf("[dsm_alloc] Allocation de la page %d à l'adresse %p\n",
            dsm_wkr_ctx->page_counter, (void *)debut);
 
