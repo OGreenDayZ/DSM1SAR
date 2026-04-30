@@ -378,7 +378,7 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
             LOG_ERROR("C'est pas une requete que je connais sorry");
     }
 
-    switch (payload->is_empty) {
+    switch (payload->data_info) {
         case EMPTY_INIT:
             printf("[treat_mgr_req_ack] EMPTY_INIT - la page est vide et ca va la "
                    "remplir pour regler la page fault\n");

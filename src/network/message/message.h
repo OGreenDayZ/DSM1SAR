@@ -168,7 +168,7 @@ typedef struct {
 
 typedef struct {
     uint32_t page_id;
-    // Pas de champs is_empty, car si on lui demande des données alors il est le
+    // Pas de champs data_info, car si on lui demande des données alors il est le
     // propriétaire
     uint8_t data[];
 } dsm_msg_wkr_data_ack;
@@ -188,7 +188,7 @@ typedef struct {
      * uint32_t Attention a ne pas dépasser 255 et a toujours mettre des entiers non
      * signés.
      */
-    uint8_t is_empty;
+    uint8_t data_info;
     uint8_t data[];
 } dsm_msg_mgr_req_ack;
 

@@ -98,6 +98,8 @@ static dsm_request_content *req_content_of(dsm_dq_node *n) {
 static int push_req(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
                     dsm_page_content **out_page_content, bool *is_drainer) {
 
+    LOG_INFO("Push d'une requête de worker ...");
+
     dsm_page_content *obj;
     dsm_page_content *page_content = make_page_content(req->page_id);
     if (!page_content) {
@@ -119,6 +121,9 @@ static int push_req(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
     if (out_page_content) {
         *out_page_content = page_content;
     }
+
+    LOG_INFO("Requête de worker poussée avec succès (page_id=%u, mode=%d)", req->page_id,
+             req->mode);
     return 0;
 }
 
@@ -298,6 +303,8 @@ static dsm_page_content *find_page_content(uint32_t page_id) {
 static int try_unlock(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
                       dsm_page_content **out_page_content, bool *is_drainer) {
 
+    LOG_INFO("Traitement d'une requête UNLOCK_REQ...");
+
     *out_page_content = find_page_content(req->page_id);
     if (!*out_page_content) {
         LOG_ERROR("Page %u non trouvée pour UNLOCK_REQ ?!", req->page_id);
@@ -334,6 +341,8 @@ static int try_unlock(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
 
     *is_drainer = !dsm_dq_pop(&(*out_page_content)->pending_reqs);
     reset_head_req_ctx((*out_page_content));
+
+    LOG_INFO("Requête UNLOCK_REQ traitée avec succès (page_id=%u)", req->page_id);
 
     return 0;
 }
