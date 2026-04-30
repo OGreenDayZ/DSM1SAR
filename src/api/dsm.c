@@ -3,7 +3,6 @@
 #include "debug/debug.h"
 #include "internal.h"
 #include "network/daemon.h"
-#include "network/manager/manager.h"
 #include "network/network.h"
 #include "network/pager/pager_msg.h"
 #include "network/worker/worker.h"
@@ -18,6 +17,10 @@ dsm_context *dsm_ctx = NULL;
 void dsm_get_default_config(dsm_config *config) {
     // Pour certains champs, si 0 => soulève erreur à l'init (ex:nb_nodes)
     // et #accept si la valeur sera redéfinie en interne si non spécifiée par l'user
+    if (!config) {
+        LOG_ERROR("USER NO ON T'AS DIS D'INITIALISER CONFIG!!!!!");
+        return;
+    }
     config->pager.nb_pages = DSM_DEFAULT_NB_PAGES;
     config->pager.page_size = DSM_DEFAULT_PAGESIZE;
 
@@ -110,6 +113,10 @@ static void dsm_ctx_cleanup() {
     unsigned int bkt;
     struct dsm_hlist_node *tmp;
 
+    if (!dsm_ctx) {
+        LOG_ERROR("DSM non initialisé");
+        return;
+    }
     dsm_hash_safe_for_each_safe(&dsm_ctx->nodes_reg, bkt, tmp, pos, node) {
         dsm_hlist_del_init(&pos->node);
         free(pos);
@@ -126,6 +133,11 @@ static void print_nodes_reg() {
     unsigned int bkt;
     struct dsm_hlist_node *tmp;
 
+    if (!dsm_ctx) {
+        LOG_ERROR("DSM non initialisé");
+        return;
+    }
+
     LOG_INFO("Mon Registre de Noeuds :");
     dsm_hash_safe_for_each_safe(&dsm_ctx->nodes_reg, bkt, tmp, pos, node) {
         LOG_INFO("ID=%u, FD_SOCK=%u", pos->id, pos->tcp_sock);
@@ -136,6 +148,11 @@ static void print_convert_reg() {
     dsm_mgr_to_node_content *pos;
     unsigned int bkt;
     struct dsm_hlist_node *tmp;
+
+    if (!dsm_wkr_ctx) {
+        LOG_ERROR("Worker context pas initialisé");
+        return;
+    }
 
     LOG_INFO("Mon Registre de liaison ManagerID -> NodeID :");
     dsm_hash_safe_for_each_safe(&dsm_wkr_ctx->managerID_to_nodeID, bkt, tmp, pos, node) {
@@ -163,12 +180,18 @@ int dsm_init(const dsm_config *config) {
         return -1;
     }
 
+    // if (!dsm_wkr_ctx) {
+    //     LOG_ERROR("Worker contexte non initialisé");
+    //     return -1;
+    // }
+
     dsm_node_role role = dsm_ctx->config.net.node.role;
 
     print_nodes_reg();
 
     if (dsm_ctx->config.net.node.role == DSM_ROLE_WORKER) {
         print_convert_reg();
+
         if (pthread_create(&dsm_wkr_ctx->daemon, NULL, daemon_thread_start, NULL) != 0) {
             LOG_ERROR("Erreur pthread_create : daemon");
             dsm_ctx_cleanup();
@@ -193,26 +216,27 @@ void *dsm_alloc(void) {
         LOG_ERROR("Worker context non initialisé");
         return NULL;
     }
-
     if (dsm_wkr_ctx->page_counter > EFFECTIVE_NB_PAGES) {
         LOG_ERROR("Adresse d'allocation dépasse la taille de la mémoire alloué");
         return NULL;
     }
 
+    dsm_requests_reg_entry *map_entry = malloc(sizeof(dsm_requests_reg_entry));
+    dsm_requests_reg_entry *obj = NULL;
+    dsm_locks_reg_entry *map_locks_entry = malloc(sizeof(dsm_locks_reg_entry)),
+                        *obj_locks = NULL;
     uintptr_t debut = (uintptr_t)dsm_wkr_ctx->range_start + dsm_wkr_ctx->page_counter;
-
-    addr_to_page_id(debut);
-
     LOG_INFO("Allocation de %lu octets à l'adresse %p", EFFECTIVE_PAGESIZE,
              (void *)debut);
 
-    dsm_wkr_ctx->page_counter++;
-
-    // Initialisation des entrées de la map requests_reg
-    dsm_requests_reg_entry *map_entry = malloc(sizeof(dsm_requests_reg_entry));
-    dsm_requests_reg_entry *obj;
-
-    map_entry->page_id = addr_to_page_id(debut);
+    map_locks_entry->page_id = dsm_wkr_ctx->page_counter;
+    if (dsm_safe_list_init(&map_locks_entry->locks_list) < 0) {
+        LOG_ERROR("[dsm_alloc] dsm_safe_list_init map_locks_entry->locks_list");
+        free(map_locks_entry);
+        free(map_entry);
+        return NULL;
+    }
+    map_entry->page_id = dsm_wkr_ctx->page_counter;
     map_entry->state = NONE;
 
     if (pthread_mutex_init(&map_entry->mutex, NULL) < 0) {
@@ -230,6 +254,13 @@ void *dsm_alloc(void) {
         free(map_entry);
     }
 
+    inserted =
+        dsm_hash_safe_add_unique(&dsm_wkr_ctx->locks_reg, &map_locks_entry->node,
+                                 obj_locks, node, page_id, map_locks_entry->page_id);
+    if (inserted == 0) {
+        free(map_locks_entry);
+    }
+    dsm_wkr_ctx->page_counter++;
     return (void *)debut;
 }
 
@@ -240,6 +271,11 @@ int dsm_lock(void *addr) {
     dsm_locks_reg_entry *locks_reg_entry = NULL, *found = NULL;
     dsm_locks_list_entry *entry_list = malloc(sizeof(dsm_locks_list_entry));
 
+    if (entry_list == NULL) {
+        LOG_ERROR("Erreur de malloc pour une entrée de locks_list");
+        return -1;
+    }
+
     dsm_hash_safe_get(&dsm_wkr_ctx->locks_reg, locks_reg_entry, node, page_id) {
         if (locks_reg_entry->page_id == page_id) {
             found = locks_reg_entry;
@@ -247,6 +283,11 @@ int dsm_lock(void *addr) {
         }
     }
     dsm_hash_safe_get_end(&dsm_wkr_ctx->locks_reg, page_id);
+
+    if (found == NULL) {
+        LOG_INFO("[dsm_lock] locks_reg est mal initialisé");
+        return -1;
+    }
 
     entry_list->locked = 0;
     if (pthread_mutex_init(&entry_list->mutex, NULL) < 0) {
@@ -275,9 +316,9 @@ int dsm_lock(void *addr) {
     pthread_mutex_unlock(&entry_list->mutex);
 
     // Je supprime l'entrée de laaaa
+    dsm_safe_list_del(&found->locks_list, &entry_list->node);
     pthread_mutex_destroy(&entry_list->mutex);
     pthread_cond_destroy(&entry_list->cond);
-    dsm_safe_list_del(&found->locks_list, &entry_list->node);
     return 0;
 }
 
@@ -298,9 +339,17 @@ int dsm_unlock(void *addr) {
  * @return int
  */
 int dsm_get_node_id() {
+    if (!dsm_ctx) {
+        LOG_ERROR("DSM non initialisé");
+        return -1;
+    }
     return dsm_ctx->node_id;
 }
 
 int dsm_get_role() {
+    if (!dsm_ctx) {
+        LOG_ERROR("DSM non initialisé");
+        return -1;
+    }
     return dsm_ctx->config.net.node.role;
 }

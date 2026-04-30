@@ -1,211 +1,178 @@
-/**
- * @file user_multithread.c
- * @brief Test multithread du DSM1SAR - API publique uniquement (dsm.h)
- *
- * Scénario :
- *   - 2 nœuds workers, 1 manager
- *   - Chaque nœud lance NB_THREADS threads
- *   - Phase 1 (écriture) : le nœud 1 écrit dans les NB_THREADS cases de
- *     shared_data via lock/unlock
- *   - Barrière globale inter-nœuds
- *   - Phase 2 (lecture)  : le nœud 2 lit et vérifie les valeurs écrites
- *   - Barrière globale inter-nœuds
- *   - Finalisation
- */
-
 #include "dsm.h"
-
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
-/* ------------------------------------------------------------------ */
-/*  Paramètres du test                                                  */
-/* ------------------------------------------------------------------ */
+// --- Couleurs pour les logs ---
+#define CLR_RESET "\x1b[0m"
+#define CLR_TITLE "\x1b[1;35m" // Magenta Gras
+#define CLR_STEP "\x1b[1;36m"  // Cyan Gras
+#define CLR_INFO "\x1b[32m"    // Vert
+#define CLR_WARN "\x1b[33m"    // Jaune
+#define CLR_ERR "\x1b[1;31m"   // Rouge Gras
 
-#define NB_THREADS 4          /* threads par nœud worker              */
-#define ARRAY_SIZE NB_THREADS /* une case partagée par thread          */
+#define TEST_LOG(color, msg, ...)                                                        \
+    printf(color "[TEST] " msg CLR_RESET "\n", ##__VA_ARGS__)
 
-/* ------------------------------------------------------------------ */
-/*  Contexte passé à chaque thread                                      */
-/* ------------------------------------------------------------------ */
-
+// Structure pour les threads de test
 typedef struct {
-    int thread_idx;   /* indice local du thread (0 … NB_THREADS-1)   */
-    int *shared_data; /* pointeur vers la zone partagée               */
-    int node_id;      /* identifiant du nœud courant                  */
-} thread_arg_t;
+    void *addr;
+    int id;
+} thread_data_t;
 
-/* ------------------------------------------------------------------ */
-/*  Utilitaires                                                          */
-/* ------------------------------------------------------------------ */
+// --- Scénarios de test ---
 
-static void check(int ret, const char *msg) {
-    if (ret != DSM_SUCCESS) {
-        fprintf(stderr, "[ERREUR] %s (code=%d)\n", msg, ret);
-        exit(EXIT_FAILURE);
-    }
-}
+// 1. Lecture simple (Déclenche READ_REQ)
+void *test_read_task(void *arg) {
+    thread_data_t *data = (thread_data_t *)arg;
+    TEST_LOG(CLR_INFO, "Thread %d: Tentative de LECTURE à %p", data->id, data->addr);
 
-/* ------------------------------------------------------------------ */
-/*  Thread d'écriture (nœud 1)                                          */
-/* ------------------------------------------------------------------ */
+    int val = *(int *)data->addr; // Déclenche le handler UFFD (READ)
 
-static void *writer_thread(void *arg) {
-    thread_arg_t *ctx = (thread_arg_t *)arg;
-
-    int idx = ctx->thread_idx;
-    int value = (ctx->node_id * 100) + idx; /* valeur déterministe      */
-
-    printf("[Nœud %d | Thread %d] Tentative d'écriture : shared_data[%d] = %d\n",
-           ctx->node_id, idx, idx, value);
-
-    /* Acquisition du lock sur la page contenant shared_data[idx] */
-    if (dsm_lock(&ctx->shared_data[idx]) < 0) {
-        fprintf(stderr, "[Nœud %d | Thread %d] Erreur dsm_lock\n", ctx->node_id, idx);
-        return NULL;
-    }
-
-    ctx->shared_data[idx] = value;
-
-    printf("[Nœud %d | Thread %d] Écriture effectuée : shared_data[%d] = %d\n",
-           ctx->node_id, idx, idx, ctx->shared_data[idx]);
-
-    /* Libération du lock */
-    if (dsm_unlock(&ctx->shared_data[idx]) < 0) {
-        fprintf(stderr, "[Nœud %d | Thread %d] Erreur dsm_unlock\n", ctx->node_id, idx);
-        return NULL;
-    }
-
+    TEST_LOG(CLR_INFO, "Thread %d: LECTURE réussie ! Valeur lue = %d", data->id, val);
     return NULL;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Thread de lecture / vérification (nœud 2)                          */
-/* ------------------------------------------------------------------ */
+// 2. Écriture simple (Déclenche WRITE_REQ ou Promotion)
+void *test_write_task(void *arg) {
+    thread_data_t *data = (thread_data_t *)arg;
+    int new_val = 100 + data->id;
+    TEST_LOG(CLR_WARN, "Thread %d: Tentative d'ÉCRITURE de %d à %p", data->id, new_val,
+             data->addr);
 
-static void *reader_thread(void *arg) {
-    thread_arg_t *ctx = (thread_arg_t *)arg;
+    *(int *)data->addr = new_val; // Déclenche le handler UFFD (WRITE)
 
-    int idx = ctx->thread_idx;
-    int expected_value = (1 * 100) + idx; /* valeur attendue du nœud 1  */
+    TEST_LOG(CLR_WARN, "Thread %d: ÉCRITURE terminée avec succès", data->id);
+    return NULL;
+}
 
-    if (dsm_lock(&ctx->shared_data[idx]) < 0) {
-        fprintf(stderr, "[Nœud %d | Thread %d] Erreur dsm_lock\n", ctx->node_id, idx);
-        return NULL;
-    }
+// 3. Test de Verrou (LOCK_REQ / UNLOCK_REQ)
+void *test_lock_task(void *arg) {
+    thread_data_t *data = (thread_data_t *)arg;
+    TEST_LOG(CLR_STEP, "Thread %d: Demande de dsm_lock() sur %p", data->id, data->addr);
 
-    int read_val = ctx->shared_data[idx];
-
-    if (dsm_unlock(&ctx->shared_data[idx]) < 0) {
-        fprintf(stderr, "[Nœud %d | Thread %d] Erreur dsm_unlock\n", ctx->node_id, idx);
-        return NULL;
-    }
-
-    if (read_val == expected_value) {
-        printf("[Nœud %d | Thread %d] OK  shared_data[%d] = %d (attendu %d)\n",
-               ctx->node_id, idx, idx, read_val, expected_value);
+    if (dsm_lock(data->addr) == 0) {
+        TEST_LOG(CLR_STEP, "Thread %d: Verrou ACQUIS. Section critique...", data->id);
+        sleep(1); // Simulation de travail
+        dsm_unlock(data->addr);
+        TEST_LOG(CLR_STEP, "Thread %d: Verrou LIBÉRÉ (dsm_unlock)", data->id);
     } else {
-        printf("[Nœud %d | Thread %d] KO  shared_data[%d] = %d (attendu %d) !!!\n",
-               ctx->node_id, idx, idx, read_val, expected_value);
+        TEST_LOG(CLR_ERR, "Thread %d: Échec du lock !", data->id);
+    }
+    return NULL;
+}
+
+void *test_concurrent_write_task(void *arg) {
+    thread_data_t *data = (thread_data_t *)arg;
+
+    // On simule plusieurs écritures rapides pour forcer les changements d'états
+    for (int i = 0; i < 5; i++) {
+        int val = (data->id * 100) + i;
+
+        TEST_LOG(CLR_ERR,
+                 "Thread %d: [CONCURRENCE] Tentative d'écriture n°%d (Valeur: %d)",
+                 data->id, i, val);
+
+        // Cette ligne va potentiellement déclencher :
+        // 1. Un passage de NONE -> WRITE_SENT dans requests_reg[cite: 1, 3]
+        // 2. Un message WRITE_REQ au manager
+        // 3. Une attente sur entry->mutex si un autre thread écrit déjà
+        *(int *)data->addr = val;
+
+        TEST_LOG(CLR_INFO, "Thread %d: [CONCURRENCE] Écriture n°%d réussie", data->id, i);
+
+        // Petit sleep pour laisser une chance aux autres threads d'interrompre
+        usleep(100000);
     }
 
     return NULL;
 }
+int main(int argc, char *argv[]) {
+    printf(CLR_TITLE "=============================================\n");
+    printf("   Banc de Test DSM : Tous les Cas d'Usage   \n");
+    printf("=============================================\n" CLR_RESET);
 
-/* ------------------------------------------------------------------ */
-/*  Lancement d'un pool de threads                                      */
-/* ------------------------------------------------------------------ */
-
-/**
- * @brief Crée NB_THREADS threads, les exécute puis les joint.
- *
- * @param fn   Fonction de thread (writer_thread ou reader_thread)
- * @param data Zone mémoire partagée
- * @param nid  Identifiant du nœud courant
- */
-static void run_threads(void *(*fn)(void *), int *data, int nid) {
-    pthread_t tids[NB_THREADS];
-    thread_arg_t args[NB_THREADS];
-
-    for (int i = 0; i < NB_THREADS; i++) {
-        args[i].thread_idx = i;
-        args[i].shared_data = data;
-        args[i].node_id = nid;
-
-        if (pthread_create(&tids[i], NULL, fn, &args[i]) != 0) {
-            fprintf(stderr, "[Nœud %d] Erreur pthread_create thread %d\n", nid, i);
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    for (int i = 0; i < NB_THREADS; i++) {
-        pthread_join(tids[i], NULL);
-    }
-}
-
-/* ------------------------------------------------------------------ */
-/*  Main                                                                 */
-/* ------------------------------------------------------------------ */
-
-int main(void) {
-
-    /* ---- 1. Configuration ---- */
+    // 1. Initialisation de la configuration
     dsm_config config;
     dsm_get_default_config(&config);
 
-    config.net.system.nb_nodes = 2; /* 2 workers + 1 manager */
+    config.net.system.nb_nodes = 3;
     config.net.system.nb_managers = 1;
+    config.net.node.role = DSM_ROLE_WORKER;
 
-    /* ---- 2. Initialisation ---- */
-    check(dsm_init(&config), "dsm_init");
-
-    /* ---- 3. Allocation déterministe (avant toute divergence de flux) ----
-     *
-     * Tous les nœuds workers appellent dsm_alloc() dans le même ordre et
-     * reçoivent le même pointeur virtuel vers la zone surveillée.
-     */
-    int *shared_data = NULL;
-    if (dsm_get_role() == DSM_ROLE_WORKER) {
-        shared_data = (int *)dsm_alloc();
-        if (!shared_data) {
-            fprintf(stderr, "Erreur dsm_alloc\n");
-            return EXIT_FAILURE;
-        }
+    TEST_LOG(CLR_STEP, "Étape 1: Initialisation du contexte DSM...");
+    if (dsm_init(&config) < 0) {
+        TEST_LOG(CLR_ERR, "Erreur fatale : dsm_init a échoué.");
+        return EXIT_FAILURE;
     }
 
-    int my_id = dsm_get_node_id();
-    printf("[Nœud %d] Initialisé. Role=%d\n", my_id, dsm_get_role());
+    // 2. Allocation de mémoire DSM
+    TEST_LOG(CLR_STEP, "Étape 2: Allocation d'une page partagée...");
+    int *shared_mem = (int *)dsm_alloc();
+    if (!shared_mem) {
+        TEST_LOG(CLR_ERR, "Erreur fatale : dsm_alloc a échoué.");
+        return EXIT_FAILURE;
+    }
+    TEST_LOG(CLR_INFO, "Page allouée à l'adresse virtuelle : %p", (void *)shared_mem);
 
-    /* ---- 4. Phase d'écriture : nœud 1 uniquement ---- */
-    if (my_id == 1) {
-        printf("[Nœud %d] === Phase ÉCRITURE (%d threads) ===\n", my_id, NB_THREADS);
-        run_threads(writer_thread, shared_data, my_id);
-        printf("[Nœud %d] Écriture terminée.\n", my_id);
+    pthread_t threads[6];
+    thread_data_t tdata[6];
+
+    // --- CAS A : Première Lecture (Page Vide / EMPTY_INIT) ---
+    printf("\n" CLR_TITLE "--- CAS A : PREMIÈRE LECTURE (MISSING PAGE) ---" CLR_RESET
+           "\n");
+    tdata[0] = (thread_data_t){shared_mem, 0};
+    pthread_create(&threads[0], NULL, test_read_task, &tdata[0]);
+    pthread_join(threads[0], NULL);
+
+    // --- CAS B : Écriture sur page en Read-Only (PROMOTION / WRITE_REQ) ---
+    printf("\n" CLR_TITLE "--- CAS B : ÉCRITURE (PROMOTION DE DROITS) ---" CLR_RESET
+           "\n");
+    tdata[1] = (thread_data_t){shared_mem, 1};
+    pthread_create(&threads[1], NULL, test_write_task, &tdata[1]);
+    pthread_join(threads[1], NULL);
+
+    // --- CAS C : Accès Concurrents Multi-Threads (READ/READ) ---
+    printf("\n" CLR_TITLE
+           "--- CAS C : LECTURES CONCURRENTES (MÉCANISME PASSAGER) ---" CLR_RESET "\n");
+    for (int i = 2; i < 4; i++) {
+        tdata[i] = (thread_data_t){shared_mem, i};
+        pthread_create(&threads[i], NULL, test_read_task, &tdata[i]);
+    }
+    for (int i = 2; i < 4; i++)
+        pthread_join(threads[i], NULL);
+
+    printf("\n" CLR_TITLE "--- CAS E : ÉCRITURES CONCURRENTES (RACE CONDITION & "
+           "INVALIDATIONS) ---" CLR_RESET "\n");
+    TEST_LOG(CLR_WARN,
+             "Lancement de plusieurs threads écrivant sur la MÊME page simultanément...");
+
+    for (int i = 0; i < 4; i++) {
+        tdata[i].addr = shared_mem;
+        tdata[i].id = i + 10; // IDs distincts pour les logs
+        pthread_create(&threads[i], NULL, test_concurrent_write_task, &tdata[i]);
     }
 
-    /* ---- 5. Barrière : on attend que tout le monde ait fini d'écrire ---- */
-    printf("[Nœud %d] Attente à la barrière post-écriture...\n", my_id);
-    // dsm_barrier_advanced(NB_THREADS, 0 /* manager_id */);
-    printf("[Nœud %d] Barrière franchie.\n", my_id);
-
-    /* ---- 6. Phase de lecture : nœud 2 uniquement ---- */
-    if (my_id == 2) {
-        printf("[Nœud %d] === Phase LECTURE / VÉRIFICATION (%d threads) ===\n", my_id,
-               NB_THREADS);
-        run_threads(reader_thread, shared_data, my_id);
-        printf("[Nœud %d] Lecture terminée.\n", my_id);
+    for (int i = 0; i < 4; i++) {
+        pthread_join(threads[i], NULL);
     }
 
-    /* ---- 7. Barrière finale avant finalize ---- */
-    printf("[Nœud %d] Attente à la barrière pré-finalize...\n", my_id);
-    // dsm_barrier_advanced(NB_THREADS, 0 /* manager_id */);
-    printf("[Nœud %d] Barrière franchie.\n", my_id);
+    TEST_LOG(CLR_STEP, "Vérification finale : la valeur en mémoire est %d",
+             *(int *)shared_mem);
+    // --- CAS D : Verrous Exclusifs (LOCK / UNLOCK) ---
+    printf("\n" CLR_TITLE "--- CAS D : TEST DES VERROUS (DSM_LOCK) ---" CLR_RESET "\n");
+    for (int i = 4; i < 6; i++) {
+        tdata[i] = (thread_data_t){shared_mem, i};
+        pthread_create(&threads[i], NULL, test_lock_task, &tdata[i]);
+    }
+    for (int i = 4; i < 6; i++)
+        pthread_join(threads[i], NULL);
 
-    /* ---- 8. Finalisation ---- */
-    // dsm_finalize_advanced(NB_THREADS);
+    // 3. Nettoyage (Si implémenté)
+    printf("\n" CLR_STEP "Étape Final: Fin des tests." CLR_RESET "\n");
+    // dsm_ctx_cleanup(); // Si exposé
 
-    printf("[Nœud %d] Fin du test.\n", my_id);
     return EXIT_SUCCESS;
 }

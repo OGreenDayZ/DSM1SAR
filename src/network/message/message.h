@@ -155,7 +155,7 @@ typedef struct {
 
 typedef struct {
     uint32_t page_id;
-    uint8_t is_sync;
+    uint8_t is_sync; // 0 -> ne pas repondre, 1 -> repondre
 } dsm_msg_mgr_inva_req;
 
 typedef struct {

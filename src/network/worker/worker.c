@@ -183,6 +183,7 @@ static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
             pthread_mutex_unlock(&send_lock);
             return ret;
         }
+        pthread_mutex_unlock(&entry->mutex);
         printf("[treat_uffd_pagefault] NO SEND - READ_REQ not sent\n");
     } else if (mode == WRITE_REQ) {
         pthread_mutex_lock(&entry->mutex);
@@ -198,6 +199,7 @@ static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
             pthread_mutex_unlock(&send_lock);
             return ret;
         }
+        pthread_mutex_unlock(&entry->mutex);
         printf("[treat_uffd_pagefault] NO SEND - WRITE_REQ not sent\n");
     }
 
@@ -244,21 +246,28 @@ static int treat_mgr_inva_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
         return -1;
     }
     dsm_requests_reg_entry *req_entry = get_request_entry(payload.page_id);
-    LOG_INFO("[treat_mgr_inva_req]");
-    pthread_mutex_lock(&req_entry->mutex);
-    LOG_INFO("[treat_mgr_req_ack] J'ai pris le lock de req_entry\n");
-    if (req_entry->state == WRITE_SENT) {
-        LOG_WARNING("[treat_mgr_inva_req] Je suis entrain de traiter le WRITE alors "
-                    "j'inva paaaaas");
-        pthread_mutex_unlock(&req_entry->mutex);
-        return 0;
-    }
     void *addr = (void *)page_id_to_addr(payload.page_id);
+
+    // LOG_INFO("[treat_mgr_inva_req]");
+    // pthread_mutex_lock(&req_entry->mutex);
+    // LOG_INFO(
+    //     "[treat_mgr_inva_req] J'ai pris le lock de req_entry et entry->state == %d \n",
+    //     req_entry->state);
+    // if (req_entry->state == WRITE_SENT) {
+    //     LOG_WARNING("[treat_mgr_inva_req] Je suis entrain de traiter le WRITE alors "
+    //                 "j'inva paaaaas");
+    //     pthread_mutex_unlock(&req_entry->mutex);
+    //     return 0;
+    // }
+    LOG_INFO("[treat_mgr_inva_req] Faut  j'invalide");
+    // pthread_mutex_unlock(&req_entry->mutex);
+
     if (madvise(addr, EFFECTIVE_PAGESIZE, MADV_DONTNEED) < 0) {
         LOG_ERROR("madvise");
         return -1;
     }
 
+    LOG_INFO("J'ai invalidé");
     if (payload.is_sync) {
         /**
          * Faut repondre avec msg_wkr_inva_ack
@@ -330,6 +339,7 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     LOG_INFO("[treat_mgr_req_ack]");
     switch (payload->req_mode) {
         case LOCK_REQ:
+            LOG_INFO("[treat_mgr_req_ack] LOCK_REQ reçu");
             // Utilisation de locks_reg
             // Ici on a reçu une reponse a une demande de lock
             // On doit s'assurer qu'on débloque le bon thread avec locks_reg
@@ -343,7 +353,7 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
                 req_entry->state = NONE;
                 pthread_mutex_unlock(&req_entry->mutex);
             }
-
+            pthread_mutex_unlock(&req_entry->mutex);
             dsm_hash_safe_get(&dsm_wkr_ctx->locks_reg, entry, node, payload->page_id) {
                 if (entry->page_id == payload->page_id) {
                     found = entry;
@@ -360,27 +370,32 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
                 dsm_safe_list_unlock(&entry->locks_list);
                 break;
             }
-
             break;
         case UNLOCK_REQ:
+            LOG_INFO("[treat_mgr_req_ack] UNLOCK_REQ reçu");
             // On reçoit ici la reponse au UNLOCK_REQ
+            break;
         case WRITE_REQ:
             // maybe or maybe not, but i think not
             // WEEE je dois supprimer les entrés de la requests_pending_list
+            LOG_INFO("[treat_mgr_req_ack] WRITE_REQ reçu");
             pthread_mutex_lock(&req_entry->mutex);
             LOG_INFO("[treat_mgr_req_ack] WRITE_REQ J'ai pris le lock de req_entry\n");
             if (req_entry->state == WRITE_SENT) {
                 req_entry->state = NONE;
                 pthread_mutex_unlock(&req_entry->mutex);
             }
+            pthread_mutex_unlock(&req_entry->mutex);
             break;
         case READ_REQ:
+            LOG_INFO("[treat_mgr_req_ack] READ_REQ reçu");
             pthread_mutex_lock(&req_entry->mutex);
             LOG_INFO("[treat_mgr_req_ack] READ_REQ J'ai pris le lock de req_entry\n");
             if (req_entry->state == READ_SENT) {
                 req_entry->state = NONE;
                 pthread_mutex_unlock(&req_entry->mutex);
             }
+            pthread_mutex_unlock(&req_entry->mutex);
             break;
         default:
             LOG_ERROR("C'est pas une requete que je connais sorry");
@@ -462,7 +477,7 @@ void dispatch_call_wkr(void *arg) {
         default:
             LOG_WARNING("Code de message TCP inconnu ou non traitable: %d", code);
     }
-
+    LOG_INFO("J'ai fini ici");
     free(msg_ctx->payload);
     free(msg_ctx);
 }

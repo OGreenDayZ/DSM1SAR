@@ -207,7 +207,7 @@ int dsm_daemon_start(void) {
             ret = -1;
             goto exit;
         }
-
+        LOG_ERROR("J'attends un message");
         for (int i = 0; i < max_fds; i++) {
             if (fds[i].revents & POLLIN) {
 
