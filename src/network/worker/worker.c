@@ -453,7 +453,7 @@ void dispatch_call_wkr(void *arg) {
     int code = msg_ctx->header.code;
 
     switch (code) {
-        case CODE_WKR_REQ:
+            // case CODE_WKR_REQ:
             // treat
 
         case CODE_MGR_REQ_ACK:

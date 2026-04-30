@@ -299,6 +299,8 @@ int dsm_srlze_dscv_finalize(uint8_t *buf, size_t buf_sz) {
 
 int dsm_srlze_wkr_req(uint32_t page_id, uint8_t mode, uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_wkr_req)) {
+        LOG_ERROR("Taille du buffer insuffisante pour sérialiser le CODE=%d : %zu < %zu",
+                  CODE_WKR_REQ, buf_sz, sizeof(dsm_msg_header) + sizeof(dsm_msg_wkr_req));
         return -1;
     }
 
@@ -325,6 +327,9 @@ int dsm_srlze_wkr_req(uint32_t page_id, uint8_t mode, uint8_t *buf, size_t buf_s
 int dsm_srlze_mgr_inva_req(uint32_t page_id, uint8_t is_sync, uint8_t *buf,
                            size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_mgr_inva_req)) {
+        LOG_ERROR("Taille du buffer insuffisante pour sérialiser le CODE=%d : %zu < %zu",
+                  CODE_MGR_INVA_REQ, buf_sz,
+                  sizeof(dsm_msg_header) + sizeof(dsm_msg_mgr_inva_req));
         return -1;
     }
 
@@ -348,6 +353,9 @@ int dsm_srlze_mgr_inva_req(uint32_t page_id, uint8_t is_sync, uint8_t *buf,
 int dsm_srlze_mgr_data_req(uint32_t page_id, uint8_t is_invalidate, uint8_t *buf,
                            size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_mgr_data_req)) {
+        LOG_ERROR("Taille du buffer insuffisante pour sérialiser le CODE=%d : %zu < %zu",
+                  CODE_MGR_DATA_REQ, buf_sz,
+                  sizeof(dsm_msg_header) + sizeof(dsm_msg_mgr_data_req));
         return -1;
     }
 
@@ -371,6 +379,9 @@ int dsm_srlze_mgr_data_req(uint32_t page_id, uint8_t is_invalidate, uint8_t *buf
 
 int dsm_srlze_wkr_inva_ack(uint32_t page_id, uint8_t *buf, size_t buf_sz) {
     if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_wkr_inva_ack)) {
+        LOG_ERROR("Taille du buffer insuffisante pour sérialiser le CODE=%d : %zu < %zu",
+                  CODE_WKR_INVA_ACK, buf_sz,
+                  sizeof(dsm_msg_header) + sizeof(dsm_msg_wkr_inva_ack));
         return -1;
     }
 
@@ -393,6 +404,10 @@ int dsm_srlze_wkr_inva_ack(uint32_t page_id, uint8_t *buf, size_t buf_sz) {
 int dsm_srlze_wkr_data_ack(uint32_t page_id, uint8_t *data, uint8_t *buf, size_t buf_sz) {
     if (buf_sz <
         sizeof(dsm_msg_header) + sizeof(dsm_msg_wkr_data_ack) + EFFECTIVE_PAGESIZE) {
+        LOG_ERROR("Taille du buffer insuffisante pour sérialiser le CODE=%d : %zu < %zu",
+                  CODE_WKR_DATA_ACK, buf_sz,
+                  sizeof(dsm_msg_header) + sizeof(dsm_msg_wkr_data_ack) +
+                      EFFECTIVE_PAGESIZE);
         return -1;
     }
 
@@ -402,11 +417,25 @@ int dsm_srlze_wkr_data_ack(uint32_t page_id, uint8_t *data, uint8_t *buf, size_t
                                  sizeof(dsm_msg_wkr_data_ack) + EFFECTIVE_PAGESIZE};
     dsm_msg_wkr_data_ack payload = {.page_id = htonl(page_id)};
     int offset = serialize_header(&header, buf, buf_sz);
-    if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header))
+    LOG_INFO("FLAGGGGGGGGG ANTI FOUUUUUUUUUUUUUUU 1111111111111");
+
+    if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header)) {
+        LOG_INFO("FLAGGGGGGGGG ANTI FOUUUUUUUUUUUUUUU 222222222222");
         return -1;
+    }
+
+    LOG_INFO("FLAGGGGGGGGG ANTI FOUUUUUUUUUUUUUUU 444444444444444");
     memcpy(buf + offset, &payload, sizeof(payload));
+    LOG_INFO("FLAGGGGGGGGG ANTI FOUUUUUUUUUUUUUUU 55555555555555");
+
     offset += sizeof(payload);
+    LOG_INFO("FLAGGGGGGGGG ANTI FOUUUUUUUUUUUUUUU 666666666666666");
+    if (data == NULL) {
+        LOG_ERROR("ERREUR FATALE : data est NULL avant memcpy");
+        return -1;
+    }
     memcpy(buf + offset, data, EFFECTIVE_PAGESIZE);
+    LOG_INFO("FLAGGGGGGGGG ANTI FOUUUUUUUUUUUUUUU 33333333333333");
     return offset + EFFECTIVE_PAGESIZE;
 }
 
@@ -415,6 +444,9 @@ int dsm_srlze_mgr_req_ack(uint32_t page_id, uint8_t req_mode, uint8_t data_info,
 
     size_t data_len = ((data_info == NOT_EMPTY) ? EFFECTIVE_PAGESIZE : 0);
     if (buf_sz < sizeof(dsm_msg_header) + sizeof(dsm_msg_mgr_req_ack) + data_len) {
+        LOG_ERROR("Taille du buffer insuffisante pour sérialiser le CODE=%d : %zu < %zu",
+                  CODE_MGR_REQ_ACK, buf_sz,
+                  sizeof(dsm_msg_header) + sizeof(dsm_msg_mgr_req_ack) + data_len);
         return -1;
     }
 
@@ -630,6 +662,9 @@ int dsm_dsrlze_dscv_wkr_config(uint8_t *buf, size_t buf_sz,
 
 int dsm_dsrlze_wkr_req(uint8_t *buf, size_t buf_sz, dsm_msg_wkr_req *msg) {
     if (buf_sz < sizeof(dsm_msg_wkr_req)) {
+        LOG_ERROR(
+            "Taille du buffer insuffisante pour désérialiser le CODE=%d : %zu < %zu",
+            CODE_WKR_REQ, buf_sz, sizeof(dsm_msg_wkr_req));
         return -1;
     }
 
@@ -643,6 +678,9 @@ int dsm_dsrlze_wkr_req(uint8_t *buf, size_t buf_sz, dsm_msg_wkr_req *msg) {
 
 int dsm_dsrlze_mgr_inva_req(uint8_t *buf, size_t buf_sz, dsm_msg_mgr_inva_req *msg) {
     if (buf_sz < sizeof(dsm_msg_mgr_inva_req)) {
+        LOG_ERROR(
+            "Taille du buffer insuffisante pour désérialiser le CODE=%d : %zu < %zu",
+            CODE_MGR_INVA_REQ, buf_sz, sizeof(dsm_msg_mgr_inva_req));
         return -1;
     }
 
@@ -656,6 +694,9 @@ int dsm_dsrlze_mgr_inva_req(uint8_t *buf, size_t buf_sz, dsm_msg_mgr_inva_req *m
 
 int dsm_dsrlze_mgr_data_req(uint8_t *buf, size_t buf_sz, dsm_msg_mgr_data_req *msg) {
     if (buf_sz < sizeof(dsm_msg_mgr_data_req)) {
+        LOG_ERROR(
+            "Taille du buffer insuffisante pour désérialiser le CODE=%d : %zu < %zu",
+            CODE_MGR_DATA_REQ, buf_sz, sizeof(dsm_msg_mgr_data_req));
         return -1;
     }
 
@@ -669,6 +710,9 @@ int dsm_dsrlze_mgr_data_req(uint8_t *buf, size_t buf_sz, dsm_msg_mgr_data_req *m
 
 int dsm_dsrlze_wkr_inva_ack(uint8_t *buf, size_t buf_sz, dsm_msg_wkr_inva_ack *msg) {
     if (buf_sz < sizeof(dsm_msg_wkr_inva_ack)) {
+        LOG_ERROR(
+            "Taille du buffer insuffisante pour désérialiser le CODE=%d : %zu < %zu",
+            CODE_WKR_INVA_ACK, buf_sz, sizeof(dsm_msg_wkr_inva_ack));
         return -1;
     }
 
@@ -682,6 +726,9 @@ int dsm_dsrlze_wkr_inva_ack(uint8_t *buf, size_t buf_sz, dsm_msg_wkr_inva_ack *m
 int dsm_dsrlze_wkr_data_ack(uint8_t *buf, size_t buf_sz, dsm_msg_wkr_data_ack **msg) {
     size_t needed_sz = sizeof(dsm_msg_wkr_data_ack) + EFFECTIVE_PAGESIZE;
     if (buf_sz < needed_sz) {
+        LOG_ERROR(
+            "Taille du buffer insuffisante pour désérialiser le CODE=%d : %zu < %zu",
+            CODE_WKR_DATA_ACK, buf_sz, needed_sz);
         return -1;
     }
 
@@ -702,6 +749,9 @@ int dsm_dsrlze_wkr_data_ack(uint8_t *buf, size_t buf_sz, dsm_msg_wkr_data_ack **
 
 int dsm_dsrlze_mgr_req_ack(uint8_t *buf, size_t buf_sz, dsm_msg_mgr_req_ack **msg) {
     if (buf_sz < sizeof(dsm_msg_mgr_req_ack)) {
+        LOG_ERROR(
+            "Taille du buffer insuffisante pour désérialiser le CODE=%d : %zu < %zu",
+            CODE_MGR_REQ_ACK, buf_sz, sizeof(dsm_msg_mgr_req_ack));
         return -1;
     }
 
