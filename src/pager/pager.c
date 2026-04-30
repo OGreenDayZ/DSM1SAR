@@ -60,6 +60,7 @@ error1:
 
 int pager_protect(int uffd, int page_id, int protection) {
     __u64 page = dsm_wkr_ctx->range_start + page_id * EFFECTIVE_PAGESIZE;
+    LOG_INFO("[PAGER] Je resout la faute avec writeprotect\n");
     struct uffdio_writeprotect wp = {.range = {.start = page, .len = EFFECTIVE_PAGESIZE},
                                      .mode = protection};
     if (ioctl(uffd, UFFDIO_WRITEPROTECT, &wp)) {
@@ -73,6 +74,7 @@ int pager_copy(int uffd, int page_id, __u64 src, int mode) {
     __u64 dst = dsm_wkr_ctx->range_start + page_id * EFFECTIVE_PAGESIZE;
     struct uffdio_copy cp = {
         .dst = dst, .src = src, .len = EFFECTIVE_PAGESIZE, .mode = mode};
+    LOG_INFO("[PAGER] Je resout la faute avec copy\n");
     if (ioctl(uffd, UFFDIO_COPY, &cp)) {
         LOG_ERROR("ioctl copy");
         return -1;
