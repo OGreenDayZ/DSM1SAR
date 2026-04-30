@@ -7,6 +7,7 @@
 
 #define DSM_MSG_RECV_TIMEOUT_SEC 5
 #define DSM_MTU_SIZE 1500
+#define DSM_ERR_TCP_CONN_CLOSE -2
 
 typedef enum {
     /* Discover */
@@ -25,7 +26,7 @@ typedef enum {
     CODE_DISCOVER_WORKER_CONFIG_ACK,
     CODE_DISCOVER_FINALIZE,
 
-    // PAGER :
+    /* Pager / Daemon */
     CODE_WKR_REQ,
     CODE_WKR_DATA_ACK,
     CODE_WKR_INVA_ACK,
@@ -33,6 +34,12 @@ typedef enum {
     CODE_MGR_REQ_ACK,
     CODE_MGR_DATA_REQ,
     CODE_MGR_INVA_REQ,
+
+    /* Synchro */
+    CODE_SYNC_BARRIER_REQ,
+    CODE_SYNC_BARRIER_ACK,
+    CODE_SYNC_FINALIZE_REQ,
+    CODE_SYNC_FINALIZE_ACK
 
 } dsm_msg_code;
 
@@ -43,6 +50,9 @@ typedef enum {
  * @mgr: manager
  * @wkr: worker
  * @pgr: pager
+ * @inva: invalidate
+ * @barr: barrier
+ * @fina: finalize
  */
 
 #pragma pack(push, 1)
@@ -158,7 +168,7 @@ typedef struct {
 
 typedef struct {
     uint32_t page_id;
-    // Pas de champs is_empty, car si on lui demande des données alors il est le
+    // Pas de champs data_info, car si on lui demande des données alors il est le
     // propriétaire
     uint8_t data[];
 } dsm_msg_wkr_data_ack;
@@ -178,9 +188,29 @@ typedef struct {
      * uint32_t Attention a ne pas dépasser 255 et a toujours mettre des entiers non
      * signés.
      */
-    uint8_t is_empty;
+    uint8_t data_info;
     uint8_t data[];
 } dsm_msg_mgr_req_ack;
+
+/* CODE_SYNC_BARRIER_REQ */
+// typedef struct {
+//     // struct vide
+// } dsm_msg_sync_barr_req;
+
+/* CODE_SYNC_BARRIER_ACK */
+// typedef struct {
+//     // struct vide
+// } dsm_msg_sync_barr_ack;
+
+/* CODE_SYNC_FINALIZE_REQ */
+// typedef struct {
+//     // struct vide
+// } dsm_msg_sync_fina_req;
+
+/* CODE_SYNC_FINALIZE_ACK */
+// typedef struct {
+//     // struct vide
+// } dsm_msg_sync_fina_ack;
 
 #pragma pack(pop)
 

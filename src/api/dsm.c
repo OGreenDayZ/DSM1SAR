@@ -42,23 +42,23 @@ static int is_power_of_two(size_t x) {
 static int validate_config(dsm_config *config) {
     if (config->pager.nb_pages == 0) {
         LOG_ERROR("nb_pages doit être > 0");
-        return DSM_ERROR_INIT_ARG_NB_PAGES;
+        return -DSM_ERROR_INIT_ARG_NB_PAGES;
     }
 
     if (!is_power_of_two(config->pager.page_size)) {
         LOG_ERROR("page_size doit être une puissance de 2 et > 0");
-        return DSM_ERROR_INIT_ARG_PAGE_SIZE;
+        return -DSM_ERROR_INIT_ARG_PAGE_SIZE;
     }
 
     if (config->net.system.nb_nodes < 2) {
         LOG_ERROR("nb_nodes doit être >= 2");
-        return DSM_ERROR_INIT_ARG_NB_NODES;
+        return -DSM_ERROR_INIT_ARG_NB_NODES;
     }
 
     if (config->net.system.nb_managers == 0 ||
         config->net.system.nb_managers >= config->net.system.nb_nodes) {
         LOG_ERROR("nb_managers doit être > 0 et < nb_nodes");
-        return DSM_ERROR_INIT_ARG_NB_MANAGERS;
+        return -DSM_ERROR_INIT_ARG_NB_MANAGERS;
     }
 
     if (config->net.node.pool_nb_threads == 0) {
@@ -77,19 +77,19 @@ static int dsm_ctx_init(const dsm_config *config) {
 
     if (dsm_ctx) {
         LOG_ERROR("DSM déjà initialisé");
-        return DSM_ERROR_ALREADY_INIT;
+        return -DSM_ERROR_ALREADY_INIT;
     }
 
     dsm_ctx = malloc(sizeof(dsm_context));
     if (!dsm_ctx) {
         LOG_ERROR("Erreur malloc : dsm_ctx");
-        return DSM_ERROR_CONTEXT_ALLOC;
+        return -DSM_ERROR_CONTEXT_ALLOC;
     }
 
     dsm_ctx->config = *config;
 
     int ret = validate_config(&dsm_ctx->config);
-    if (ret != 0) {
+    if (ret < 0) {
         return ret;
     }
 
@@ -100,7 +100,7 @@ static int dsm_ctx_init(const dsm_config *config) {
         dsm_safe_map_destroy(&dsm_ctx->nodes_reg);
         free(dsm_ctx);
         dsm_ctx = NULL;
-        return DSM_ERROR_CONTEXT_ALLOC;
+        return -DSM_ERROR_CONTEXT_ALLOC;
     }
     return 0;
 }
@@ -153,12 +153,15 @@ void *daemon_thread_start(void *arg) {
 
 int dsm_init(const dsm_config *config) {
     LOG_INFO("Initialisation de DSM1SAR...");
-    int ret = dsm_ctx_init(config);
-    if (ret != 0) {
-        return ret;
+    if (dsm_ctx_init(config) < 0) {
+        return -1;
     }
 
-    ret = dsm_network_init();
+    if (dsm_network_init() < 0) {
+        LOG_ERROR("Erreur dsm_network_init");
+        dsm_ctx_cleanup();
+        return -1;
+    }
 
     dsm_node_role role = dsm_ctx->config.net.node.role;
 
@@ -182,7 +185,7 @@ int dsm_init(const dsm_config *config) {
         dsm_ctx_cleanup();
     }
 
-    return ret;
+    return 0;
 }
 
 void *dsm_alloc(void) {

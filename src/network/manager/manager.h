@@ -78,8 +78,16 @@ typedef struct {
 
 typedef struct {
 
+    pthread_mutex_t lock;
+    unsigned int missing_barr_reqs;
+    unsigned int missing_fina_reqs;
+} dsm_mgr_sync;
+
+typedef struct {
+
     // map des pages : page_id -> dsm_page_content
     dsm_safe_map pages_reg;
+    dsm_mgr_sync sync;
 
 } dsm_manager_ctx;
 

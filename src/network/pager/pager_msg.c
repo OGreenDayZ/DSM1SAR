@@ -43,7 +43,7 @@ int send_wkr_inva_ack(uint32_t page_id, int fd_sock) {
 }
 
 /**
- * @note : pas de is_empty ici car on demande les données au propriétaire, donc si il a
+ * @note : pas de data_info ici car on demande les données au propriétaire, donc si il a
  * reçu une demande de donnée forcément il a.
  */
 int send_wkr_data_ack(uint32_t page_id, uint8_t *data, int fd_sock) {
@@ -97,12 +97,15 @@ int send_mgr_data_req(uint32_t page_id, uint8_t is_invalidate, int fd_sock) {
     return 0;
 }
 
-int send_mgr_req_ack(uint32_t page_id, uint8_t req_mode, uint8_t is_empty, uint8_t *data,
+int send_mgr_req_ack(uint32_t page_id, uint8_t req_mode, uint8_t data_info, uint8_t *data,
                      int fd_sock) {
     LOG_INFO("Envoi du CODE=%d à %d...", CODE_MGR_REQ_ACK, fd_sock);
-    int data_len = (is_empty ? 0 : EFFECTIVE_PAGESIZE);
+    LOG_INFO(
+        "[AffichageTEMP]Envoi du CODE=%d à %d... (page_id=%u, req_mode=%d, data_info=%d)",
+        CODE_MGR_REQ_ACK, fd_sock, page_id, req_mode, data_info);
+    int data_len = (data_info ? 0 : EFFECTIVE_PAGESIZE);
     uint8_t msg_buf[sizeof(dsm_msg_header) + sizeof(dsm_msg_mgr_req_ack) + data_len];
-    int msg_len = dsm_srlze_mgr_req_ack(page_id, req_mode, is_empty, data, msg_buf,
+    int msg_len = dsm_srlze_mgr_req_ack(page_id, req_mode, data_info, data, msg_buf,
                                         sizeof(msg_buf));
     if (msg_len < 0)
         return -1;

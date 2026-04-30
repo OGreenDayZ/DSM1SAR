@@ -31,10 +31,6 @@ static int dmn_ctx_init() {
 
     atomic_store(&dmn_ctx->state, DSM_DMN_STATE_ONGOING);
 
-    // if (dsm_safe_list_init(&dmn_ctx->poll_fds_update) < 0) {
-    //     return -1;
-    // }
-
     dmn_ctx->pool = pool_create(dsm_ctx->config.net.node.pool_nb_threads,
                                 dsm_ctx->config.net.node.pool_queue_size);
 
@@ -49,8 +45,9 @@ static int recv_header(int fd, dsm_msg_header *out) {
     uint8_t buf[sizeof(dsm_msg_header)];
     struct timeval timeout = {.tv_sec = DSM_MSG_RECV_TIMEOUT_SEC, .tv_usec = 0};
 
-    if (dsm_tcp_recv_all(fd, buf, sizeof(buf), &timeout) < 0)
-        return -1;
+    int ret = dsm_tcp_recv_all(fd, buf, sizeof(buf), &timeout);
+    if (ret < 0)
+        return ret;
 
     return dsm_dsrlze_header(buf, sizeof(buf), out);
 }
@@ -104,8 +101,8 @@ static int handle_socket_event(int recv_sock) {
 
     msg_ctx->sock = recv_sock;
 
-    if (recv_header(recv_sock, &msg_ctx->header) < 0) {
-        ret = -1;
+    ret = recv_header(recv_sock, &msg_ctx->header);
+    if (ret < 0) {
         goto exit_err_ctx;
     }
 
@@ -126,8 +123,8 @@ static int handle_socket_event(int recv_sock) {
         goto exit_err_payload;
     }
 
-    if (recv_payload(recv_sock, msg_ctx->header.payload_len, msg_ctx->payload) < 0) {
-        ret = -1;
+    ret = recv_payload(recv_sock, msg_ctx->header.payload_len, msg_ctx->payload);
+    if (ret < 0) {
         goto exit_err_payload;
     }
 
@@ -220,7 +217,13 @@ int dsm_daemon_start(void) {
                     }
                 } else {
 
-                    if (handle_socket_event(fds[i].fd) < 0) {
+                    ret = handle_socket_event(fds[i].fd);
+                    if (ret < 0) {
+                        if (ret == DSM_ERR_TCP_CONN_CLOSE) {
+                            LOG_WARNING("Connexion fermée, màj du poll, FD=%d -> -1",
+                                        fds[i].fd);
+                            fds[i].fd = -1;
+                        }
                         continue;
                     }
                 }

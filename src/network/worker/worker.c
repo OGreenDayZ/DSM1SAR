@@ -46,27 +46,23 @@ int dsm_wkr_ctx_init() {
         return -1;
     }
 
-    if (dsm_safe_map_init(&dsm_wkr_ctx->barrier_reg, DSM_WKR_PAGE_HASH_BITS) < 0) {
-        LOG_ERROR("[dsm_wkr_ctx_init] dsm_safe_map_init dsm_wkr_ctx->barrier_reg");
-        return -1;
-    }
-
     if (dsm_safe_map_init(&dsm_wkr_ctx->locks_reg, DSM_WKR_PAGE_HASH_BITS) < 0) {
         LOG_ERROR("[dsm_wkr_ctx_init] dsm_safe_map_init dsm_wkr_ctx->locks_reg");
         return -1;
     }
+    pthread_mutex_init(&dsm_wkr_ctx->sync.barr.lock, NULL);
+    pthread_cond_init(&dsm_wkr_ctx->sync.barr.wait_cond, NULL);
 
-    dsm_wkr_ctx->sync_finalize.target_count = 0;
-    if (pthread_mutex_init(&dsm_wkr_ctx->sync_finalize.targ_c_mutex, NULL) != 0) {
-        LOG_ERROR("pthread_mutex_init : targ_c_mutex");
-        return -1;
-    }
+    dsm_wkr_ctx->sync.barr.targ_mgr_id = 0; // Par défaut, ca sera toujours le ManagerID=0
 
-    dsm_wkr_ctx->sync_finalize.finalize_count = 0;
-    if (pthread_cond_init(&dsm_wkr_ctx->sync_finalize.finalize_cond, NULL) != 0) {
-        LOG_ERROR("pthread_cond_init : finalize_cond");
-        return -1;
-    }
+    dsm_wkr_ctx->sync.barr.curr_count = 0;
+    dsm_wkr_ctx->sync.barr.targ_count = 0;
+
+    pthread_mutex_init(&dsm_wkr_ctx->sync.fina.lock, NULL);
+    pthread_cond_init(&dsm_wkr_ctx->sync.fina.wait_cond, NULL);
+
+    dsm_wkr_ctx->sync.fina.curr_count = 0;
+    dsm_wkr_ctx->sync.fina.targ_count = 0;
 
     dsm_wkr_ctx->page_counter = 0;
     return 0;
@@ -390,7 +386,7 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
             LOG_ERROR("C'est pas une requete que je connais sorry");
     }
 
-    switch (payload->is_empty) {
+    switch (payload->data_info) {
         case EMPTY_INIT:
             printf("[treat_mgr_req_ack] EMPTY_INIT - la page est vide et ca va la "
                    "remplir pour regler la page fault\n");

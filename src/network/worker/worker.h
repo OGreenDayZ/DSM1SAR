@@ -25,29 +25,35 @@ typedef struct {
 
 typedef struct {
 
-    unsigned int page_id; // TODO REWORK !!!
+    pthread_mutex_t lock;
 
-    unsigned int target_count;
-    unsigned int manager_id; // responsable de la barrière
+    unsigned int targ_mgr_id; // Le responsable de la barrière, 0 par défaut
 
-    unsigned int curr_count; // compteur threads arrivés à la barrière
+    unsigned int curr_count;
+    unsigned int targ_count; // 0 non initialisé, sinon le nombre de threads qui dorment
+                             // sur wait_cond
 
-    pthread_cond_t cond;
+    pthread_cond_t wait_cond;
 
-    struct dsm_hlist_node node;
-} dsm_barrier_content; // Pour barrier_reg
-
-// Entry de la liste
+} sync_barrier; // Pour dsm_mgr_sync
 
 typedef struct {
 
-    unsigned int target_count;    // TODO REWORK !!!
-    pthread_mutex_t targ_c_mutex; // TODO REWORK !!!
+    pthread_mutex_t lock;
 
-    atomic_uint finalize_count; // compteur threads arrivés à la finalisation
-    pthread_cond_t finalize_cond;
+    unsigned int curr_count;
+    unsigned int targ_count; // 0 non initialisé, sinon le nombre de threads qui dorment
+                             // sur wait_cond
 
-} dsm_sync_finalize;
+    pthread_cond_t wait_cond;
+
+} sync_finalize; // Pour dsm_mgr_sync
+
+typedef struct {
+
+    sync_barrier barr;
+    sync_finalize fina;
+} dsm_wkr_sync; // Pour sync
 
 
 typedef enum {
@@ -76,6 +82,7 @@ typedef struct {
     dsm_safe_list locks_list; 
     struct dsm_hlist_node node; // locks_reg 
 } dsm_locks_reg_entry;
+
 typedef struct {
     /**
      * Descripteur userfaultfd du worker courant.
@@ -90,10 +97,7 @@ typedef struct {
     dsm_safe_map managerID_to_nodeID;
     dsm_safe_map requests_reg;
     dsm_safe_map locks_reg;
-
-
-    dsm_safe_map barrier_reg;        // TODO REWORK !!
-    dsm_sync_finalize sync_finalize; // TODO REWORK !!
+   dsm_wkr_sync sync;
 
     pthread_t daemon;
 
