@@ -64,7 +64,8 @@ int send_wkr_data_ack(uint32_t page_id, uint8_t *data, int fd_sock) {
 }
 
 int send_mgr_inva_req(uint32_t page_id, uint8_t is_sync, int fd_sock) {
-    LOG_INFO("Envoi du CODE=%d à %d...", CODE_MGR_INVA_REQ, fd_sock);
+    LOG_INFO("Envoi du CODE=%d à %d (page_id=%d, is_sync=%d)...", CODE_MGR_INVA_REQ,
+             fd_sock, page_id, is_sync);
     uint8_t msg_buf[sizeof(dsm_msg_header) + sizeof(dsm_msg_mgr_inva_req)];
     int msg_len = dsm_srlze_mgr_inva_req(page_id, is_sync, msg_buf, sizeof(msg_buf));
     if (msg_len < 0)

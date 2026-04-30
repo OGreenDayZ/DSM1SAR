@@ -55,13 +55,6 @@ typedef struct {
     sync_finalize fina;
 } dsm_wkr_sync; // Pour sync
 
-// typedef struct {
-//     page_mode_req mode_req; // Le max requete faite pour cette page
-//     int started; // flag pour dire si la requete est en cours de traitement ou pas
-//     // 0 -> non, 1 -> oui
-//     int dont_do; // 0 -> do , 1 -> dont_do
-//     dsm_list_head node;
-// } dsm_requests_reg_list_entry; // entrée de list_req
 
 typedef enum {
     NONE, 
@@ -75,14 +68,19 @@ typedef struct {
     struct dsm_hlist_node node; // pour la map requests_reg
 } dsm_requests_reg_entry;       // entrée de requests_reg
 
+
 typedef struct {
-    unsigned int page_id;
     int locked; // 0 : la page n'est pas encore locked & 1 : la page est locked
     // Le mutex est la car c'est la page qu'on protège
     pthread_mutex_t mutex; // mutex pour protéger l'accès à locked
     pthread_cond_t cond;
-
-    dsm_list_head node;
+    
+    dsm_list_head node; // locks_list
+} dsm_locks_list_entry; 
+typedef struct {
+    unsigned int page_id;
+    dsm_safe_list locks_list; 
+    struct dsm_hlist_node node; // locks_reg 
 } dsm_locks_reg_entry;
 
 typedef struct {
@@ -98,9 +96,8 @@ typedef struct {
     // map des managers : manager_id -> node_id
     dsm_safe_map managerID_to_nodeID;
     dsm_safe_map requests_reg;
-    dsm_safe_list locks_reg; // enregistre les locks sur les pages, par thread
-
-    dsm_wkr_sync sync;
+    dsm_safe_map locks_reg;
+   dsm_wkr_sync sync;
 
     pthread_t daemon;
 
