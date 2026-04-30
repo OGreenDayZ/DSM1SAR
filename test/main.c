@@ -1,5 +1,6 @@
 #include "debug/debug.h"
 #include "dsm.h"
+#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -24,5 +25,13 @@ int main(int argc, char const *argv[]) {
     //     sleep(3);
     //     // config.net.system.system_id = 1; // Collision
     // }
-    return dsm_init(&config);
+
+    if (dsm_init(&config) < 0) {
+        return -1;
+    }
+
+    printf("J'attends...\n");
+    sleep(20);
+
+    return 0;
 }
