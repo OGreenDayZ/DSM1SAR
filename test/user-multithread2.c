@@ -63,45 +63,40 @@ int main() {
         return -1;
     }
 
-    if (dsm_get_role() == DSM_ROLE_WORKER) {
-        // Allocation d'une page
-        void *page_ptr = dsm_alloc();
-        if (!page_ptr)
-            return -1;
+    // Allocation d'une page
+    void *page_ptr = dsm_alloc();
+    if (!page_ptr)
+        return -1;
 
-        pthread_t threads[5];
-        test_arg_t args[5];
+    pthread_t threads[5];
+    test_arg_t args[5];
 
-        printf(
-            "\n--- CAS 1 & 2 : Concurrence d'accès (Messager/Passager/Priorité) ---\n");
-        for (int i = 0; i < 3; i++) {
-            args[i].addr = page_ptr;
-            args[i].thread_id = i;
-            if (i == 2) {
-                // Le dernier thread tente une écriture pour tester l'annulation du READ
-                // non
-                // commencé
-                pthread_create(&threads[i], NULL, thread_write_upgrade, &args[i]);
-            } else {
-                pthread_create(&threads[i], NULL, thread_read_concurrency, &args[i]);
-            }
+    printf("\n--- CAS 1 & 2 : Concurrence d'accès (Messager/Passager/Priorité) ---\n");
+    for (int i = 0; i < 3; i++) {
+        args[i].addr = page_ptr;
+        args[i].thread_id = i;
+        if (i == 2) {
+            // Le dernier thread tente une écriture pour tester l'annulation du READ
+            // non
+            // commencé
+            pthread_create(&threads[i], NULL, thread_write_upgrade, &args[i]);
+        } else {
+            pthread_create(&threads[i], NULL, thread_read_concurrency, &args[i]);
         }
-
-        for (int i = 0; i < 3; i++)
-            pthread_join(threads[i], NULL);
-
-        printf("\n--- CAS 3 : Test des verrous exclusifs (LOCK_REQ) ---\n");
-        for (int i = 3; i < 5; i++) {
-            args[i].addr = page_ptr;
-            args[i].thread_id = i;
-            pthread_create(&threads[i], NULL, thread_lock_test, &args[i]);
-        }
-
-        for (int i = 3; i < 5; i++)
-            pthread_join(threads[i], NULL);
-    } else {
-        dsm_mgr_ctx_init();
     }
+
+    for (int i = 0; i < 3; i++)
+        pthread_join(threads[i], NULL);
+
+    printf("\n--- CAS 3 : Test des verrous exclusifs (LOCK_REQ) ---\n");
+    for (int i = 3; i < 5; i++) {
+        args[i].addr = page_ptr;
+        args[i].thread_id = i;
+        pthread_create(&threads[i], NULL, thread_lock_test, &args[i]);
+    }
+
+    for (int i = 3; i < 5; i++)
+        pthread_join(threads[i], NULL);
 
     // dsm_finalize();
     return 0;

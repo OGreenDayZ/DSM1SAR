@@ -62,7 +62,6 @@ static int recv_payload(int fd, size_t len, uint8_t *out) {
 
 static int handle_uffd_event(int uffd) {
     LOG_INFO("Message reçu sur userfaultfd");
-    printf("[handle_uffd_event] Message reçu sur userfaultfd\n");
 
     int ret = 0;
     dsm_msg_uffd_thread_ctx *msg_ctx = malloc(sizeof(dsm_msg_uffd_thread_ctx));
@@ -216,8 +215,6 @@ int dsm_daemon_start(void) {
             if (fds[i].revents & POLLIN) {
 
                 if (my_role == DSM_ROLE_WORKER && i == 0) {
-                    printf("[dsm_daemon_start] Je suis un worker et je viens de recevoir "
-                           "un pagefault\n");
                     if (handle_uffd_event(fds[i].fd) < 0) {
                         continue;
                     }

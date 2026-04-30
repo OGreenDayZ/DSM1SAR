@@ -151,7 +151,7 @@ pthread_mutex_t get_mgr_send_lock_for_page(unsigned long page_id) {
 dsm_requests_reg_list_entry *add_request(unsigned long page_id, page_mode_req mode) {
     dsm_requests_reg_entry *entry_map = NULL, *entry_parcours = NULL;
     dsm_requests_reg_list_entry *entry_list = NULL, *entry_list_parcours = NULL;
-    ;
+
     dsm_requests_reg_list_entry *to_be_added =
         malloc(sizeof(dsm_requests_reg_list_entry));
 
@@ -168,8 +168,6 @@ dsm_requests_reg_list_entry *add_request(unsigned long page_id, page_mode_req mo
     to_be_added->dont_do = 0;
 
     dsm_safe_list_add_tail(&entry_map->list_req, &to_be_added->node);
-    printf("[add_request] Page %lu: Requête type %d ajoutée à la liste (addr: %p)\n",
-           page_id, mode, (void *)to_be_added);
 
     return to_be_added;
 }
@@ -194,10 +192,6 @@ int delete_satisfied_request(unsigned long page_id) {
     dsm_safe_list_for_each_entry_safe(&entry_map->list_req, req_pos, tmp, node) {
 
         if (req_pos->started == 1 || req_pos->dont_do == 1) {
-            printf("[delete_batch] Nettoyage req type %d (addr: %p, started: %d, "
-                   "dont_do: %d)\n",
-                   req_pos->mode_req, (void *)req_pos, req_pos->started,
-                   req_pos->dont_do);
 
             dsm_safe_list_del(&entry_map->list_req, &req_pos->node);
             free(req_pos);
@@ -205,9 +199,6 @@ int delete_satisfied_request(unsigned long page_id) {
         } else {
             // On tombe sur une requête qui a 'dont_do == 0' et 'started == 0'
             // Cela signifie que c'est une requête qui attend son tour pour être envoyée.
-            printf(
-                "[delete_batch] Arrêt : Prochaine requête active détectée (addr: %p)\n",
-                (void *)req_pos);
             break;
         }
     }
@@ -243,15 +234,14 @@ int has_higher_priority_pending(unsigned long page_id, page_mode_req mode) {
             page_id, req_pos->mode_req, req_pos->started);
 
         if (mode == LOCK_REQ) {
-            printf("[priority_check] faut toujours envoyé les locks\n");
+
             higher_exist = 0;
             dsm_safe_list_unlock(&entry_map->list_req);
             break;
         }
         // Si on a READ non commencé et un WRITE
         if (mode > req_pos->mode_req && req_pos->started == 0 && req_pos->dont_do == 0) {
-            printf("[priority_check] Si ya une requete inferieur pas commencé on "
-                   "l'annule\n");
+
             req_pos->dont_do = 1;
             higher_exist = 0;
             dsm_safe_list_unlock(&entry_map->list_req);
@@ -261,22 +251,10 @@ int has_higher_priority_pending(unsigned long page_id, page_mode_req mode) {
         if (mode <= req_pos->mode_req ||
             (mode <= req_pos->mode_req && req_pos->started == 1)) {
             higher_exist = 1;
-            printf("[priority_check] -> BLOQUÉ : Une requête identique ou plus forte est "
-                   "déjà en vol.\n");
+
             dsm_safe_list_unlock(&entry_map->list_req);
             break;
         }
-    }
-
-    dsm_safe_list_for_each_entry(&entry_map->list_req, req_pos, node) {
-        printf("[priority_check] PRINT_LIST - Page %lu: Analyse req en liste (Mode: %d, "
-               "Started: %d, Dont_do: %d)\n",
-               page_id, req_pos->mode_req, req_pos->started, req_pos->dont_do);
-    }
-
-    if (higher_exist == 0) {
-        printf("[priority_check] -> OK : Aucune requête couvrante en cours. Envoi "
-               "nécessaire.\n");
     }
 
     return higher_exist;
@@ -295,31 +273,20 @@ static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
                              ? WRITE_REQ
                              : READ_REQ;
 
-    printf("[uffd_fault] Thread %lu tente d'accéder à page %d en %s\n",
-           (unsigned long)pthread_self(), page_id,
-           (mode == WRITE_REQ ? "WRITE" : "READ"));
-
-    pthread_mutex_lock(&send_lock);
-    printf("[uffd_fault] Lock acquis pour page %d\n", page_id);
-
     if (has_higher_priority_pending(page_id, mode) == 1) {
-        printf("[uffd_fault] Décision: PASSAGER. Un autre thread gère déjà la requête "
-               "réseau.\n");
+
         req_entry = add_request(page_id, mode);
         req_entry->dont_do = 1;
         req_entry->started = 0; // Ce thread ne fait rien sur le réseau
-    } else {
-        printf("[uffd_fault] Décision: MESSAGER. Ce thread envoie la requête %d au "
-               "manager.\n",
-               mode);
-        req_entry = add_request(page_id, mode);
-        req_entry->dont_do = 0;
-        req_entry->started = 1; // On marque comme lancé avant d'envoyer
-        ret = send_wkr_req(page_id, mode, fd_sock_mgr);
     }
 
-    printf("[uffd_fault] Relâchement du lock pour page %d\n", page_id);
+    req_entry = add_request(page_id, mode);
+    req_entry->dont_do = 0;
+    req_entry->started = 1; // On marque comme lancé avant d'envoyer
+    pthread_mutex_lock(&send_lock);
+    ret = send_wkr_req(page_id, mode, fd_sock_mgr);
     pthread_mutex_unlock(&send_lock);
+
     return ret;
 }
 
@@ -329,7 +296,7 @@ void dispatch_call_uffd(void *arg) {
 
     switch (fault_msg->event) {
         case UFFD_EVENT_PAGEFAULT:
-            printf("[dispatch_call_uffd] Reception d'une pagefault\n");
+
             if (treat_uffd_pagefault(fault_msg) < 0) {
                 LOG_ERROR("Erreur lors du traitement du pagefault");
             }
@@ -427,7 +394,6 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
         calloc(1, EFFECTIVE_PAGESIZE); // alloue une plage de EFFECTIVE_PAGESIZE
                                        // contigue initialisée à 0
     dsm_locks_reg_entry *entry, *n;
-
     if (dsm_dsrlze_mgr_req_ack(msg_ctx->payload, msg_ctx->header.payload_len, &payload) <
         0) {
         LOG_ERROR("dsm_dsrlze_mgr_req_ack");
@@ -470,8 +436,8 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
             // On doit s'assurer qu'on débloque le bon thread avec locks_reg
             // locks_reg est une liste FIFO, donc on est sur que le 1er thread qui a
             // envoyé sa requete est le 1er a être réveillé
-            // donc on parcours la liste a la recherche de la 1ere demande de lock associé
-            // a cette page
+            // donc on parcours la liste a la recherche de la 1ere demande de lock
+            // associé a cette page
             dsm_safe_list_for_each_entry_safe(&dsm_wkr_ctx->locks_reg, entry, n, node) {
                 if (entry->page_id == payload->page_id) {
                     pthread_mutex_lock(&entry->mutex);

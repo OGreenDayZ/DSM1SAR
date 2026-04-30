@@ -175,6 +175,7 @@ int dsm_init(const dsm_config *config) {
 
     else if (role == DSM_ROLE_MANAGER) {
         LOG_INFO("Manager : Démarrage du daemon de DSM...");
+
         if (dsm_daemon_start() < 0) {
             LOG_ERROR("Erreur dsm_daemon_start");
         }
@@ -201,8 +202,6 @@ void *dsm_alloc(void) {
 
     LOG_INFO("Allocation de %lu octets à l'adresse %p", EFFECTIVE_PAGESIZE,
              (void *)debut);
-    printf("[dsm_alloc] Allocation de la page %d à l'adresse %p\n",
-           dsm_wkr_ctx->page_counter, (void *)debut);
 
     dsm_wkr_ctx->page_counter++;
 
