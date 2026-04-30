@@ -51,8 +51,8 @@ int dsm_wkr_ctx_init() {
         return -1;
     }
 
-    if (dsm_safe_list_init(&dsm_wkr_ctx->locks_reg) < 0) {
-        LOG_ERROR("[dsm_wkr_ctx_init] dsm_safe_list_init dsm_wkr_ctx->locks_reg");
+    if (dsm_safe_map_init(&dsm_wkr_ctx->locks_reg, DSM_WKR_PAGE_HASH_BITS) < 0) {
+        LOG_ERROR("[dsm_wkr_ctx_init] dsm_safe_map_init dsm_wkr_ctx->locks_reg");
         return -1;
     }
 
@@ -322,7 +322,8 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     void *zero_page =
         calloc(1, EFFECTIVE_PAGESIZE); // alloue une plage de EFFECTIVE_PAGESIZE
                                        // contigue initialisée à 0
-    dsm_locks_reg_entry *entry, *n;
+    dsm_locks_reg_entry *entry = NULL, *found = NULL;
+    dsm_locks_list_entry *entry_list;
     if (dsm_dsrlze_mgr_req_ack(msg_ctx->payload, msg_ctx->header.payload_len, &payload) <
         0) {
         LOG_ERROR("dsm_dsrlze_mgr_req_ack");
@@ -346,16 +347,24 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
                 req_entry->state = NONE;
                 pthread_mutex_unlock(&req_entry->mutex);
             }
-            dsm_safe_list_for_each_entry_safe(&dsm_wkr_ctx->locks_reg, entry, n, node) {
+
+            dsm_hash_safe_get(&dsm_wkr_ctx->locks_reg, entry, node, payload->page_id) {
                 if (entry->page_id == payload->page_id) {
-                    pthread_mutex_lock(&entry->mutex);
-                    entry->locked = 1;
-                    pthread_cond_signal(&entry->cond);
-                    pthread_mutex_unlock(&entry->mutex);
-                    dsm_safe_list_unlock(&dsm_wkr_ctx->locks_reg);
+                    found = entry;
                     break;
                 }
             }
+            dsm_hash_safe_get_end(&dsm_wkr_ctx->locks_reg, payload->page_id);
+
+            dsm_safe_list_for_each_entry(&found->locks_list, entry_list, node) {
+                pthread_mutex_lock(&entry_list->mutex);
+                entry_list->locked = 1;
+                pthread_cond_signal(&entry_list->cond);
+                pthread_mutex_unlock(&entry_list->mutex);
+                dsm_safe_list_unlock(&entry->locks_list);
+                break;
+            }
+
             break;
         case UNLOCK_REQ:
             // On reçoit ici la reponse au UNLOCK_REQ

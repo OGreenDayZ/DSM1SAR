@@ -230,50 +230,51 @@ void *dsm_alloc(void) {
     return (void *)debut;
 }
 
-// TODO - majda : est ce que faut ajouter cette requete dans la map de requete ?? NON
 int dsm_lock(void *addr) {
     unsigned int page_id = addr_to_page_id((uint64_t)addr);
     int fd_sock = get_mgr_node_socket_for_page(page_id);
-    // Je veux lock la page
-    // Je dors sur le mutex de ma liste de lock
-    // et j'attends qu'on me reveille
-    dsm_locks_reg_entry *entry = malloc(sizeof(dsm_locks_reg_entry));
-    dsm_requests_reg_entry *req_entry = get_request_entry(page_id);
     pthread_mutex_t send_lock = get_mgr_send_lock_for_page(page_id);
+    dsm_locks_reg_entry *locks_reg_entry = NULL, *found = NULL;
+    dsm_locks_list_entry *entry_list = malloc(sizeof(dsm_locks_list_entry));
 
-    entry->page_id = page_id;
-    entry->locked = 0;
+    dsm_hash_safe_get(&dsm_wkr_ctx->locks_reg, locks_reg_entry, node, page_id) {
+        if (locks_reg_entry->page_id == page_id) {
+            found = locks_reg_entry;
+            break;
+        }
+    }
+    dsm_hash_safe_get_end(&dsm_wkr_ctx->locks_reg, page_id);
 
-    if (pthread_mutex_init(&entry->mutex, NULL) < 0) {
+    entry_list->locked = 0;
+    if (pthread_mutex_init(&entry_list->mutex, NULL) < 0) {
         LOG_ERROR("[dsm_lock] pthread_mutex_init &entry->mutex");
         return -1;
     }
 
-    if (pthread_cond_init(&entry->cond, NULL) < 0) {
-        LOG_ERROR("[dsm_lock] pthread_mutex_init &entry->mutex");
+    if (pthread_cond_init(&entry_list->cond, NULL) < 0) {
+        LOG_ERROR("[dsm_lock] pthread_cond_init &entry->mutex");
         return -1;
     }
 
-    pthread_mutex_lock(&req_entry->mutex);
-    // Pas besoin de tester ici car dans tout les cas on envoie la requete
-    req_entry->state = WRITE_SENT;
-    pthread_mutex_unlock(&req_entry->mutex);
-
-    pthread_mutex_lock(&entry->mutex);
-    dsm_safe_list_add_tail(&dsm_wkr_ctx->locks_reg, &entry->node);
+    pthread_mutex_lock(&entry_list->mutex);
+    dsm_safe_list_add_tail(&found->locks_list, &entry_list->node);
 
     pthread_mutex_lock(&send_lock);
     if (send_wkr_req(page_id, LOCK_REQ, fd_sock) < 0) {
         pthread_mutex_unlock(&send_lock);
-        pthread_mutex_unlock(&entry->mutex);
+        pthread_mutex_unlock(&entry_list->mutex);
         return -1;
     }
     pthread_mutex_unlock(&send_lock);
 
-    while (entry->locked == 0)
-        pthread_cond_wait(&entry->cond, &entry->mutex);
-    pthread_mutex_unlock(&entry->mutex);
+    while (entry_list->locked == 0)
+        pthread_cond_wait(&entry_list->cond, &entry_list->mutex);
+    pthread_mutex_unlock(&entry_list->mutex);
 
+    // Je supprime l'entrée de laaaa
+    pthread_mutex_destroy(&entry_list->mutex);
+    pthread_cond_destroy(&entry_list->cond);
+    dsm_safe_list_del(&found->locks_list, &entry_list->node);
     return 0;
 }
 
