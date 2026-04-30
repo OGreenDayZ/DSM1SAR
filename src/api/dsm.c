@@ -3,6 +3,7 @@
 #include "debug/debug.h"
 #include "internal.h"
 #include "network/daemon.h"
+#include "network/manager/manager.h"
 #include "network/network.h"
 #include "network/pager/pager_msg.h"
 #include "network/worker/worker.h"
@@ -152,7 +153,6 @@ int dsm_init(const dsm_config *config) {
     print_nodes_reg();
     if (dsm_ctx->config.net.node.role == DSM_ROLE_WORKER) {
         print_convert_reg();
-        dsm_wkr_ctx_init();
     } else {
         print_nodes_reg();
     }

@@ -150,6 +150,8 @@ pthread_mutex_t get_mgr_send_lock_for_page(unsigned long page_id) {
 // Ne pas ajouter la requete tout le temps !!!
 dsm_requests_reg_list_entry *add_request(unsigned long page_id, page_mode_req mode) {
     dsm_requests_reg_entry *entry_map = NULL, *entry_parcours = NULL;
+    dsm_requests_reg_list_entry *entry_list = NULL, *entry_list_parcours = NULL;
+    ;
     dsm_requests_reg_list_entry *to_be_added =
         malloc(sizeof(dsm_requests_reg_list_entry));
 
@@ -158,6 +160,9 @@ dsm_requests_reg_list_entry *add_request(unsigned long page_id, page_mode_req mo
     }
     dsm_hash_safe_get_end(&dsm_wkr_ctx->requests_reg, page_id);
 
+    // Parcours la listen si ya une quete dont req_pos->mode == mode et started = 1 alors
+    // on ajoute pas la requete
+    // dsm_safe_list_for_each_entry(&entry_map->list_req, )
     to_be_added->mode_req = mode;
     to_be_added->started = 0;
     to_be_added->dont_do = 0;
