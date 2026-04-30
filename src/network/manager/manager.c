@@ -626,7 +626,9 @@ static int treat_sync_barrier_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     return 0;
 }
 
-static int treat_sync_finalize_req(dsm_msg_tcpss_thread_ctx *msg_ctx);
+static int treat_sync_finalize_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
+    return 0;
+}
 
 void dispatch_call_mgr(void *arg) {
     dsm_msg_tcpss_thread_ctx *msg_ctx = (dsm_msg_tcpss_thread_ctx *)arg;
