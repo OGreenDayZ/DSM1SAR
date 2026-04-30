@@ -3,6 +3,7 @@
 #include "debug/debug.h"
 #include "internal.h"
 #include "network/manager/manager.h"
+#include "network/message/serializer.h"
 #include "network/pager/pager_msg.h"
 #include "pager/pager.h"
 
@@ -15,7 +16,7 @@
 int treat_read_req_poss_init(dsm_page_content *page_content,
                              dsm_request_content *req_content, bool *req_completed) {
 
-    LOG_INFO("Traitement d'une READ_REQ sur PAGE_INIT ...");
+    LOG_INFO("Traitement d'un CODE=%d ... | READ_REQ sur PAGE_INIT", CODE_WKR_REQ);
 
     unsigned int cb_id = req_content->header.id;
     dsm_node_content *node_content;
@@ -52,13 +53,14 @@ int treat_read_req_poss_init(dsm_page_content *page_content,
 
     *req_completed = true;
 
+    LOG_INFO("Succès du traitement du CODE=%d", CODE_WKR_REQ);
     return 0;
 }
 
 int treat_read_req_poss_r(dsm_page_content *page_content,
                           dsm_request_content *req_content, bool *req_completed) {
 
-    LOG_INFO("Traitement d'une READ_REQ sur PAGE_R ...");
+    LOG_INFO("Traitement d'un CODE=%d ... | READ_REQ sur PAGE_R", CODE_WKR_REQ);
 
     unsigned int owner_id = page_content->owner_id;
     dsm_node_content *node_content;
@@ -97,6 +99,7 @@ int treat_read_req_poss_r(dsm_page_content *page_content,
     *req_completed =
         false; // Meme false on explicitera toujours pour toutes les fonctions !
 
+    LOG_INFO("Succès du traitement du CODE=%d", CODE_WKR_REQ);
     return 0;
 }
 
@@ -104,7 +107,7 @@ int treat_read_req_poss_r(dsm_page_content *page_content,
 int treat_read_req_poss_rw(dsm_page_content *page_content,
                            dsm_request_content *req_content, bool *req_completed) {
 
-    LOG_INFO("Traitement d'une READ_REQ sur PAGE_RW ...");
+    LOG_INFO("Traitement d'un CODE=%d ... | READ_REQ sur PAGE_RW", CODE_WKR_REQ);
 
     unsigned int owner_id = page_content->owner_id;
     dsm_node_content *node_content;
@@ -143,13 +146,14 @@ int treat_read_req_poss_rw(dsm_page_content *page_content,
 
     *req_completed = false;
 
+    LOG_INFO("Succès du traitement du CODE=%d", CODE_WKR_REQ);
     return 0;
 }
 
 int treat_write_req_poss_init(dsm_page_content *page_content,
                               dsm_request_content *req_content, bool *req_completed) {
 
-    LOG_INFO("Traitement d'une WRITE_REQ sur PAGE_INIT ...");
+    LOG_INFO("Traitement d'un CODE=%d ... | WRITE_REQ sur PAGE_INIT", CODE_WKR_REQ);
 
     unsigned int cb_id = req_content->header.id;
     dsm_node_content *node_content;
@@ -218,13 +222,14 @@ int treat_write_req_poss_init(dsm_page_content *page_content,
 
     *req_completed = true;
 
+    LOG_INFO("Succès du traitement du CODE=%d", CODE_WKR_REQ);
     return 0;
 }
 
 int treat_write_req_poss_r(dsm_page_content *page_content,
                            dsm_request_content *req_content, bool *req_completed) {
 
-    LOG_INFO("Traitement d'une WRITE_REQ sur PAGE_R ...");
+    LOG_INFO("Traitement d'un CODE=%d ... | WRITE_REQ sur PAGE_R", CODE_WKR_REQ);
 
     dsm_node_content *node_content;
 
@@ -340,13 +345,14 @@ int treat_write_req_poss_r(dsm_page_content *page_content,
         *req_completed = false;
     }
 
+    LOG_INFO("Succès du traitement du CODE=%d", CODE_WKR_REQ);
     return 0;
 }
 
 int treat_write_req_poss_rw(dsm_page_content *page_content,
                             dsm_request_content *req_content, bool *req_completed) {
 
-    LOG_INFO("Traitement d'une WRITE_REQ sur PAGE_RW ...");
+    LOG_INFO("Traitement d'un CODE=%d ... | WRITE_REQ sur PAGE_RW", CODE_WKR_REQ);
 
     dsm_node_content *node_content;
 
@@ -379,7 +385,7 @@ int treat_write_req_poss_rw(dsm_page_content *page_content,
         return -1;
     }
 
-    page_content->mode = PAGE_RW;
+    // page_content->mode = PAGE_RW; Pas utile
     page_content->owner_id = cb_id;
 
     int ret = 0;
@@ -411,13 +417,14 @@ int treat_write_req_poss_rw(dsm_page_content *page_content,
         *req_completed = false;
     }
 
+    LOG_INFO("Succès du traitement du CODE=%d", CODE_WKR_REQ);
     return 0;
 }
 
 int treat_lock_req_poss_init(dsm_page_content *page_content,
                              dsm_request_content *req_content, bool *req_completed) {
 
-    LOG_INFO("Traitement d'une LOCK_REQ sur PAGE_INIT ...");
+    LOG_INFO("Traitement d'un CODE=%d ... | LOCK_REQ sur PAGE_INIT", CODE_WKR_REQ);
 
     int inva_ack_count = 0;
     bool cb_is_reader = false;
@@ -478,13 +485,14 @@ int treat_lock_req_poss_init(dsm_page_content *page_content,
 
     *req_completed = false;
 
+    LOG_INFO("Succès du traitement du CODE=%d", CODE_WKR_REQ);
     return 0;
 }
 
 int treat_lock_req_poss_r(dsm_page_content *page_content,
                           dsm_request_content *req_content, bool *req_completed) {
 
-    LOG_INFO("Traitement d'une LOCK_REQ sur PAGE_R ...");
+    LOG_INFO("Traitement d'un CODE=%d ... | LOCK_REQ sur PAGE_R", CODE_WKR_REQ);
 
     dsm_node_content *node_content;
 
@@ -602,13 +610,14 @@ int treat_lock_req_poss_r(dsm_page_content *page_content,
 
     pthread_mutex_unlock(&page_content->head_req_ctx.lock);
 
+    LOG_INFO("Succès du traitement du CODE=%d", CODE_WKR_REQ);
     return 0;
 }
 
 int treat_lock_req_poss_rw(dsm_page_content *page_content,
                            dsm_request_content *req_content, bool *req_completed) {
 
-    LOG_INFO("Traitement d'une LOCK_REQ sur PAGE_RW ...");
+    LOG_INFO("Traitement d'un CODE=%d ... | LOCK_REQ sur PAGE_RW", CODE_WKR_REQ);
 
     dsm_node_content *node_content;
 
@@ -678,5 +687,42 @@ int treat_lock_req_poss_rw(dsm_page_content *page_content,
         pthread_mutex_unlock(&page_content->head_req_ctx.lock);
     }
 
+    LOG_INFO("Succès du traitement du CODE=%d", CODE_WKR_REQ);
+    return 0;
+}
+
+int send_sync_barr_ack(int sock) {
+    LOG_INFO("Envoi d'un CODE=%d ...", CODE_SYNC_BARRIER_ACK);
+
+    uint8_t msg_buf[sizeof(dsm_msg_header)];
+    int msg_len = dsm_srlze_sync_barrier_ack(msg_buf, sizeof(msg_buf));
+    if (msg_len < 0) {
+        return -1;
+    }
+
+    int sent = dsm_tcp_send_all(sock, msg_buf, msg_len);
+    if (sent < 0) {
+        return -1;
+    }
+
+    LOG_INFO("Succès de l'envoi du CODE=%d", CODE_SYNC_BARRIER_ACK);
+    return 0;
+}
+
+int send_sync_fina_ack(int sock) {
+    LOG_INFO("Envoi d'un CODE=%d ...", CODE_SYNC_FINALIZE_ACK);
+
+    uint8_t msg_buf[sizeof(dsm_msg_header)];
+    int msg_len = dsm_srlze_sync_fina_ack(msg_buf, sizeof(msg_buf));
+    if (msg_len < 0) {
+        return -1;
+    }
+
+    int sent = dsm_tcp_send_all(sock, msg_buf, msg_len);
+    if (sent < 0) {
+        return -1;
+    }
+
+    LOG_INFO("Succès de l'envoi du CODE=%d", CODE_SYNC_FINALIZE_ACK);
     return 0;
 }

@@ -67,4 +67,7 @@ int treat_lock_req_poss_rw(dsm_page_content *page_content,
 
 /******************/
 
+int send_sync_barr_ack(int sock);
+int send_sync_fina_ack(int sock);
+
 #endif // DSM_MGR_FACTORY_H

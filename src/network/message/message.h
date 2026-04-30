@@ -36,6 +36,10 @@ typedef enum {
     CODE_MGR_INVA_REQ,
 
     /* Synchro */
+    /*
+     * WKR : BARRIER_REQ, FINALIZE_REQ
+     * MGR : BARRIER_ACK, FINALIZE_ACK
+     */
     CODE_SYNC_BARRIER_REQ,
     CODE_SYNC_BARRIER_ACK,
     CODE_SYNC_FINALIZE_REQ,

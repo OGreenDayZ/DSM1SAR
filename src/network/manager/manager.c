@@ -10,6 +10,7 @@
 #include "network/pager/pager_msg.h"
 #include "pager/pager.h"
 #include "util/concurrent/safe_list.h"
+#include "util/concurrent/safe_map.h"
 
 dsm_manager_ctx *dsm_mgr_ctx = NULL;
 
@@ -245,6 +246,8 @@ static void reset_head_req_ctx(dsm_page_content *page_content) {
  *  - la requête en tête est bloquante (nécessite des ACKs)
  */
 static int drain_reqs(dsm_page_content *page_content) {
+    LOG_INFO("Drain-Début pour la page %u", page_content->page_id);
+
     dsm_dq_node *cur;
     while ((cur = dsm_dq_front(&page_content->pending_reqs)) != NULL) {
         dsm_request_content *req_content = req_content_of(cur);
@@ -287,6 +290,7 @@ static int drain_reqs(dsm_page_content *page_content) {
             break;
         }
     }
+    LOG_INFO("Drain-Fin pour la page %u", page_content->page_id);
     return 0;
 }
 
@@ -339,6 +343,7 @@ static int try_unlock(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
         return -1;
     }
 
+    (*out_page_content)->mode = PAGE_RW;
     *is_drainer = !dsm_dq_pop(&(*out_page_content)->pending_reqs);
     reset_head_req_ctx((*out_page_content));
 
@@ -373,12 +378,8 @@ static int treat_wkr_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
         return -1;
     }
 
-    if (is_drainer) {
-        LOG_INFO("Drain-Début pour la page %u", page_content->page_id);
-        if (drain_reqs(page_content) < 0) {
-            return -1;
-        }
-        LOG_INFO("Drain-Fin pour la page %u", page_content->page_id);
+    if (is_drainer && drain_reqs(page_content) < 0) {
+        return -1;
     }
 
     LOG_INFO("Succès du traitement du CODE=%d", CODE_WKR_REQ);
@@ -563,12 +564,8 @@ static int treat_wkr_data_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
         return -1;
     }
 
-    if (is_drainer) {
-        LOG_INFO("Drain-Début pour la page %u", page_content->page_id);
-        if (drain_reqs(page_content) < 0) {
-            return -1;
-        }
-        LOG_INFO("Drain-Fin pour la page %u", page_content->page_id);
+    if (is_drainer && drain_reqs(page_content) < 0) {
+        return -1;
     }
 
     LOG_INFO("Succès du traitement du CODE=%d", CODE_WKR_DATA_ACK);
@@ -591,17 +588,45 @@ static int treat_wkr_inva_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
         return -1;
     }
 
-    if (is_drainer) {
-        LOG_INFO("Drain-Début pour la page %u", page_content->page_id);
-        if (drain_reqs(page_content) < 0) {
-            return -1;
-        }
-        LOG_INFO("Drain-Fin pour la page %u", page_content->page_id);
+    if (is_drainer && drain_reqs(page_content) < 0) {
+        return -1;
     }
 
     LOG_INFO("Succès du traitement du CODE=%d", CODE_WKR_INVA_ACK);
     return 0;
 }
+
+static int treat_sync_barrier_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
+    LOG_INFO("Traitement d'un CODE=%d ...", CODE_SYNC_BARRIER_REQ);
+
+    pthread_mutex_lock(&dsm_mgr_ctx->sync.lock);
+
+    if (dsm_mgr_ctx->sync.missing_barr_reqs == 0) {
+        LOG_ERROR("Erreur Algo : BARRIER_REQ reçu alors missing_barr_reqs == 0 ?!");
+        pthread_mutex_unlock(&dsm_mgr_ctx->sync.lock);
+        return -1;
+    }
+
+    dsm_mgr_ctx->sync.missing_barr_reqs--;
+
+    if (dsm_mgr_ctx->sync.missing_barr_reqs == 0) {
+
+        unsigned int bkt;
+        dsm_node_content *node_content;
+        dsm_hash_safe_for_each(&dsm_ctx->nodes_reg, bkt, node_content, node) {
+            pthread_mutex_lock(&node_content->send_lock);
+            int ret = send_sync_barr_ack(node_content->tcp_sock);
+            pthread_mutex_unlock(&node_content->send_lock);
+        }
+    } // TODO CONTINUE
+
+    pthread_mutex_unlock(&dsm_mgr_ctx->sync.lock);
+
+    LOG_INFO("Succès du traitement du CODE=%d", CODE_SYNC_BARRIER_REQ);
+    return 0;
+}
+
+static int treat_sync_finalize_req(dsm_msg_tcpss_thread_ctx *msg_ctx);
 
 void dispatch_call_mgr(void *arg) {
     dsm_msg_tcpss_thread_ctx *msg_ctx = (dsm_msg_tcpss_thread_ctx *)arg;
@@ -622,6 +647,17 @@ void dispatch_call_mgr(void *arg) {
         case CODE_WKR_INVA_ACK:
             if (treat_wkr_inva_ack(msg_ctx) < 0) {
                 LOG_WARNING("Message non traité : CODE=%d", CODE_WKR_INVA_ACK);
+            }
+            break;
+
+        case CODE_SYNC_BARRIER_REQ:
+            if (treat_sync_barrier_req(msg_ctx) < 0) {
+                LOG_WARNING("Message non traité : CODE=%d", CODE_SYNC_BARRIER_REQ);
+            }
+            break;
+        case CODE_SYNC_FINALIZE_REQ:
+            if (treat_sync_finalize_req(msg_ctx) < 0) {
+                LOG_WARNING("Message non traité : CODE=%d", CODE_SYNC_FINALIZE_REQ);
             }
             break;
 
