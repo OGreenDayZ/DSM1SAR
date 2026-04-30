@@ -273,20 +273,31 @@ static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
                              ? WRITE_REQ
                              : READ_REQ;
 
-    if (has_higher_priority_pending(page_id, mode) == 1) {
+    LOG_INFO("[uffd_fault] Thread %lu tente d'accéder à page %d en %s\n",
+             (unsigned long)pthread_self(), page_id,
+             (mode == WRITE_REQ ? "WRITE" : "READ"));
 
+    pthread_mutex_lock(&send_lock);
+    LOG_INFO("[uffd_fault] Lock acquis pour page %d\n", page_id);
+
+    if (has_higher_priority_pending(page_id, mode) == 1) {
+        printf("[uffd_fault] Décision: PASSAGER. Un autre thread gère déjà la requête "
+               "réseau.\n");
         req_entry = add_request(page_id, mode);
         req_entry->dont_do = 1;
         req_entry->started = 0; // Ce thread ne fait rien sur le réseau
+    } else {
+        LOG_INFO("[uffd_fault] Décision: MESSAGER. Ce thread envoie la requête %d au "
+                 "manager.\n",
+                 mode);
+        req_entry = add_request(page_id, mode);
+        req_entry->dont_do = 0;
+        req_entry->started = 1; // On marque comme lancé avant d'envoyer
+        ret = send_wkr_req(page_id, mode, fd_sock_mgr);
     }
 
-    req_entry = add_request(page_id, mode);
-    req_entry->dont_do = 0;
-    req_entry->started = 1; // On marque comme lancé avant d'envoyer
-    pthread_mutex_lock(&send_lock);
-    ret = send_wkr_req(page_id, mode, fd_sock_mgr);
+    LOG_INFO("[uffd_fault] Relâchement du lock pour page %d\n", page_id);
     pthread_mutex_unlock(&send_lock);
-
     return ret;
 }
 
