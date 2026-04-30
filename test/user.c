@@ -10,7 +10,7 @@ int main() {
     dsm_config config;
     dsm_get_default_config(&config);
 
-    config.net.system.nb_nodes = 3;
+    config.net.system.nb_nodes = 2;
     config.net.system.nb_managers = 1;
 
     // 1. Initialisation du DSM (crée le pager, le daemon, etc.)
@@ -26,47 +26,15 @@ int main() {
     if (dsm_get_role() == DSM_ROLE_WORKER)
         shared_data = (int *)dsm_alloc();
 
-    // On récupère l'ID du nœud (souvent stocké dans dsm_ctx)
-    // Supposons que dsm_get_node_id() existe dans ton API
-    int my_id = dsm_get_node_id();
+    printf("Je vais lire les données avant initialisation \n");
+    printf("%d", shared_data[0]);
 
-    if (dsm_get_role() == DSM_ROLE_WORKER) {
-        if (my_id == 1) {
-            printf("[Nœud %d] J'initialise les données...\n", my_id);
-            for (int i = 0; i < 100; i++) {
-                // Ici, userfaultfd intercepte l'écriture
-                LOG_INFO("Nœud %d écrit à l'index %d", my_id, i);
-                printf("[Nœud %d] Ecriture de la donnée index %d : %d\n", my_id, i,
-                       i * 2);
-                shared_data[i] = i * 2;
-            }
-        } else {
-            printf("[Noeud %d] Je veux afficher la valeur de la variable partagé \n",
-                   my_id);
-            printf("[Noeud %d] Je veux afficher la valeur de la variable partagé : %d\n",
-                   my_id, shared_data[0]);
-        }
+    printf("J'initialise les données...\n");
+    // Ici, userfaultfd intercepte l'écriture
+    LOG_INFO("Nœud %d écrit à l'index %d", 50);
+    printf(" Ecriture de la donnée index %d : %d\n", 50, 2 * 2);
+    shared_data[50] = 2 * 2;
 
-        // 3. Synchronisation
-        // On attend que le Nœud 0 ait fini d'écrire.
-        // printf("[Nœud %d] Attente à la barrière...\n", my_id);
-        // dsm_barrier();
-        if (my_id != 1) {
-            sleep(30);
-            return 0;
-        }
-        if (my_id != 1) {
-            // Ici, au moment de la lecture, une faute de page survient.
-            // Le daemon attrape la faute, demande la page au Manager,
-            // qui la récupère chez le Nœud 0.
-            printf("[Nœud %d] Lecture de la donnée index 50 : %d\n", my_id,
-                   shared_data[50]);
-        }
-    } else if (dsm_get_role() == DSM_ROLE_MANAGER) {
-    }
-
-    // 4. Nettoyage
-    // dsm_finalize();
-    sleep(30);
+    printf("Lecture de la donnée index 50 : %d\n", shared_data[50]);
     return EXIT_SUCCESS;
 }

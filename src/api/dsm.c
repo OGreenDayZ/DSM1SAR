@@ -3,6 +3,7 @@
 #include "debug/debug.h"
 #include "internal.h"
 #include "network/daemon.h"
+#include "network/manager/manager.h"
 #include "network/network.h"
 #include "network/pager/pager_msg.h"
 #include "network/worker/worker.h"
@@ -177,6 +178,7 @@ int dsm_init(const dsm_config *config) {
 
     else if (role == DSM_ROLE_MANAGER) {
         LOG_INFO("Manager : Démarrage du daemon de DSM...");
+
         if (dsm_daemon_start() < 0) {
             LOG_ERROR("Erreur dsm_daemon_start");
         }
@@ -203,8 +205,6 @@ void *dsm_alloc(void) {
 
     LOG_INFO("Allocation de %lu octets à l'adresse %p", EFFECTIVE_PAGESIZE,
              (void *)debut);
-    printf("[dsm_alloc] Allocation de la page %d à l'adresse %p\n",
-           dsm_wkr_ctx->page_counter, (void *)debut);
 
     dsm_wkr_ctx->page_counter++;
 
@@ -213,9 +213,10 @@ void *dsm_alloc(void) {
     dsm_requests_reg_entry *obj;
 
     map_entry->page_id = addr_to_page_id(debut);
+    map_entry->state = NONE;
 
-    if (dsm_safe_list_init(&map_entry->list_req) < 0) {
-        LOG_ERROR("[dsm_alloc] dsm_safe_list_init");
+    if (pthread_mutex_init(&map_entry->mutex, NULL) < 0) {
+        LOG_ERROR("[dsm_alloc] pthread_mutex_init");
         free(map_entry);
         return NULL;
     }
@@ -225,22 +226,24 @@ void *dsm_alloc(void) {
                                             obj, node, page_id, map_entry->page_id);
     if (inserted == 0) {
         // L'entrée existe deja pas besoin d'une nouvelle
-        dsm_safe_list_destroy(&map_entry->list_req);
+        pthread_mutex_destroy(&map_entry->mutex);
         free(map_entry);
     }
 
     return (void *)debut;
 }
 
-// TODO - majda : est ce que faut ajouter cette requete dans la map de requete ??
+// TODO - majda : est ce que faut ajouter cette requete dans la map de requete ?? NON
 int dsm_lock(void *addr) {
     unsigned int page_id = addr_to_page_id((uint64_t)addr);
     int fd_sock = get_mgr_node_socket_for_page(page_id);
-
     // Je veux lock la page
     // Je dors sur le mutex de ma liste de lock
     // et j'attends qu'on me reveille
     dsm_locks_reg_entry *entry = malloc(sizeof(dsm_locks_reg_entry));
+    dsm_requests_reg_entry *req_entry = get_request_entry(page_id);
+    pthread_mutex_t send_lock = get_mgr_send_lock_for_page(page_id);
+
     entry->page_id = page_id;
     entry->locked = 0;
 
@@ -254,24 +257,34 @@ int dsm_lock(void *addr) {
         return -1;
     }
 
+    pthread_mutex_lock(&req_entry->mutex);
+    // Pas besoin de tester ici car dans tout les cas on envoie la requete
+    req_entry->state = WRITE_SENT;
+    pthread_mutex_unlock(&req_entry->mutex);
+
     pthread_mutex_lock(&entry->mutex);
     dsm_safe_list_add_tail(&dsm_wkr_ctx->locks_reg, &entry->node);
 
-    // PROTECTION
+    pthread_mutex_lock(&send_lock);
     if (send_wkr_req(page_id, LOCK_REQ, fd_sock) < 0) {
+        pthread_mutex_unlock(&send_lock);
         pthread_mutex_unlock(&entry->mutex);
         return -1;
     }
+    pthread_mutex_unlock(&send_lock);
+
     while (entry->locked == 0)
         pthread_cond_wait(&entry->cond, &entry->mutex);
     pthread_mutex_unlock(&entry->mutex);
+
     return 0;
 }
 
 int dsm_unlock(void *addr) {
     unsigned int page_id = addr_to_page_id((uint64_t)addr);
     int fd_sock = get_mgr_node_socket_for_page(page_id);
-    // PROTECTION
+    // TODO - majda : compter le nombre de thread a avoir envoyé un LOCK_REQ
+    // Des que tout les threads ont fait unlock on envoie le UNLOCK_REQ au manager
     if (send_wkr_req(page_id, UNLOCK_REQ, fd_sock) < 0) {
         return -1;
     }

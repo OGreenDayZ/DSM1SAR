@@ -55,17 +55,23 @@ typedef struct {
     sync_finalize fina;
 } dsm_wkr_sync; // Pour sync
 
-typedef struct {
-    page_mode_req mode_req; // Le max requete faite pour cette page
-    int started; // flag pour dire si la requete est en cours de traitement ou pas
-    // 0 -> non, 1 -> oui
-    int dont_do; // 0 -> do , 1 -> dont_do
-    dsm_list_head node;
-} dsm_requests_reg_list_entry; // entrée de list_req
+// typedef struct {
+//     page_mode_req mode_req; // Le max requete faite pour cette page
+//     int started; // flag pour dire si la requete est en cours de traitement ou pas
+//     // 0 -> non, 1 -> oui
+//     int dont_do; // 0 -> do , 1 -> dont_do
+//     dsm_list_head node;
+// } dsm_requests_reg_list_entry; // entrée de list_req
 
+typedef enum {
+    NONE, 
+    READ_SENT, 
+    WRITE_SENT, 
+} ReqsState; 
 typedef struct {
     unsigned int page_id; // clé
-    dsm_safe_list list_req;
+    ReqsState state; 
+    pthread_mutex_t mutex; 
     struct dsm_hlist_node node; // pour la map requests_reg
 } dsm_requests_reg_entry;       // entrée de requests_reg
 
@@ -154,5 +160,8 @@ void dispatch_call_uffd(void *arg);
  * @param arg
  */
 void dispatch_call_wkr(void *arg);
+
+dsm_requests_reg_entry *get_request_entry(unsigned long page_id); 
+pthread_mutex_t get_mgr_send_lock_for_page(unsigned long page_id); 
 
 #endif // DSM_WORKER_H
