@@ -10,13 +10,17 @@ int main() {
     dsm_config config;
     dsm_get_default_config(&config);
 
-    config.net.system.nb_nodes = 2;
+    config.net.system.nb_nodes = 3;
     config.net.system.nb_managers = 1;
 
     // 1. Initialisation du DSM (crée le pager, le daemon, etc.)
-    if (dsm_init(&config) != DSM_SUCCESS) {
+    int ret = dsm_init(&config);
+    if (ret < 0) {
         fprintf(stderr, "Erreur d'initialisation DSM\n");
         return EXIT_FAILURE;
+
+    } else if (ret == DSM_ROLE_MANAGER) {
+        return EXIT_SUCCESS;
     }
 
     // 2. Allocation déterministe

@@ -117,7 +117,6 @@ struct my_item *obj;
 dsm_hash_safe_get(&map, obj, node, search_key) {
     if (obj->key == search_key) {
         found = obj;
-        break;  // Important : toujours faire break quand trouvé
     }
 }
 dsm_hash_safe_get_end(&map, search_key);
@@ -130,8 +129,7 @@ if (found) {
 ⚠️ **RÈGLES IMPORTANTES** :
 1. **Toujours appeler `dsm_hash_safe_get_end()` après la boucle**, même si rien n'est trouvé
 2. Ne pas faire de `return` qui échappe à la boucle sans passer par `get_end`
-3. Toujours faire `break` quand vous trouvez votre élément
-4. La map est verrouillée en **lecture** pendant la boucle
+3. La map est verrouillée en **lecture** pendant la boucle
 
 ---
 
@@ -242,7 +240,6 @@ int main() {
     dsm_hash_safe_get(&users, obj, node, 1) {
         if (obj->user_id == 1) {
             found = obj;
-            break;
         }
     }
     dsm_hash_safe_get_end(&users, 1);

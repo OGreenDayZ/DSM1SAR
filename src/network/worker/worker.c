@@ -50,25 +50,22 @@ int dsm_wkr_ctx_init() {
         LOG_ERROR("[dsm_wkr_ctx_init] dsm_safe_map_init dsm_wkr_ctx->locks_reg");
         return -1;
     }
-    pthread_mutex_init(&dsm_wkr_ctx->sync.barr.lock, NULL);
-    pthread_cond_init(&dsm_wkr_ctx->sync.barr.wait_cond, NULL);
 
-    dsm_wkr_ctx->sync.barr.targ_mgr_id = 0; // Par défaut, ca sera toujours le ManagerID=0
+    if (barrier_init(&dsm_wkr_ctx->sync.barr) < 0) {
+        LOG_ERROR("barrier_init");
+        return -1;
+    }
 
-    dsm_wkr_ctx->sync.barr.curr_count = 0;
-    dsm_wkr_ctx->sync.barr.targ_count = 0;
-
-    pthread_mutex_init(&dsm_wkr_ctx->sync.fina.lock, NULL);
-    pthread_cond_init(&dsm_wkr_ctx->sync.fina.wait_cond, NULL);
-
-    dsm_wkr_ctx->sync.fina.curr_count = 0;
-    dsm_wkr_ctx->sync.fina.targ_count = 0;
+    if (finalize_init(&dsm_wkr_ctx->sync.fina) < 0) {
+        LOG_ERROR("finalize_init");
+        return -1;
+    }
 
     dsm_wkr_ctx->page_counter = 0;
     return 0;
 }
 
-void dsm_wkr_ctx_cleanup();
+void dsm_wkr_ctx_cleanup() {}
 
 long addr_to_page_id(uint64_t addr) {
     if (addr < dsm_wkr_ctx->range_start ||

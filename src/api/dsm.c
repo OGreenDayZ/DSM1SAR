@@ -3,6 +3,8 @@
 #include "debug/debug.h"
 #include "internal.h"
 #include "network/daemon.h"
+#include "network/discover/net_discover.h"
+#include "network/manager/manager.h"
 #include "network/network.h"
 #include "network/pager/pager_msg.h"
 #include "network/worker/worker.h"
@@ -165,25 +167,22 @@ void *daemon_thread_start(void *arg) {
     if (dsm_daemon_start() < 0) {
         LOG_ERROR("Erreur dsm_daemon_start");
     }
+    dsm_wkr_ctx_cleanup();
+    dsm_ctx_cleanup();
     return NULL;
 }
 
-int dsm_init(const dsm_config *config) {
+dsm_node_role dsm_init(const dsm_config *config) {
     LOG_INFO("Initialisation de DSM1SAR...");
     if (dsm_ctx_init(config) < 0) {
         return -1;
     }
 
-    if (dsm_network_init() < 0) {
-        LOG_ERROR("Erreur dsm_network_init");
+    if (dsm_discover() < 0) {
+        LOG_ERROR("Erreur dsm_discover");
         dsm_ctx_cleanup();
         return -1;
     }
-
-    // if (!dsm_wkr_ctx) {
-    //     LOG_ERROR("Worker contexte non initialisé");
-    //     return -1;
-    // }
 
     dsm_node_role role = dsm_ctx->config.net.node.role;
 
@@ -205,10 +204,15 @@ int dsm_init(const dsm_config *config) {
         if (dsm_daemon_start() < 0) {
             LOG_ERROR("Erreur dsm_daemon_start");
         }
+        dsm_mgr_ctx_cleanup();
         dsm_ctx_cleanup();
+
+    } else { // role == DSM_ROLE_UNDEFINED
+        dsm_ctx_cleanup();
+        return -1;
     }
 
-    return 0;
+    return role;
 }
 
 void *dsm_alloc(void) {
@@ -332,6 +336,35 @@ int dsm_unlock(void *addr) {
     }
     return 0;
 }
+
+int dsm_barrier_advanced(unsigned int threads_count, unsigned int manager_id) {
+
+    pthread_mutex_lock(&dsm_wkr_ctx->sync.barr.lock);
+
+    if (dsm_wkr_ctx->sync.barr.state == BARR_RESET &&
+        barrier_define(&dsm_wkr_ctx->sync.barr, threads_count, manager_id) < 0) {
+        goto error_unlock;
+    }
+
+    if (barrier_wait(&dsm_wkr_ctx->sync.barr) < 0) {
+        goto error_unlock;
+    }
+
+    pthread_mutex_unlock(&dsm_wkr_ctx->sync.barr.lock);
+    return 0;
+
+error_unlock:
+    pthread_mutex_unlock(&dsm_wkr_ctx->sync.barr.lock);
+    return -1;
+}
+
+int dsm_barrier(void) {
+    return dsm_barrier_advanced(1, 0);
+}
+
+int dsm_finalize_advanced(unsigned int threads_count);
+
+int dsm_finalize(void);
 
 /**
  * @note TODO - majda : a voir si c'est vraiment utile

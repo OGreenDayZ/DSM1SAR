@@ -15,6 +15,4 @@ int dsm_udp_sock(void);
 int dsm_udp_bind_unicast(uint16_t port);
 int dsm_udp_bind_multicast(uint32_t mcast_ip, uint16_t port);
 
-int dsm_network_init(void);
-
 #endif // DSM_NETWORK_H

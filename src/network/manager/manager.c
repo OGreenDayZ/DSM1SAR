@@ -1,10 +1,12 @@
 #include "manager.h"
 
+#include <stdatomic.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "debug/debug.h"
 #include "internal.h"
+#include "network/daemon.h"
 #include "network/manager/mgr_factory.h"
 #include "network/message/serializer.h"
 #include "network/pager/pager_msg.h"
@@ -41,7 +43,7 @@ int dsm_mgr_ctx_init() {
     return 0;
 }
 
-void dsm_mgr_ctx_cleanup();
+void dsm_mgr_ctx_cleanup() {}
 
 static dsm_request_content *make_req_content(dsm_msg_tcpss_thread_ctx *msg_ctx,
                                              dsm_msg_wkr_req *req) {
@@ -594,7 +596,7 @@ static int treat_wkr_inva_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     return 0;
 }
 
-static int treat_sync_barrier_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
+static int treat_sync_barrier_req() {
     LOG_INFO("Traitement d'un CODE=%d ...", CODE_SYNC_BARRIER_REQ);
 
     pthread_mutex_lock(&dsm_mgr_ctx->sync.lock);
@@ -615,8 +617,16 @@ static int treat_sync_barrier_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
             pthread_mutex_lock(&node_content->send_lock);
             int ret = send_sync_barr_ack(node_content->tcp_sock);
             pthread_mutex_unlock(&node_content->send_lock);
+            if (ret < 0) {
+                pthread_mutex_unlock(&dsm_mgr_ctx->sync.lock);
+                dsm_hash_safe_unlock(&dsm_ctx->nodes_reg, bkt);
+                return -1;
+            }
         }
-    } // TODO CONTINUE
+
+        dsm_mgr_ctx->sync.missing_barr_reqs =
+            dsm_ctx->config.net.system.nb_nodes - dsm_ctx->config.net.system.nb_managers;
+    }
 
     pthread_mutex_unlock(&dsm_mgr_ctx->sync.lock);
 
@@ -624,7 +634,40 @@ static int treat_sync_barrier_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     return 0;
 }
 
-static int treat_sync_finalize_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
+static int treat_sync_finalize_req() {
+    LOG_INFO("Traitement d'un CODE=%d ...", CODE_SYNC_FINALIZE_REQ);
+
+    pthread_mutex_lock(&dsm_mgr_ctx->sync.lock);
+
+    if (dsm_mgr_ctx->sync.missing_fina_reqs == 0) {
+        LOG_ERROR("Erreur Algo : FINALIZE_REQ reçu alors missing_fina_reqs == 0 ?!");
+        pthread_mutex_unlock(&dsm_mgr_ctx->sync.lock);
+        return -1;
+    }
+
+    dsm_mgr_ctx->sync.missing_fina_reqs--;
+
+    if (dsm_mgr_ctx->sync.missing_fina_reqs == 0) {
+
+        unsigned int bkt;
+        dsm_node_content *node_content;
+        dsm_hash_safe_for_each(&dsm_ctx->nodes_reg, bkt, node_content, node) {
+            pthread_mutex_lock(&node_content->send_lock);
+            int ret = send_sync_fina_ack(node_content->tcp_sock);
+            pthread_mutex_unlock(&node_content->send_lock);
+            if (ret < 0) {
+                pthread_mutex_unlock(&dsm_mgr_ctx->sync.lock);
+                dsm_hash_safe_unlock(&dsm_ctx->nodes_reg, bkt);
+                return -1;
+            }
+        }
+
+        atomic_store(&dsm_dmn_ctx->state, DSM_DMN_STATE_TERMINATING);
+    }
+
+    pthread_mutex_unlock(&dsm_mgr_ctx->sync.lock);
+
+    LOG_INFO("Succès du traitement du CODE=%d", CODE_SYNC_FINALIZE_REQ);
     return 0;
 }
 
@@ -651,12 +694,12 @@ void dispatch_call_mgr(void *arg) {
             break;
 
         case CODE_SYNC_BARRIER_REQ:
-            if (treat_sync_barrier_req(msg_ctx) < 0) {
+            if (treat_sync_barrier_req() < 0) {
                 LOG_WARNING("Message non traité : CODE=%d", CODE_SYNC_BARRIER_REQ);
             }
             break;
         case CODE_SYNC_FINALIZE_REQ:
-            if (treat_sync_finalize_req(msg_ctx) < 0) {
+            if (treat_sync_finalize_req() < 0) {
                 LOG_WARNING("Message non traité : CODE=%d", CODE_SYNC_FINALIZE_REQ);
             }
             break;

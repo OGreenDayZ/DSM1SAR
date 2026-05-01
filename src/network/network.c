@@ -185,7 +185,3 @@ error_exit:
     close(sock);
     return -1;
 }
-
-int dsm_network_init() {
-    return dsm_discover();
-}

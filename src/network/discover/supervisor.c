@@ -110,6 +110,7 @@ static void spvs_ctx_cleanup(dsm_discover_ctx *dscv_ctx) {
                 if (pthread_mutex_init(&node_content->send_lock, NULL) < 0) {
                     LOG_ERROR("pthread_mutex_init : node_content->send_lock");
                     free(node_content);
+                    dsm_hash_safe_unlock(&spvs_ctx->spvs_reg, bkt);
                     return;
                 }
                 node_content->id = pos->id;

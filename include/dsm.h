@@ -1,9 +1,8 @@
 #ifndef DSM1SAR_H
 #define DSM1SAR_H
 
-#include <linux/types.h>
 #include <arpa/inet.h>
-
+#include <linux/types.h>
 
 // API Publique (seul fichier inclus par l'utilisateur)
 
@@ -68,43 +67,47 @@ typedef enum {
 
 /* --- Fonctions --- */
 void dsm_get_default_config(dsm_config *config);
-int dsm_init(const dsm_config *config);
 
 /**
- * @brief Alloue un segment de mémoire dans l'espace d'adressage global partagé. 
- * 
- * @warning Cette fonction doit être appelée de manière déterministe avant toute divergence 
- * du flux d'exécution (fork, création de threads ou logique spécifique aux nœuds). 
- * Pour garantir la cohérence de l'espace global, chaque nœud doit effectuer les mêmes 
- * appels d'allocation dans le même ordre.
- * 
+ * @return Le rôle du nœud (manager ou worker)
+ * @warning DSM_ROLE_UNDEFINED ne peut être jamais retourné par dsm_init, il est retourné
+ * en tant que -1
+ */
+dsm_node_role dsm_init(const dsm_config *config);
+
+/**
+ * @brief Alloue un segment de mémoire dans l'espace d'adressage global partagé.
+ *
+ * @warning Cette fonction doit être appelée de manière déterministe avant toute
+ * divergence du flux d'exécution (fork, création de threads ou logique spécifique aux
+ * nœuds). Pour garantir la cohérence de l'espace global, chaque nœud doit effectuer les
+ * mêmes appels d'allocation dans le même ordre.
+ *
  * @param len Taille de l'allocation en octets.
  * @return void* Un pointeur vers la zone allouée, ou NULL en cas d'erreur.
  */
-void *dsm_alloc(void); 
-
-
-/**
- * @brief Envoie une requete de LOCK sur la page qui contient addr  
- * 
- * @param addr 
- * @return int : 0 en cas de succés, -1 en cas d'erreur  
- */
-int dsm_lock(void* addr);
+void *dsm_alloc(void);
 
 /**
- * @brief Envoie une requete de UNLOCK sur la page qui contient addr  
- * 
- * @param addr 
- * @return int : 0 en cas de succés, -1 en cas d'erreur  
+ * @brief Envoie une requete de LOCK sur la page qui contient addr
+ *
+ * @param addr
+ * @return int : 0 en cas de succés, -1 en cas d'erreur
  */
-int dsm_unlock(void* addr); 
-// lock, unlock de page addr
+int dsm_lock(void *addr);
+
+/**
+ * @brief Envoie une requete de UNLOCK sur la page qui contient addr
+ *
+ * @param addr
+ * @return int : 0 en cas de succés, -1 en cas d'erreur
+ */
+int dsm_unlock(void *addr);
 int dsm_barrier(void);
 int dsm_barrier_advanced(unsigned int threads_count, unsigned int manager_id);
 int dsm_finalize(void);
 int dsm_finalize_advanced(unsigned int threads_count);
-int dsm_get_node_id(); 
-int dsm_get_role(); 
+int dsm_get_node_id();
+int dsm_get_role();
 
 #endif // DSM1SAR_H
