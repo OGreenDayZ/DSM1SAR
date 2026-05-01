@@ -353,7 +353,6 @@ static int try_unlock(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
 }
 
 static int treat_wkr_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
-    LOG_INFO("Traitement d'un CODE=%d ...", CODE_WKR_REQ);
 
     dsm_msg_wkr_req req;
     if (dsm_dsrlze_wkr_req(msg_ctx->payload, msg_ctx->header.payload_len, &req) < 0) {
@@ -382,7 +381,6 @@ static int treat_wkr_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
         return -1;
     }
 
-    LOG_INFO("Succès du traitement du CODE=%d", CODE_WKR_REQ);
     return 0;
 }
 

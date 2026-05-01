@@ -385,7 +385,6 @@ int treat_write_req_poss_rw(dsm_page_content *page_content,
         return -1;
     }
 
-    // page_content->mode = PAGE_RW; Pas utile
     page_content->owner_id = cb_id;
 
     int ret = 0;

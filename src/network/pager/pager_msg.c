@@ -51,8 +51,11 @@ int send_wkr_data_ack(uint32_t page_id, uint8_t *data, int fd_sock) {
     int data_len = EFFECTIVE_PAGESIZE;
     uint8_t msg_buf[sizeof(dsm_msg_header) + sizeof(dsm_msg_wkr_data_ack) + data_len];
     int msg_len = dsm_srlze_wkr_data_ack(page_id, data, msg_buf, sizeof(msg_buf));
-    if (msg_len < 0)
+    if (msg_len < 0) {
+        LOG_ERROR("Taille du message : %d insuffisante pour ce code", msg_len);
         return -1;
+    }
+
     int sent = dsm_tcp_send_all(fd_sock, msg_buf, msg_len);
     if (sent < 0) {
         LOG_ERROR("Erreur d'envoie du message de requete pour la page %d par le noeud %d",
