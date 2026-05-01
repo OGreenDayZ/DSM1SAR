@@ -272,6 +272,7 @@ static int treat_mgr_inva_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
         /**
          * Faut repondre avec msg_wkr_inva_ack
          */
+        LOG_INFO("Faut repondre au manager");
         pthread_mutex_lock(msg_ctx->send_lock);
         int ret = send_wkr_inva_ack(payload.page_id, msg_ctx->sock);
         pthread_mutex_unlock(msg_ctx->send_lock);
@@ -453,9 +454,6 @@ void dispatch_call_wkr(void *arg) {
     int code = msg_ctx->header.code;
 
     switch (code) {
-        case CODE_WKR_REQ:
-            // treat
-
         case CODE_MGR_REQ_ACK:
             // treat
             LOG_INFO("Reception par le noeud %d du code CODE_MGR_REQ_ACK et traitement.",

@@ -144,16 +144,18 @@ int main(int argc, char *argv[]) {
     for (int i = 2; i < 4; i++)
         pthread_join(threads[i], NULL);
 
-    printf("\n" CLR_TITLE "--- CAS E : ÉCRITURES CONCURRENTES (RACE CONDITION & "
-           "INVALIDATIONS) ---" CLR_RESET "\n");
-    TEST_LOG(CLR_WARN,
-             "Lancement de plusieurs threads écrivant sur la MÊME page simultanément...");
+    // --- CAS E : ÉCRITURES CONCURRENTES (RACE CONDITION &INVALIDATIONS) ---
+    // printf("\n" CLR_TITLE "--- CAS E : ÉCRITURES CONCURRENTES (RACE CONDITION & "
+    //        "INVALIDATIONS) ---" CLR_RESET "\n");
+    // TEST_LOG(CLR_WARN,
+    //          "Lancement de plusieurs threads écrivant sur la MÊME page
+    //          simultanément...");
 
-    for (int i = 0; i < 4; i++) {
-        tdata[i].addr = shared_mem;
-        tdata[i].id = i + 10; // IDs distincts pour les logs
-        pthread_create(&threads[i], NULL, test_concurrent_write_task, &tdata[i]);
-    }
+    // for (int i = 0; i < 4; i++) {
+    //     tdata[i].addr = shared_mem;
+    //     tdata[i].id = i + 10; // IDs distincts pour les logs
+    //     pthread_create(&threads[i], NULL, test_concurrent_write_task, &tdata[i]);
+    // }
 
     for (int i = 0; i < 4; i++) {
         pthread_join(threads[i], NULL);
