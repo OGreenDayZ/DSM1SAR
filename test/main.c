@@ -9,10 +9,10 @@ int main(int argc, char const *argv[]) {
     dsm_config config;
     dsm_get_default_config(&config);
 
-    config.net.system.nb_nodes = 2;
-    config.net.system.nb_managers = 1;
+    config.net.system.nb_nodes = 5;
+    config.net.system.nb_managers = 2;
 
-    config.net.node.role = DSM_ROLE_MANAGER; // Collision
+    config.net.node.role = DSM_ROLE_WORKER; // Collision
     // dsm_init(&config);
 
     // // Test de dsm consécutif
@@ -26,12 +26,31 @@ int main(int argc, char const *argv[]) {
     //     // config.net.system.system_id = 1; // Collision
     // }
 
-    if (dsm_init(&config) < 0) {
+    int ret = dsm_init(&config);
+    if (ret < 0) {
+        fprintf(stderr, "Erreur d'initialisation DSM\n");
+        return -1;
+
+    } else if (ret == DSM_ROLE_MANAGER) {
+        return 0;
+    }
+
+    int *shared_data = (int *)dsm_alloc();
+    if (shared_data == NULL) {
+        fprintf(stderr, "Erreur d'allocation DSM\n");
         return -1;
     }
 
-    printf("J'attends...\n");
-    sleep(20);
+    printf("Je vais lire les données avant initialisation \n");
+    printf("%d\n", shared_data[0]);
+
+    printf("J'initialise les données...\n");
+    // Ici, userfaultfd intercepte l'écriture
+    shared_data[50]++;
+
+    printf("Lecture de la donnée : %d\n", shared_data[50]);
+
+    dsm_finalize();
 
     return 0;
 }

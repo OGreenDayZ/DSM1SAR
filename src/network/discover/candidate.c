@@ -52,6 +52,7 @@ static void cand_ctx_cleanup() {
             if (pthread_mutex_init(&node_content->send_lock, NULL) < 0) {
                 LOG_ERROR("pthread_mutex_init : node_content->send_lock");
                 free(node_content);
+                dsm_hash_safe_unlock(&cand_ctx->cand_reg, bkt);
                 return;
             }
             node_content->id = pos->id;
@@ -342,7 +343,8 @@ static int recv_dscv_share_reg() {
 
         if (header.code == CODE_DISCOVER_SHARE_REGISTRY_MANAGER) {
             LOG_INFO("Rôle assigné : MANAGER");
-            dsm_ctx->config.net.system.nb_managers = share->nb_nodes;
+            dsm_ctx->config.net.system.nb_managers =
+                share->sys_total_nodes - share->nb_nodes;
             if (dsm_mgr_ctx_init() || prepare_nodes_reg(share) < 0) {
                 free(share);
                 return -1;
@@ -350,8 +352,7 @@ static int recv_dscv_share_reg() {
 
         } else { // CODE_DISCOVER_SHARE_REGISTRY_WORKER
             LOG_INFO("Rôle assigné : WORKER");
-            dsm_ctx->config.net.system.nb_managers =
-                share->sys_total_nodes - share->nb_nodes;
+            dsm_ctx->config.net.system.nb_managers = share->nb_nodes;
             if (dsm_wkr_ctx_init() || connect_to_managers(share) < 0) {
                 free(share);
                 return -1;

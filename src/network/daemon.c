@@ -13,26 +13,26 @@
 #include "network/message/serializer.h"
 #include "network/worker/worker.h"
 
-dsm_daemon_ctx *dmn_ctx = NULL;
+dsm_daemon_ctx *dsm_dmn_ctx = NULL;
 
 static int dmn_ctx_init() {
     LOG_INFO("Initialisation du contexte du daemon ...");
 
-    if (dmn_ctx) {
-        LOG_ERROR("dmn_ctx déjà initialisé ?!");
+    if (dsm_dmn_ctx) {
+        LOG_ERROR("dsm_dmn_ctx déjà initialisé ?!");
         return -1;
     }
 
-    dmn_ctx = malloc(sizeof(dsm_daemon_ctx));
-    if (!dmn_ctx) {
-        LOG_ERROR("malloc : dmn_ctx");
+    dsm_dmn_ctx = malloc(sizeof(dsm_daemon_ctx));
+    if (!dsm_dmn_ctx) {
+        LOG_ERROR("malloc : dsm_dmn_ctx");
         return -1;
     }
 
-    atomic_store(&dmn_ctx->state, DSM_DMN_STATE_ONGOING);
+    atomic_store(&dsm_dmn_ctx->state, DSM_DMN_STATE_ONGOING);
 
-    dmn_ctx->pool = pool_create(dsm_ctx->config.net.node.pool_nb_threads,
-                                dsm_ctx->config.net.node.pool_queue_size);
+    dsm_dmn_ctx->pool = pool_create(dsm_ctx->config.net.node.pool_nb_threads,
+                                    dsm_ctx->config.net.node.pool_queue_size);
 
     return 0;
 }
@@ -75,7 +75,7 @@ static int handle_uffd_event(int uffd) {
         goto exit_err_ctx;
     }
 
-    if (pool_add_task(dmn_ctx->pool, dispatch_call_uffd, msg_ctx) < 0) {
+    if (pool_add_task(dsm_dmn_ctx->pool, dispatch_call_uffd, msg_ctx) < 0) {
         ret = -1;
         goto exit_err_ctx;
     }
@@ -134,12 +134,12 @@ static int handle_socket_event(int recv_sock) {
 
     if (dsm_ctx->config.net.node.role == DSM_ROLE_MANAGER) {
 
-        if (pool_add_task(dmn_ctx->pool, dispatch_call_mgr, msg_ctx) < 0) {
+        if (pool_add_task(dsm_dmn_ctx->pool, dispatch_call_mgr, msg_ctx) < 0) {
             ret = -1;
             goto exit_err_payload;
         }
     } else {
-        if (pool_add_task(dmn_ctx->pool, dispatch_call_wkr, msg_ctx) < 0) {
+        if (pool_add_task(dsm_dmn_ctx->pool, dispatch_call_wkr, msg_ctx) < 0) {
             ret = -1;
             goto exit_err_payload;
         }
@@ -195,7 +195,7 @@ int dsm_daemon_start(void) {
         goto exit;
     }
 
-    while (atomic_load(&dmn_ctx->state) != DSM_DMN_STATE_STOPPED) {
+    while (atomic_load(&dsm_dmn_ctx->state) != DSM_DMN_STATE_TERMINATING) {
         if (update_dmn_state() < 0) {
             ret = -1;
             goto exit;
@@ -234,6 +234,7 @@ int dsm_daemon_start(void) {
             }
         }
     }
+    ret = 0;
 
 exit:
     dmn_ctx_cleanup();

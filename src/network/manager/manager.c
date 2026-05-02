@@ -1,10 +1,12 @@
 #include "manager.h"
 
+#include <stdatomic.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "debug/debug.h"
 #include "internal.h"
+#include "network/daemon.h"
 #include "network/manager/mgr_factory.h"
 #include "network/message/serializer.h"
 #include "network/pager/pager_msg.h"
@@ -41,7 +43,7 @@ int dsm_mgr_ctx_init() {
     return 0;
 }
 
-void dsm_mgr_ctx_cleanup();
+void dsm_mgr_ctx_cleanup() {}
 
 static dsm_request_content *make_req_content(dsm_msg_tcpss_thread_ctx *msg_ctx,
                                              dsm_msg_wkr_req *req) {
@@ -437,7 +439,8 @@ static int try_send_req_ack(dsm_page_content *page_content, bool *is_drainer) {
         return -1;
     }
 
-    *is_drainer = !dsm_dq_pop(&page_content->pending_reqs);
+    *is_drainer =
+        !dsm_dq_pop(&page_content->pending_reqs) && page_content->mode != PAGE_LOCKED;
     reset_head_req_ctx(page_content);
 
     return 0;
@@ -452,21 +455,13 @@ static int inject_data(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_data_ack *
         return -1;
     }
 
-    /**
-     * @warning : owner_id n'est pas == -1, vérification faite avant l'appel à inject_data
-     */
-    if ((unsigned int)(*out_page_content)->owner_id == msg_ctx->header.id) {
-        LOG_ERROR("Erreur Algo : DATA_ACK d'un worker qui est proprio de la page ?! "
-                  "(page_id=%u, worker_id=%u)",
-                  data_ack->page_id, msg_ctx->header.id);
-        return -1;
-    }
+    unsigned int msg_cb_id = msg_ctx->header.id;
 
     pthread_mutex_lock(&(*out_page_content)->head_req_ctx.lock);
     if ((*out_page_content)->head_req_ctx.missing_acks == 0) {
         LOG_ERROR("Erreur Algo : DATA_ACK reçu alors que la requête en tête n'attend pas "
                   "d'ACK ?! (page_id=%u, worker_id=%u)",
-                  data_ack->page_id, msg_ctx->header.id);
+                  data_ack->page_id, msg_cb_id);
         goto unlock_return;
     }
 
@@ -474,7 +469,7 @@ static int inject_data(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_data_ack *
         LOG_ERROR(
             "Erreur Algo : DATA_ACK reçu alors que la requête en tête n'attend que des "
             "ACK d'invalidation ?! (page_id=%u, worker_id=%u)",
-            data_ack->page_id, msg_ctx->header.id);
+            data_ack->page_id, msg_cb_id);
         goto unlock_return;
     }
 
@@ -482,7 +477,7 @@ static int inject_data(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_data_ack *
         LOG_ERROR(
             "Erreur Algo : DATA_ACK reçu alors que la requête en tête a déjà reçu des "
             "données ?! (page_id=%u, worker_id=%u)",
-            data_ack->page_id, msg_ctx->header.id);
+            data_ack->page_id, msg_cb_id);
         goto unlock_return;
     }
 
@@ -594,7 +589,7 @@ static int treat_wkr_inva_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     return 0;
 }
 
-static int treat_sync_barrier_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
+static int treat_sync_barrier_req() {
     LOG_INFO("Traitement d'un CODE=%d ...", CODE_SYNC_BARRIER_REQ);
 
     pthread_mutex_lock(&dsm_mgr_ctx->sync.lock);
@@ -615,8 +610,16 @@ static int treat_sync_barrier_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
             pthread_mutex_lock(&node_content->send_lock);
             int ret = send_sync_barr_ack(node_content->tcp_sock);
             pthread_mutex_unlock(&node_content->send_lock);
+            if (ret < 0) {
+                pthread_mutex_unlock(&dsm_mgr_ctx->sync.lock);
+                dsm_hash_safe_unlock(&dsm_ctx->nodes_reg, bkt);
+                return -1;
+            }
         }
-    } // TODO CONTINUE
+
+        dsm_mgr_ctx->sync.missing_barr_reqs =
+            dsm_ctx->config.net.system.nb_nodes - dsm_ctx->config.net.system.nb_managers;
+    }
 
     pthread_mutex_unlock(&dsm_mgr_ctx->sync.lock);
 
@@ -624,7 +627,40 @@ static int treat_sync_barrier_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     return 0;
 }
 
-static int treat_sync_finalize_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
+static int treat_sync_finalize_req() {
+    LOG_INFO("Traitement d'un CODE=%d ...", CODE_SYNC_FINALIZE_REQ);
+
+    pthread_mutex_lock(&dsm_mgr_ctx->sync.lock);
+
+    if (dsm_mgr_ctx->sync.missing_fina_reqs == 0) {
+        LOG_ERROR("Erreur Algo : FINALIZE_REQ reçu alors missing_fina_reqs == 0 ?!");
+        pthread_mutex_unlock(&dsm_mgr_ctx->sync.lock);
+        return -1;
+    }
+
+    dsm_mgr_ctx->sync.missing_fina_reqs--;
+
+    if (dsm_mgr_ctx->sync.missing_fina_reqs == 0) {
+
+        unsigned int bkt;
+        dsm_node_content *node_content;
+        dsm_hash_safe_for_each(&dsm_ctx->nodes_reg, bkt, node_content, node) {
+            pthread_mutex_lock(&node_content->send_lock);
+            int ret = send_sync_fina_ack(node_content->tcp_sock);
+            pthread_mutex_unlock(&node_content->send_lock);
+            if (ret < 0) {
+                pthread_mutex_unlock(&dsm_mgr_ctx->sync.lock);
+                dsm_hash_safe_unlock(&dsm_ctx->nodes_reg, bkt);
+                return -1;
+            }
+        }
+
+        atomic_store(&dsm_dmn_ctx->state, DSM_DMN_STATE_TERMINATING);
+    }
+
+    pthread_mutex_unlock(&dsm_mgr_ctx->sync.lock);
+
+    LOG_INFO("Succès du traitement du CODE=%d", CODE_SYNC_FINALIZE_REQ);
     return 0;
 }
 
@@ -657,12 +693,12 @@ void dispatch_call_mgr(void *arg) {
             break;
 
         case CODE_SYNC_BARRIER_REQ:
-            if (treat_sync_barrier_req(msg_ctx) < 0) {
+            if (treat_sync_barrier_req() < 0) {
                 LOG_WARNING("Message non traité : CODE=%d", CODE_SYNC_BARRIER_REQ);
             }
             break;
         case CODE_SYNC_FINALIZE_REQ:
-            if (treat_sync_finalize_req(msg_ctx) < 0) {
+            if (treat_sync_finalize_req() < 0) {
                 LOG_WARNING("Message non traité : CODE=%d", CODE_SYNC_FINALIZE_REQ);
             }
             break;

@@ -164,6 +164,7 @@ static int make_share_reg(dsm_supervisor_ctx *spvs_ctx, dsm_discover_ctx *dscv_c
                         malloc(sizeof(dsm_mgr_to_node_content));
                     if (!convert_node_content) {
                         LOG_ERROR("Erreur malloc : convert_node_content");
+                        dsm_hash_safe_unlock(&spvs_ctx->spvs_reg, bkt);
                         return -1;
                     }
                     convert_node_content->manager_id = index;

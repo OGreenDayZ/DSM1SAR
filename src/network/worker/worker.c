@@ -5,6 +5,7 @@
 #include "network/message/message.h"
 #include "network/message/serializer.h"
 #include "network/pager/pager_msg.h"
+#include "network/worker/sync.h"
 #include "pager/pager.h"
 #include "util/concurrent/safe_list.h"
 #include "util/concurrent/safe_map.h"
@@ -51,25 +52,22 @@ int dsm_wkr_ctx_init() {
         LOG_ERROR("[dsm_wkr_ctx_init] dsm_safe_map_init dsm_wkr_ctx->locks_reg");
         return -1;
     }
-    pthread_mutex_init(&dsm_wkr_ctx->sync.barr.lock, NULL);
-    pthread_cond_init(&dsm_wkr_ctx->sync.barr.wait_cond, NULL);
 
-    dsm_wkr_ctx->sync.barr.targ_mgr_id = 0; // Par défaut, ca sera toujours le ManagerID=0
+    if (barrier_init(&dsm_wkr_ctx->sync.barr) < 0) {
+        LOG_ERROR("barrier_init");
+        return -1;
+    }
 
-    dsm_wkr_ctx->sync.barr.curr_count = 0;
-    dsm_wkr_ctx->sync.barr.targ_count = 0;
-
-    pthread_mutex_init(&dsm_wkr_ctx->sync.fina.lock, NULL);
-    pthread_cond_init(&dsm_wkr_ctx->sync.fina.wait_cond, NULL);
-
-    dsm_wkr_ctx->sync.fina.curr_count = 0;
-    dsm_wkr_ctx->sync.fina.targ_count = 0;
+    if (finalize_init(&dsm_wkr_ctx->sync.fina) < 0) {
+        LOG_ERROR("finalize_init");
+        return -1;
+    }
 
     dsm_wkr_ctx->page_counter = 0;
     return 0;
 }
 
-void dsm_wkr_ctx_cleanup();
+void dsm_wkr_ctx_cleanup() {}
 
 long addr_to_page_id(uint64_t addr) {
     if (addr < dsm_wkr_ctx->range_start ||
@@ -303,6 +301,7 @@ static int treat_mgr_data_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
         /**
          * On invalide la page
          */
+        LOG_INFO("[treat_mgr_data_req] J'invalide la page aussi");
         if (madvise(addr, EFFECTIVE_PAGESIZE, MADV_DONTNEED) < 0) {
             LOG_ERROR("madvise");
             return -1;
@@ -449,6 +448,34 @@ error:
     return -1;
 }
 
+static int treat_sync_barrier_ack() {
+    LOG_INFO("Traitement d'un CODE=%d ...", CODE_SYNC_BARRIER_REQ);
+
+    pthread_mutex_lock(&dsm_wkr_ctx->sync.barr.lock);
+    int ret = barrier_trigger(&dsm_wkr_ctx->sync.barr);
+    pthread_mutex_unlock(&dsm_wkr_ctx->sync.barr.lock);
+    if (ret < 0) {
+        return -1;
+    }
+
+    LOG_INFO("Succès du traitement du CODE=%d", CODE_SYNC_BARRIER_REQ);
+    return 0;
+}
+
+static int treat_sync_finalize_ack() {
+    LOG_INFO("Traitement d'un CODE=%d ...", CODE_SYNC_FINALIZE_REQ);
+
+    pthread_mutex_lock(&dsm_wkr_ctx->sync.fina.lock);
+    int ret = finalize_trigger(&dsm_wkr_ctx->sync.fina);
+    pthread_mutex_unlock(&dsm_wkr_ctx->sync.fina.lock);
+    if (ret < 0) {
+        return -1;
+    }
+
+    LOG_INFO("Succès du traitement du CODE=%d", CODE_SYNC_FINALIZE_REQ);
+    return 0;
+}
+
 void dispatch_call_wkr(void *arg) {
     /**
      * Contient :
@@ -472,6 +499,7 @@ void dispatch_call_wkr(void *arg) {
             /** @a TODO Ne pas oublier de < 0 check, c'est
                                           pas du void */
             break;
+
         case CODE_MGR_INVA_REQ:
             LOG_INFO("Reception par le noeud %d du code CODE_MGR_INVA_REQ et traitement.",
                      dsm_ctx->node_id);
@@ -482,11 +510,24 @@ void dispatch_call_wkr(void *arg) {
 
             LOG_INFO("Je suis sortie de treat_mgr_inva_req");
             break;
+
         case CODE_MGR_DATA_REQ:
             LOG_INFO("Reception par le noeud %d du code CODE_MGR_DATA_REQ et traitement.",
                      dsm_ctx->node_id);
             if (treat_mgr_data_req(msg_ctx) < 0) {
                 LOG_ERROR("Traitement du message CODE=CODE_MGR_DATA_REQ a echoué");
+            }
+            break;
+
+        case CODE_SYNC_BARRIER_ACK:
+            if (treat_sync_barrier_ack() < 0) {
+                LOG_WARNING("Message non traité : CODE=%d", CODE_SYNC_BARRIER_REQ);
+            }
+            break;
+
+        case CODE_SYNC_FINALIZE_ACK:
+            if (treat_sync_finalize_ack() < 0) {
+                LOG_WARNING("Message non traité : CODE=%d", CODE_SYNC_FINALIZE_REQ);
             }
             break;
 

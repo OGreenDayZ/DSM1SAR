@@ -3,6 +3,8 @@
 #include "debug/debug.h"
 #include "internal.h"
 #include "network/daemon.h"
+#include "network/discover/net_discover.h"
+#include "network/manager/manager.h"
 #include "network/network.h"
 #include "network/pager/pager_msg.h"
 #include "network/worker/worker.h"
@@ -165,25 +167,22 @@ void *daemon_thread_start(void *arg) {
     if (dsm_daemon_start() < 0) {
         LOG_ERROR("Erreur dsm_daemon_start");
     }
+    dsm_wkr_ctx_cleanup();
+    dsm_ctx_cleanup();
     return NULL;
 }
 
-int dsm_init(const dsm_config *config) {
+dsm_node_role dsm_init(const dsm_config *config) {
     LOG_INFO("Initialisation de DSM1SAR...");
     if (dsm_ctx_init(config) < 0) {
         return -1;
     }
 
-    if (dsm_network_init() < 0) {
-        LOG_ERROR("Erreur dsm_network_init");
+    if (dsm_discover() < 0) {
+        LOG_ERROR("Erreur dsm_discover");
         dsm_ctx_cleanup();
         return -1;
     }
-
-    // if (!dsm_wkr_ctx) {
-    //     LOG_ERROR("Worker contexte non initialisé");
-    //     return -1;
-    // }
 
     dsm_node_role role = dsm_ctx->config.net.node.role;
 
@@ -205,10 +204,15 @@ int dsm_init(const dsm_config *config) {
         if (dsm_daemon_start() < 0) {
             LOG_ERROR("Erreur dsm_daemon_start");
         }
+        dsm_mgr_ctx_cleanup();
         dsm_ctx_cleanup();
+
+    } else { // role == DSM_ROLE_UNDEFINED
+        dsm_ctx_cleanup();
+        return -1;
     }
 
-    return 0;
+    return role;
 }
 
 void *dsm_alloc(void) {
@@ -283,7 +287,6 @@ int dsm_lock(void *addr) {
         }
     }
     dsm_hash_safe_get_end(&dsm_wkr_ctx->locks_reg, page_id);
-
     if (found == NULL) {
         LOG_INFO("[dsm_lock] locks_reg est mal initialisé");
         return -1;
@@ -299,38 +302,142 @@ int dsm_lock(void *addr) {
         LOG_ERROR("[dsm_lock] pthread_cond_init &entry->mutex");
         return -1;
     }
+    dsm_safe_list_lock(&found->locks_list);
+
+    // 2. Vérifier si la liste est vide AVANT d'ajouter notre élément
+    // Si elle est vide, nous sommes de facto le premier ("leader")
+    int is_first = dsm_safe_list_empty(&found->locks_list);
+
+    // 3. Ajouter notre entrée à la queue
+    dsm_safe_list_add_tail(&found->locks_list, &entry_list->node);
+
+    // 4. Déverrouiller la liste
+    dsm_safe_list_unlock(&found->locks_list);
 
     dsm_safe_list_add_tail(&found->locks_list, &entry_list->node);
 
-    pthread_mutex_lock(send_lock);
-    if (send_wkr_req(page_id, LOCK_REQ, fd_sock) < 0) {
+    // On verifie si la requete actuelle est la 1ere de la liste
+    // Si elle l'est on envoie la requete sinon on dors sur notre var_cond
+
+    if (is_first) {
+        LOG_INFO("[dsm_lock] Je suis le 1er (Leader). Envoi de la requête au manager.");
+
+        pthread_mutex_lock(send_lock);
+        if (send_wkr_req(page_id, LOCK_REQ, fd_sock) < 0) {
+            pthread_mutex_unlock(send_lock);
+            return -1;
+        }
         pthread_mutex_unlock(send_lock);
-        return -1;
+    } else {
+        LOG_INFO("[dsm_lock] Je suis en file d'attente. Un autre thread gère déjà la "
+                 "requête.");
     }
-    pthread_mutex_unlock(send_lock);
 
+    LOG_INFO("[dsm_lock] J'ai envoyé LOCK_REQ et j'attends LOCK_ACK");
     pthread_mutex_lock(&entry_list->mutex);
-    while (entry_list->locked == 0)
+    {
         pthread_cond_wait(&entry_list->cond, &entry_list->mutex);
-    pthread_mutex_unlock(&entry_list->mutex);
+        LOG_INFO("J'attends mon LOCK_ACK!!!!!!!!!!!!!!!!!!!!");
+    }
 
-    // Je supprime l'entrée de laaaa
-    dsm_safe_list_del(&found->locks_list, &entry_list->node);
-    pthread_mutex_destroy(&entry_list->mutex);
-    pthread_cond_destroy(&entry_list->cond);
-    free(entry_list);
+    pthread_mutex_unlock(&entry_list->mutex);
     return 0;
 }
 
 int dsm_unlock(void *addr) {
     unsigned int page_id = addr_to_page_id((uint64_t)addr);
     int fd_sock = get_mgr_node_socket_for_page(page_id);
-    // TODO - majda : compter le nombre de thread a avoir envoyé un LOCK_REQ
-    // Des que tout les threads ont fait unlock on envoie le UNLOCK_REQ au manager
+    pthread_mutex_t *send_lock = get_mgr_send_lock_for_page(page_id);
+    dsm_locks_reg_entry *locks_reg_entry = NULL, *found = NULL;
+    dsm_locks_list_entry *first_entry = NULL;
+    // Faut supprimer l'entrée de ici
+    dsm_hash_safe_get(&dsm_wkr_ctx->locks_reg, locks_reg_entry, node, page_id) {
+        if (locks_reg_entry->page_id == page_id) {
+            found = locks_reg_entry;
+            break;
+        }
+    }
+    dsm_hash_safe_get_end(&dsm_wkr_ctx->locks_reg, page_id);
+
+    // 1. On verrouille la liste pour la section critique (utilise pthread_rwlock_wrlock
+    // en interne)
+    dsm_safe_list_lock(&found->locks_list);
+
+    // 2. On vérifie que la liste n'est pas vide.
+    // Note : on utilise dsm_list_empty (de list.h) et pas dsm_safe_list_empty car on
+    // détient déjà le verrou !
+    if (!dsm_list_empty(&found->locks_list.head)) {
+
+        // 3. Le premier élément chaîné est juste après la tête
+        dsm_list_head *first_node = found->locks_list.head.next;
+
+        // 4. On utilise la macro pour remonter à la structure complète
+        // dsm_locks_list_entry[cite: 2] "node" correspond au nom du champ dsm_list_head
+        // dans votre structure dsm_locks_list_entry
+        first_entry = dsm_container_of(first_node, dsm_locks_list_entry, node);
+    }
+    dsm_safe_list_unlock(&found->locks_list);
+
+    LOG_INFO("[dsm_lock] J'ai reçu LOCK_ACK");
+    dsm_safe_list_del(&found->locks_list, &first_entry->node);
+    pthread_mutex_destroy(&first_entry->mutex);
+    pthread_cond_destroy(&first_entry->cond);
+    free(first_entry);
+
+    pthread_mutex_lock(send_lock);
     if (send_wkr_req(page_id, UNLOCK_REQ, fd_sock) < 0) {
+        pthread_mutex_unlock(send_lock);
         return -1;
     }
+    pthread_mutex_unlock(send_lock);
     return 0;
+}
+
+int dsm_barrier_advanced(unsigned int threads_count, unsigned int manager_id) {
+
+    pthread_mutex_lock(&dsm_wkr_ctx->sync.barr.lock);
+
+    if (barrier_define(&dsm_wkr_ctx->sync.barr, threads_count, manager_id) < 0) {
+        goto error_unlock;
+    }
+
+    if (barrier_wait(&dsm_wkr_ctx->sync.barr) < 0) {
+        goto error_unlock;
+    }
+
+    pthread_mutex_unlock(&dsm_wkr_ctx->sync.barr.lock);
+    return 0;
+
+error_unlock:
+    pthread_mutex_unlock(&dsm_wkr_ctx->sync.barr.lock);
+    return -1;
+}
+
+int dsm_barrier(void) {
+    return dsm_barrier_advanced(1, 0);
+}
+
+int dsm_finalize_advanced(unsigned int threads_count) {
+    pthread_mutex_lock(&dsm_wkr_ctx->sync.fina.lock);
+
+    if (finalize_define(&dsm_wkr_ctx->sync.fina, threads_count) < 0) {
+        goto error_unlock;
+    }
+
+    if (finalize_wait(&dsm_wkr_ctx->sync.fina) < 0) {
+        goto error_unlock;
+    }
+
+    pthread_mutex_unlock(&dsm_wkr_ctx->sync.fina.lock);
+    return 0;
+
+error_unlock:
+    pthread_mutex_unlock(&dsm_wkr_ctx->sync.fina.lock);
+    return -1;
+}
+
+int dsm_finalize(void) {
+    return dsm_finalize_advanced(1);
 }
 
 /**

@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 #include "internal.h"
-#include "pager/pager.h"
+#include "network/worker/sync.h"
 #include "util/concurrent/safe_list.h"
 #include "util/concurrent/safe_map.h"
 #include "util/hlist.h"
@@ -25,36 +25,9 @@ typedef struct {
 
 typedef struct {
 
-    pthread_mutex_t lock;
-
-    unsigned int targ_mgr_id; // Le responsable de la barrière, 0 par défaut
-
-    unsigned int curr_count;
-    unsigned int targ_count; // 0 non initialisé, sinon le nombre de threads qui dorment
-                             // sur wait_cond
-
-    pthread_cond_t wait_cond;
-
-} sync_barrier; // Pour dsm_mgr_sync
-
-typedef struct {
-
-    pthread_mutex_t lock;
-
-    unsigned int curr_count;
-    unsigned int targ_count; // 0 non initialisé, sinon le nombre de threads qui dorment
-                             // sur wait_cond
-
-    pthread_cond_t wait_cond;
-
-} sync_finalize; // Pour dsm_mgr_sync
-
-typedef struct {
-
     sync_barrier barr;
     sync_finalize fina;
 } dsm_wkr_sync; // Pour sync
-
 
 typedef enum {
     NONE, 
@@ -68,19 +41,18 @@ typedef struct {
     struct dsm_hlist_node node; // pour la map requests_reg
 } dsm_requests_reg_entry;       // entrée de requests_reg
 
-
 typedef struct {
     int locked; // 0 : la page n'est pas encore locked & 1 : la page est locked
     // Le mutex est la car c'est la page qu'on protège
     pthread_mutex_t mutex; // mutex pour protéger l'accès à locked
     pthread_cond_t cond;
-    
+
     dsm_list_head node; // locks_list
-} dsm_locks_list_entry; 
+} dsm_locks_list_entry;
 typedef struct {
     unsigned int page_id;
-    dsm_safe_list locks_list; 
-    struct dsm_hlist_node node; // locks_reg 
+    dsm_safe_list locks_list;
+    struct dsm_hlist_node node; // locks_reg
 } dsm_locks_reg_entry;
 
 typedef struct {
@@ -97,7 +69,7 @@ typedef struct {
     dsm_safe_map managerID_to_nodeID;
     dsm_safe_map requests_reg;
     dsm_safe_map locks_reg;
-   dsm_wkr_sync sync;
+    dsm_wkr_sync sync;
 
     pthread_t daemon;
 
@@ -158,7 +130,7 @@ void dispatch_call_uffd(void *arg);
  */
 void dispatch_call_wkr(void *arg);
 
-dsm_requests_reg_entry *get_request_entry(unsigned long page_id); 
+dsm_requests_reg_entry *get_request_entry(unsigned long page_id);
 pthread_mutex_t *get_mgr_send_lock_for_page(unsigned long page_id);
 
 #endif // DSM_WORKER_H
