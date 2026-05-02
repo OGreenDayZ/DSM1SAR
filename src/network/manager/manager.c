@@ -439,7 +439,8 @@ static int try_send_req_ack(dsm_page_content *page_content, bool *is_drainer) {
         return -1;
     }
 
-    *is_drainer = !dsm_dq_pop(&page_content->pending_reqs);
+    *is_drainer =
+        !dsm_dq_pop(&page_content->pending_reqs) && page_content->mode != PAGE_LOCKED;
     reset_head_req_ctx(page_content);
 
     return 0;

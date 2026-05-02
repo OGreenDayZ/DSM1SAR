@@ -11,7 +11,7 @@
 #include "util/concurrent/thread_pool.h"
 
 #define DSM_SPVS_POLL_FDS_SERVER 2
-#define DSM_SPVS_POLL_TIMEOUT_MS 500
+#define DSM_SPVS_POLL_TIMEOUT_MS 100
 
 #define DSM_SPVS_HASH_BITS 4
 

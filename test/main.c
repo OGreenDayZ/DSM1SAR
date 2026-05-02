@@ -9,10 +9,10 @@ int main(int argc, char const *argv[]) {
     dsm_config config;
     dsm_get_default_config(&config);
 
-    config.net.system.nb_nodes = 4;
+    config.net.system.nb_nodes = 5;
     config.net.system.nb_managers = 2;
 
-    config.net.node.role = DSM_ROLE_MANAGER; // Collision
+    config.net.node.role = DSM_ROLE_WORKER; // Collision
     // dsm_init(&config);
 
     // // Test de dsm consécutif
@@ -42,15 +42,13 @@ int main(int argc, char const *argv[]) {
     }
 
     printf("Je vais lire les données avant initialisation \n");
-    printf("%d", shared_data[0]);
+    printf("%d\n", shared_data[0]);
 
     printf("J'initialise les données...\n");
     // Ici, userfaultfd intercepte l'écriture
-    LOG_INFO("Nœud %d écrit à l'index %d", 50);
-    printf(" Ecriture de la donnée index %d : %d\n", 50, 2 * 2);
-    shared_data[50] = 2 * 2;
+    shared_data[50]++;
 
-    printf("Lecture de la donnée index 50 : %d\n", shared_data[50]);
+    printf("Lecture de la donnée : %d\n", shared_data[50]);
 
     dsm_finalize();
 
