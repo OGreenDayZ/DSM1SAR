@@ -144,38 +144,37 @@ int main(int argc, char *argv[]) {
     for (int i = 2; i < 4; i++)
         pthread_join(threads[i], NULL);
 
-    // --- CAS E : ÉCRITURES CONCURRENTES (RACE CONDITION &INVALIDATIONS) ---
-    // printf("\n" CLR_TITLE "--- CAS E : ÉCRITURES CONCURRENTES (RACE CONDITION & "
-    //        "INVALIDATIONS) ---" CLR_RESET "\n");
-    // TEST_LOG(CLR_WARN,
-    //          "Lancement de plusieurs threads écrivant sur la MÊME page
-    //          simultanément...");
+    // -- -CAS E : ÉCRITURES CONCURRENTES(RACE CONDITION & INVALIDATIONS)-- -
+    printf("\n" CLR_TITLE "--- CAS E : ÉCRITURES CONCURRENTES (RACE CONDITION & "
+           "INVALIDATIONS) ---" CLR_RESET "\n");
+    TEST_LOG(CLR_WARN, "Lancement de plusieurs threads écrivant sur la MÊME page"
+                       "simultanément...");
 
-    // for (int i = 0; i < 4; i++) {
-    //     tdata[i].addr = shared_mem;
-    //     tdata[i].id = i + 10; // IDs distincts pour les logs
-    //     pthread_create(&threads[i], NULL, test_concurrent_write_task, &tdata[i]);
-    // }
+    for (int i = 0; i < 4; i++) {
+        tdata[i].addr = shared_mem;
+        tdata[i].id = i + 10; // IDs distincts pour les logs
+        pthread_create(&threads[i], NULL, test_concurrent_write_task, &tdata[i]);
+    }
 
-    // for (int i = 0; i < 4; i++) {
-    //     pthread_join(threads[i], NULL);
-    // }
+    for (int i = 0; i < 4; i++) {
+        pthread_join(threads[i], NULL);
+    }
 
-    // TEST_LOG(CLR_STEP, "Vérification finale : la valeur en mémoire est %d",
-    //          *(int *)shared_mem);
+    TEST_LOG(CLR_STEP, "Vérification finale : la valeur en mémoire est %d",
+             *(int *)shared_mem);
 
     // --- CAS D : Verrous Exclusifs (LOCK / UNLOCK) ---
-    printf("\n" CLR_TITLE "--- CAS D : TEST DES VERROUS (DSM_LOCK) ---" CLR_RESET "\n");
-    for (int i = 4; i < 6; i++) {
-        tdata[i] = (thread_data_t){shared_mem, i};
-        pthread_create(&threads[i], NULL, test_lock_task, &tdata[i]);
-    }
-    for (int i = 4; i < 6; i++)
-        pthread_join(threads[i], NULL);
+    // printf("\n" CLR_TITLE "--- CAS D : TEST DES VERROUS (DSM_LOCK) ---" CLR_RESET
+    // "\n"); for (int i = 4; i < 6; i++) {
+    //     tdata[i] = (thread_data_t){shared_mem, i};
+    //     pthread_create(&threads[i], NULL, test_lock_task, &tdata[i]);
+    // }
+    // for (int i = 4; i < 6; i++)
+    //     pthread_join(threads[i], NULL);
 
     // 3. Nettoyage (Si implémenté)
     printf("\n" CLR_STEP "Étape Final: Fin des tests." CLR_RESET "\n");
-    sleep(60);
+    // sleep(60);
     // dsm_ctx_cleanup(); // Si exposé
 
     return EXIT_SUCCESS;

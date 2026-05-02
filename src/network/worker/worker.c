@@ -131,7 +131,9 @@ int get_mgr_node_socket_for_page(unsigned long page_id) {
 
 pthread_mutex_t *get_mgr_send_lock_for_page(unsigned long page_id) {
     dsm_mgr_to_node_content *manager = NULL;
-    get_mgr_convert_node(page_id, &manager);
+    if (!get_mgr_convert_node(page_id, &manager)) {
+        return NULL;
+    }
     return &manager->to_node_content->send_lock;
 }
 
@@ -153,6 +155,8 @@ static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
     int flags = fault_msg->arg.pagefault.flags;
     int fd_sock_mgr = get_mgr_node_socket_for_page(page_id);
     pthread_mutex_t *send_lock = get_mgr_send_lock_for_page(page_id);
+    if (send_lock == NULL)
+        return -1;
     int ret = 0;
 
     page_mode_req mode = (flags & (UFFD_PAGEFAULT_FLAG_WRITE | UFFD_PAGEFAULT_FLAG_WP))

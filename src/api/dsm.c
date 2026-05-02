@@ -300,17 +300,16 @@ int dsm_lock(void *addr) {
         return -1;
     }
 
-    pthread_mutex_lock(&entry_list->mutex);
     dsm_safe_list_add_tail(&found->locks_list, &entry_list->node);
 
     pthread_mutex_lock(send_lock);
     if (send_wkr_req(page_id, LOCK_REQ, fd_sock) < 0) {
         pthread_mutex_unlock(send_lock);
-        pthread_mutex_unlock(&entry_list->mutex);
         return -1;
     }
     pthread_mutex_unlock(send_lock);
 
+    pthread_mutex_lock(&entry_list->mutex);
     while (entry_list->locked == 0)
         pthread_cond_wait(&entry_list->cond, &entry_list->mutex);
     pthread_mutex_unlock(&entry_list->mutex);
@@ -319,6 +318,7 @@ int dsm_lock(void *addr) {
     dsm_safe_list_del(&found->locks_list, &entry_list->node);
     pthread_mutex_destroy(&entry_list->mutex);
     pthread_cond_destroy(&entry_list->cond);
+    free(entry_list);
     return 0;
 }
 

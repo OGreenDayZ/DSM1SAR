@@ -60,10 +60,10 @@ typedef enum {
     NONE, 
     READ_SENT, 
     WRITE_SENT, 
-} ReqsState; 
+} reqs_state; 
 typedef struct {
     unsigned int page_id; // clé
-    ReqsState state; 
+    reqs_state state; 
     pthread_mutex_t mutex; 
     struct dsm_hlist_node node; // pour la map requests_reg
 } dsm_requests_reg_entry;       // entrée de requests_reg
