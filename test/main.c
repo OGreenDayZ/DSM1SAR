@@ -9,8 +9,8 @@ int main(int argc, char const *argv[]) {
     dsm_config config;
     dsm_get_default_config(&config);
 
-    config.net.system.nb_nodes = 2;
-    config.net.system.nb_managers = 1;
+    config.net.system.nb_nodes = 4;
+    config.net.system.nb_managers = 2;
 
     config.net.node.role = DSM_ROLE_MANAGER; // Collision
     // dsm_init(&config);
@@ -51,6 +51,8 @@ int main(int argc, char const *argv[]) {
     shared_data[50] = 2 * 2;
 
     printf("Lecture de la donnée index 50 : %d\n", shared_data[50]);
+
+    dsm_finalize();
 
     return 0;
 }

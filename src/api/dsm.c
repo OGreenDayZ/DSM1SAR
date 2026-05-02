@@ -341,8 +341,7 @@ int dsm_barrier_advanced(unsigned int threads_count, unsigned int manager_id) {
 
     pthread_mutex_lock(&dsm_wkr_ctx->sync.barr.lock);
 
-    if (dsm_wkr_ctx->sync.barr.state == BARR_RESET &&
-        barrier_define(&dsm_wkr_ctx->sync.barr, threads_count, manager_id) < 0) {
+    if (barrier_define(&dsm_wkr_ctx->sync.barr, threads_count, manager_id) < 0) {
         goto error_unlock;
     }
 
@@ -362,9 +361,28 @@ int dsm_barrier(void) {
     return dsm_barrier_advanced(1, 0);
 }
 
-int dsm_finalize_advanced(unsigned int threads_count);
+int dsm_finalize_advanced(unsigned int threads_count) {
+    pthread_mutex_lock(&dsm_wkr_ctx->sync.fina.lock);
 
-int dsm_finalize(void);
+    if (finalize_define(&dsm_wkr_ctx->sync.fina, threads_count) < 0) {
+        goto error_unlock;
+    }
+
+    if (finalize_wait(&dsm_wkr_ctx->sync.fina) < 0) {
+        goto error_unlock;
+    }
+
+    pthread_mutex_unlock(&dsm_wkr_ctx->sync.fina.lock);
+    return 0;
+
+error_unlock:
+    pthread_mutex_unlock(&dsm_wkr_ctx->sync.fina.lock);
+    return -1;
+}
+
+int dsm_finalize(void) {
+    return dsm_finalize_advanced(1);
+}
 
 /**
  * @note TODO - majda : a voir si c'est vraiment utile

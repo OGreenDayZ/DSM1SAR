@@ -5,6 +5,7 @@
 #include "network/message/message.h"
 #include "network/message/serializer.h"
 #include "network/pager/pager_msg.h"
+#include "network/worker/sync.h"
 #include "pager/pager.h"
 #include "util/concurrent/safe_list.h"
 #include "util/concurrent/safe_map.h"
@@ -154,8 +155,13 @@ static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
     __u64 addr = fault_msg->arg.pagefault.address;
     int page_id = addr_to_page_id(addr);
     int flags = fault_msg->arg.pagefault.flags;
-    int fd_sock_mgr = get_mgr_node_socket_for_page(page_id);
-    pthread_mutex_t send_lock = get_mgr_send_lock_for_page(page_id);
+    dsm_mgr_to_node_content *content;
+    if (!get_mgr_convert_node(page_id, &content)) {
+        LOG_ERROR("Manager pour page %d non trouvé", page_id);
+        return -1;
+    }
+    int fd_sock_mgr = content->to_node_content->tcp_sock;
+    pthread_mutex_t send_lock = content->to_node_content->send_lock;
     int ret = 0;
 
     page_mode_req mode = (flags & (UFFD_PAGEFAULT_FLAG_WRITE | UFFD_PAGEFAULT_FLAG_WP))
@@ -438,6 +444,34 @@ error:
     return -1;
 }
 
+static int treat_sync_barrier_ack() {
+    LOG_INFO("Traitement d'un CODE=%d ...", CODE_SYNC_BARRIER_REQ);
+
+    pthread_mutex_lock(&dsm_wkr_ctx->sync.barr.lock);
+    int ret = barrier_trigger(&dsm_wkr_ctx->sync.barr);
+    pthread_mutex_unlock(&dsm_wkr_ctx->sync.barr.lock);
+    if (ret < 0) {
+        return -1;
+    }
+
+    LOG_INFO("Succès du traitement du CODE=%d", CODE_SYNC_BARRIER_REQ);
+    return 0;
+}
+
+static int treat_sync_finalize_ack() {
+    LOG_INFO("Traitement d'un CODE=%d ...", CODE_SYNC_FINALIZE_REQ);
+
+    pthread_mutex_lock(&dsm_wkr_ctx->sync.fina.lock);
+    int ret = finalize_trigger(&dsm_wkr_ctx->sync.fina);
+    pthread_mutex_unlock(&dsm_wkr_ctx->sync.fina.lock);
+    if (ret < 0) {
+        return -1;
+    }
+
+    LOG_INFO("Succès du traitement du CODE=%d", CODE_SYNC_FINALIZE_REQ);
+    return 0;
+}
+
 void dispatch_call_wkr(void *arg) {
     /**
      * Contient :
@@ -469,6 +503,18 @@ void dispatch_call_wkr(void *arg) {
             treat_mgr_data_req(msg_ctx);
             LOG_INFO("Reception par le noeud %d du code CODE_MGR_DATA_REQ et traitement.",
                      dsm_ctx->node_id);
+            break;
+
+        case CODE_SYNC_BARRIER_ACK:
+            if (treat_sync_barrier_ack() < 0) {
+                LOG_WARNING("Message non traité : CODE=%d", CODE_SYNC_BARRIER_REQ);
+            }
+            break;
+
+        case CODE_SYNC_FINALIZE_ACK:
+            if (treat_sync_finalize_ack() < 0) {
+                LOG_WARNING("Message non traité : CODE=%d", CODE_SYNC_FINALIZE_REQ);
+            }
             break;
 
         default:

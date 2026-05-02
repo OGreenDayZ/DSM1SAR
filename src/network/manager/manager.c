@@ -454,21 +454,13 @@ static int inject_data(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_data_ack *
         return -1;
     }
 
-    /**
-     * @warning : owner_id n'est pas == -1, vérification faite avant l'appel à inject_data
-     */
-    if ((unsigned int)(*out_page_content)->owner_id == msg_ctx->header.id) {
-        LOG_ERROR("Erreur Algo : DATA_ACK d'un worker qui est proprio de la page ?! "
-                  "(page_id=%u, worker_id=%u)",
-                  data_ack->page_id, msg_ctx->header.id);
-        return -1;
-    }
+    unsigned int msg_cb_id = msg_ctx->header.id;
 
     pthread_mutex_lock(&(*out_page_content)->head_req_ctx.lock);
     if ((*out_page_content)->head_req_ctx.missing_acks == 0) {
         LOG_ERROR("Erreur Algo : DATA_ACK reçu alors que la requête en tête n'attend pas "
                   "d'ACK ?! (page_id=%u, worker_id=%u)",
-                  data_ack->page_id, msg_ctx->header.id);
+                  data_ack->page_id, msg_cb_id);
         goto unlock_return;
     }
 
@@ -476,7 +468,7 @@ static int inject_data(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_data_ack *
         LOG_ERROR(
             "Erreur Algo : DATA_ACK reçu alors que la requête en tête n'attend que des "
             "ACK d'invalidation ?! (page_id=%u, worker_id=%u)",
-            data_ack->page_id, msg_ctx->header.id);
+            data_ack->page_id, msg_cb_id);
         goto unlock_return;
     }
 
@@ -484,7 +476,7 @@ static int inject_data(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_data_ack *
         LOG_ERROR(
             "Erreur Algo : DATA_ACK reçu alors que la requête en tête a déjà reçu des "
             "données ?! (page_id=%u, worker_id=%u)",
-            data_ack->page_id, msg_ctx->header.id);
+            data_ack->page_id, msg_cb_id);
         goto unlock_return;
     }
 

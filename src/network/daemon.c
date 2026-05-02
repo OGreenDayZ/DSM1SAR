@@ -230,6 +230,7 @@ int dsm_daemon_start(void) {
             }
         }
     }
+    ret = 0;
 
 exit:
     dmn_ctx_cleanup();

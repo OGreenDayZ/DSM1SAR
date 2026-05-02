@@ -1,6 +1,7 @@
 #include "sync.h"
 #include "debug/debug.h"
 #include "internal.h"
+#include "network/daemon.h"
 #include "network/message/serializer.h"
 #include "network/worker/worker.h"
 
@@ -206,7 +207,7 @@ int finalize_wait(sync_finalize *fina) {
         }
     }
 
-    LOG_INFO("[%d/%d] Thread %lu en attente pour la finalisation", fina->curr_count,
+    LOG_INFO("[%d/%d] Thread %lu : en attente pour la finalisation", fina->curr_count,
              fina->targ_count, (unsigned long)pthread_self());
     while (fina->state != FINA_TRIGGERED) {
         pthread_cond_wait(&fina->wait_cond, &fina->lock);
@@ -214,7 +215,7 @@ int finalize_wait(sync_finalize *fina) {
 
     // PAS DE RESET CAR FINALISATION UNIQUE
 
-    LOG_INFO("Finalisation permise");
+    LOG_INFO("Thread %lu : Finalisation permise", (unsigned long)pthread_self());
 
     return 0;
 }
@@ -232,6 +233,7 @@ int finalize_trigger(sync_finalize *fina) {
 
     if (fina->missing_mgr_acks == 0) {
         fina->state = FINA_TRIGGERED;
+        atomic_store(&dsm_dmn_ctx->state, DSM_DMN_STATE_TERMINATING);
         pthread_cond_broadcast(&fina->wait_cond);
         LOG_INFO("Finalisation déclenchée, tous les threads en attente seront réveillés");
     }
