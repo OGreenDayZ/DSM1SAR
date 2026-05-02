@@ -13,6 +13,7 @@
 #include <bits/pthreadtypes.h>
 #include <linux/userfaultfd.h>
 #include <pthread.h>
+#include <stdint.h>
 #include <string.h>
 #include <sys/mman.h>
 
@@ -126,17 +127,10 @@ int get_mgr_node_socket_for_page(unsigned long page_id) {
     return content->to_node_content->tcp_sock;
 }
 
-pthread_mutex_t get_mgr_send_lock_for_page(unsigned long page_id) {
-    int manager_id = get_mgr_id_for_page(page_id);
-    dsm_node_content *entry = NULL, *obj;
-    dsm_hash_safe_get(&dsm_ctx->nodes_reg, obj, node, manager_id) {
-        if (obj->id == manager_id) {
-            entry = obj;
-            break;
-        }
-    }
-    dsm_hash_safe_get_end(&dsm_ctx->nodes_reg, manager_id);
-    return entry->send_lock;
+pthread_mutex_t *get_mgr_send_lock_for_page(unsigned long page_id) {
+    dsm_mgr_to_node_content *manager = NULL;
+    get_mgr_convert_node(page_id, &manager);
+    return &manager->to_node_content->send_lock;
 }
 
 dsm_requests_reg_entry *get_request_entry(unsigned long page_id) {
@@ -161,7 +155,7 @@ static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
         return -1;
     }
     int fd_sock_mgr = content->to_node_content->tcp_sock;
-    pthread_mutex_t send_lock = content->to_node_content->send_lock;
+    pthread_mutex_t *send_lock = &content->to_node_content->send_lock;
     int ret = 0;
 
     page_mode_req mode = (flags & (UFFD_PAGEFAULT_FLAG_WRITE | UFFD_PAGEFAULT_FLAG_WP))
@@ -178,12 +172,10 @@ static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
             entry->state = READ_SENT;
             pthread_mutex_unlock(&entry->mutex);
 
-            pthread_mutex_lock(&send_lock);
+            pthread_mutex_lock(send_lock);
             LOG_INFO("[uffd_fault] Lock acquis pour page %d\n", page_id);
-            printf("[treat_uffd_pagefault] SEND - READ_REQ sent\n");
-            send_wkr_req(page_id, READ_REQ, fd_sock_mgr);
-            LOG_INFO("[uffd_fault] Relâchement du lock pour page %d\n", page_id);
-            pthread_mutex_unlock(&send_lock);
+            ret = send_wkr_req(page_id, READ_REQ, fd_sock_mgr);
+            pthread_mutex_unlock(send_lock);
             return ret;
         }
         pthread_mutex_unlock(&entry->mutex);
@@ -194,12 +186,12 @@ static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
             entry->state = WRITE_SENT;
             pthread_mutex_unlock(&entry->mutex);
 
-            pthread_mutex_lock(&send_lock);
+            pthread_mutex_lock(send_lock);
             LOG_INFO("[uffd_fault] Lock acquis pour page %d\n", page_id);
             printf("[treat_uffd_pagefault] SEND - WRITE_REQ sent\n");
             send_wkr_req(page_id, WRITE_REQ, fd_sock_mgr);
             LOG_INFO("[uffd_fault] Relâchement du lock pour page %d\n", page_id);
-            pthread_mutex_unlock(&send_lock);
+            pthread_mutex_unlock(send_lock);
             return ret;
         }
         pthread_mutex_unlock(&entry->mutex);
@@ -249,9 +241,14 @@ static int treat_mgr_inva_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
         return -1;
     }
     dsm_requests_reg_entry *req_entry = get_request_entry(payload.page_id);
-    void *addr = (void *)page_id_to_addr(payload.page_id);
+    void *addr = (void *)(uintptr_t)page_id_to_addr(payload.page_id);
 
-    // LOG_INFO("[treat_mgr_inva_req]");
+    // TODO - majda : voir si c'est vraiment ca
+    if (req_entry) {
+        pthread_mutex_lock(&req_entry->mutex);
+        req_entry->state = NONE; /* reset : un nouveau fault pourra re-envoyer */
+        pthread_mutex_unlock(&req_entry->mutex);
+    }
     // pthread_mutex_lock(&req_entry->mutex);
     // LOG_INFO(
     //     "[treat_mgr_inva_req] J'ai pris le lock de req_entry et entry->state == %d \n",
@@ -262,7 +259,7 @@ static int treat_mgr_inva_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     //     pthread_mutex_unlock(&req_entry->mutex);
     //     return 0;
     // }
-    LOG_INFO("[treat_mgr_inva_req] Faut  j'invalide");
+    // LOG_INFO("[treat_mgr_inva_req] Faut  j'invalide");
     // pthread_mutex_unlock(&req_entry->mutex);
 
     if (madvise(addr, EFFECTIVE_PAGESIZE, MADV_DONTNEED) < 0) {
@@ -275,11 +272,13 @@ static int treat_mgr_inva_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
         /**
          * Faut repondre avec msg_wkr_inva_ack
          */
+        LOG_INFO("Faut repondre au manager");
         pthread_mutex_lock(msg_ctx->send_lock);
         int ret = send_wkr_inva_ack(payload.page_id, msg_ctx->sock);
         pthread_mutex_unlock(msg_ctx->send_lock);
         return ret;
     }
+    LOG_INFO("Je sors de la fonction treat_mgr_inva_req");
     return 0;
 }
 
@@ -307,6 +306,11 @@ static int treat_mgr_data_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
             LOG_ERROR("madvise");
             return -1;
         }
+    }
+    if (pager_protect(dsm_wkr_ctx->uffd, payload.page_id, UFFDIO_WRITEPROTECT_MODE_WP) <
+        0) {
+        LOG_ERROR("[treat_mgr_data_req] pager_protect");
+        return -1;
     }
     /**
      * envoyer dsm_msg_wkr_data_ack
@@ -350,13 +354,14 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
             // envoyé sa requete est le 1er a être réveillé
             // donc on parcours la liste a la recherche de la 1ere demande de lock
             // associé a cette page
+
             pthread_mutex_lock(&req_entry->mutex);
             LOG_INFO("[treat_mgr_req_ack] J'ai pris le lock de req_entry\n");
             if (req_entry->state == WRITE_SENT) {
                 req_entry->state = NONE;
-                pthread_mutex_unlock(&req_entry->mutex);
             }
             pthread_mutex_unlock(&req_entry->mutex);
+
             dsm_hash_safe_get(&dsm_wkr_ctx->locks_reg, entry, node, payload->page_id) {
                 if (entry->page_id == payload->page_id) {
                     found = entry;
@@ -386,7 +391,6 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
             LOG_INFO("[treat_mgr_req_ack] WRITE_REQ J'ai pris le lock de req_entry\n");
             if (req_entry->state == WRITE_SENT) {
                 req_entry->state = NONE;
-                pthread_mutex_unlock(&req_entry->mutex);
             }
             pthread_mutex_unlock(&req_entry->mutex);
             break;
@@ -396,7 +400,6 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
             LOG_INFO("[treat_mgr_req_ack] READ_REQ J'ai pris le lock de req_entry\n");
             if (req_entry->state == READ_SENT) {
                 req_entry->state = NONE;
-                pthread_mutex_unlock(&req_entry->mutex);
             }
             pthread_mutex_unlock(&req_entry->mutex);
             break;
@@ -484,25 +487,35 @@ void dispatch_call_wkr(void *arg) {
     int code = msg_ctx->header.code;
 
     switch (code) {
-            // case CODE_WKR_REQ:
-            // treat
-
         case CODE_MGR_REQ_ACK:
             // treat
             LOG_INFO("Reception par le noeud %d du code CODE_MGR_REQ_ACK et traitement.",
                      dsm_ctx->node_id);
-            treat_mgr_req_ack(msg_ctx); /** @a TODO Ne pas oublier de < 0 check, c'est
-                                           pas du void */
+            if (treat_mgr_req_ack(msg_ctx) < 0) {
+                LOG_ERROR("Traitement du message CODE=CODE_MGR_REQ_ACK a échoué");
+                return;
+            }
+            /** @a TODO Ne pas oublier de < 0 check, c'est
+                                          pas du void */
             break;
+
         case CODE_MGR_INVA_REQ:
             LOG_INFO("Reception par le noeud %d du code CODE_MGR_INVA_REQ et traitement.",
                      dsm_ctx->node_id);
-            treat_mgr_inva_req(msg_ctx);
+            if (treat_mgr_inva_req(msg_ctx) < 0) {
+                LOG_ERROR("Traitement du message CODE=CODE_MGR_INVA_REQ a échoué");
+                break;
+            }
+
+            LOG_INFO("Je suis sortie de treat_mgr_inva_req");
             break;
+
         case CODE_MGR_DATA_REQ:
-            treat_mgr_data_req(msg_ctx);
             LOG_INFO("Reception par le noeud %d du code CODE_MGR_DATA_REQ et traitement.",
                      dsm_ctx->node_id);
+            if (treat_mgr_data_req(msg_ctx) < 0) {
+                LOG_ERROR("Traitement du message CODE=CODE_MGR_DATA_REQ a echoué");
+            }
             break;
 
         case CODE_SYNC_BARRIER_ACK:
@@ -520,7 +533,7 @@ void dispatch_call_wkr(void *arg) {
         default:
             LOG_WARNING("Code de message TCP inconnu ou non traitable: %d", code);
     }
-    LOG_INFO("J'ai fini ici");
+    LOG_INFO("J'ai fini dispatch_call_wkr");
     free(msg_ctx->payload);
     free(msg_ctx);
 }

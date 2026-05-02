@@ -668,18 +668,24 @@ void dispatch_call_mgr(void *arg) {
 
     switch (msg_ctx->header.code) {
         case CODE_WKR_REQ:
+            LOG_INFO("[dispatch_call_mgr] code=CODE_WKR_REQ reçu du noeud %d",
+                     msg_ctx->header.id);
             if (treat_wkr_req(msg_ctx) < 0) {
                 LOG_WARNING("Message non traité : CODE=%d", CODE_WKR_REQ);
             }
             break;
 
         case CODE_WKR_DATA_ACK:
+            LOG_INFO("[dispatch_call_mgr] code=CODE_WKR_DATA_ACK reçu du noeud %d",
+                     msg_ctx->header.id);
             if (treat_wkr_data_ack(msg_ctx) < 0) {
                 LOG_WARNING("Message non traité : CODE=%d", CODE_WKR_DATA_ACK);
             }
             break;
 
         case CODE_WKR_INVA_ACK:
+            LOG_INFO("[dispatch_call_mgr] code=CODE_WKR_INVA_ACK reçu du noeud %d",
+                     msg_ctx->header.id);
             if (treat_wkr_inva_ack(msg_ctx) < 0) {
                 LOG_WARNING("Message non traité : CODE=%d", CODE_WKR_INVA_ACK);
             }
