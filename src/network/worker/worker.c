@@ -291,9 +291,9 @@ static int treat_mgr_data_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
         LOG_ERROR("dsm_dsrlze_mgr_data_req");
         return -1;
     }
-
-    void *zero_page = calloc(1, EFFECTIVE_PAGESIZE);
     void *addr = (void *)page_id_to_addr(payload.page_id);
+    void *data = malloc(EFFECTIVE_PAGESIZE);
+    memcpy(data, addr, EFFECTIVE_PAGESIZE);
 
     if (payload.is_invalidate) {
         /**
@@ -313,9 +313,10 @@ static int treat_mgr_data_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
      * envoyer dsm_msg_wkr_data_ack
      */
     pthread_mutex_lock(msg_ctx->send_lock);
-    int ret = send_wkr_data_ack(payload.page_id, (uint8_t *)addr, msg_ctx->sock);
+    int ret = send_wkr_data_ack(payload.page_id, data, msg_ctx->sock);
     pthread_mutex_unlock(msg_ctx->send_lock);
-    free(zero_page);
+
+    free(data);
     return ret;
 }
 /**
