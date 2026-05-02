@@ -46,7 +46,6 @@ typedef struct {
     // Le mutex est la car c'est la page qu'on protège
     pthread_mutex_t mutex; // mutex pour protéger l'accès à locked
     pthread_cond_t cond;
-
     dsm_list_head node; // locks_list
 } dsm_locks_list_entry;
 typedef struct {

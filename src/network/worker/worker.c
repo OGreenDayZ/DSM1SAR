@@ -336,7 +336,6 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
         calloc(1, EFFECTIVE_PAGESIZE); // alloue une plage de EFFECTIVE_PAGESIZE
                                        // contigue initialisée à 0
     dsm_locks_reg_entry *entry = NULL, *found = NULL;
-    dsm_locks_list_entry *entry_list;
     if (dsm_dsrlze_mgr_req_ack(msg_ctx->payload, msg_ctx->header.payload_len, &payload) <
         0) {
         LOG_ERROR("dsm_dsrlze_mgr_req_ack");
@@ -344,10 +343,9 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     }
     dsm_requests_reg_entry *req_entry = get_request_entry(payload->page_id);
 
-    LOG_INFO("[treat_mgr_req_ack]");
     switch (payload->req_mode) {
         case LOCK_REQ:
-            LOG_INFO("[treat_mgr_req_ack] LOCK_REQ reçu");
+            LOG_INFO("[treat_mgr_req_ack] LOCK_ACK reçu");
             // Utilisation de locks_reg
             // Ici on a reçu une reponse a une demande de lock
             // On doit s'assurer qu'on débloque le bon thread avec locks_reg
@@ -371,23 +369,34 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
             }
             dsm_hash_safe_get_end(&dsm_wkr_ctx->locks_reg, payload->page_id);
 
-            dsm_safe_list_for_each_entry(&found->locks_list, entry_list, node) {
-                pthread_mutex_lock(&entry_list->mutex);
-                entry_list->locked = 1;
-                pthread_cond_signal(&entry_list->cond);
-                pthread_mutex_unlock(&entry_list->mutex);
-                dsm_safe_list_unlock(&entry->locks_list);
-                break;
+            // dsm_safe_list_for_each_entry(&found->locks_list, entry_list, node) {
+            //     pthread_mutex_lock(&entry_list->mutex);
+            //     entry_list->locked = 1;
+            //     pthread_cond_signal(&entry_list->cond);
+            //     pthread_mutex_unlock(&entry_list->mutex);
+            //     dsm_safe_list_unlock(&found->locks_list);
+            //     break;
+            // }
+
+            dsm_safe_list_lock(&found->locks_list);
+            if (!dsm_list_empty(&found->locks_list.head)) {
+                dsm_locks_list_entry *first = dsm_container_of(
+                    found->locks_list.head.next, dsm_locks_list_entry, node);
+                pthread_mutex_lock(&first->mutex);
+                first->locked = 1;
+                pthread_cond_signal(&first->cond);
+                pthread_mutex_unlock(&first->mutex);
             }
+            dsm_safe_list_unlock(&found->locks_list);
             break;
         case UNLOCK_REQ:
-            LOG_INFO("[treat_mgr_req_ack] UNLOCK_REQ reçu");
+            LOG_INFO("[treat_mgr_req_ack] UNLOCK_ACK reçu");
             // On reçoit ici la reponse au UNLOCK_REQ
             break;
         case WRITE_REQ:
             // maybe or maybe not, but i think not
             // WEEE je dois supprimer les entrés de la requests_pending_list
-            LOG_INFO("[treat_mgr_req_ack] WRITE_REQ reçu");
+            LOG_INFO("[treat_mgr_req_ack] WRITE_ACK reçu");
             pthread_mutex_lock(&req_entry->mutex);
             LOG_INFO("[treat_mgr_req_ack] WRITE_REQ J'ai pris le lock de req_entry\n");
             if (req_entry->state == WRITE_SENT) {
@@ -396,7 +405,7 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
             pthread_mutex_unlock(&req_entry->mutex);
             break;
         case READ_REQ:
-            LOG_INFO("[treat_mgr_req_ack] READ_REQ reçu");
+            LOG_INFO("[treat_mgr_req_ack] READ_ACK reçu");
             pthread_mutex_lock(&req_entry->mutex);
             LOG_INFO("[treat_mgr_req_ack] READ_REQ J'ai pris le lock de req_entry\n");
             if (req_entry->state == READ_SENT) {

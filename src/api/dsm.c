@@ -279,7 +279,6 @@ int dsm_lock(void *addr) {
         LOG_ERROR("Erreur de malloc pour une entrée de locks_list");
         return -1;
     }
-
     dsm_hash_safe_get(&dsm_wkr_ctx->locks_reg, locks_reg_entry, node, page_id) {
         if (locks_reg_entry->page_id == page_id) {
             found = locks_reg_entry;
@@ -291,55 +290,34 @@ int dsm_lock(void *addr) {
         LOG_INFO("[dsm_lock] locks_reg est mal initialisé");
         return -1;
     }
-
     entry_list->locked = 0;
     if (pthread_mutex_init(&entry_list->mutex, NULL) < 0) {
         LOG_ERROR("[dsm_lock] pthread_mutex_init &entry->mutex");
         return -1;
     }
-
     if (pthread_cond_init(&entry_list->cond, NULL) < 0) {
         LOG_ERROR("[dsm_lock] pthread_cond_init &entry->mutex");
         return -1;
     }
+
     dsm_safe_list_lock(&found->locks_list);
-
-    // 2. Vérifier si la liste est vide AVANT d'ajouter notre élément
-    // Si elle est vide, nous sommes de facto le premier ("leader")
-    int is_first = dsm_safe_list_empty(&found->locks_list);
-
-    // 3. Ajouter notre entrée à la queue
-    dsm_safe_list_add_tail(&found->locks_list, &entry_list->node);
-
-    // 4. Déverrouiller la liste
+    dsm_list_add_tail(&found->locks_list.head, &entry_list->node);
     dsm_safe_list_unlock(&found->locks_list);
 
-    dsm_safe_list_add_tail(&found->locks_list, &entry_list->node);
-
-    // On verifie si la requete actuelle est la 1ere de la liste
-    // Si elle l'est on envoie la requete sinon on dors sur notre var_cond
-
-    if (is_first) {
-        LOG_INFO("[dsm_lock] Je suis le 1er (Leader). Envoi de la requête au manager.");
-
-        pthread_mutex_lock(send_lock);
-        if (send_wkr_req(page_id, LOCK_REQ, fd_sock) < 0) {
-            pthread_mutex_unlock(send_lock);
-            return -1;
-        }
+    pthread_mutex_lock(send_lock);
+    if (send_wkr_req(page_id, LOCK_REQ, fd_sock) < 0) {
         pthread_mutex_unlock(send_lock);
-    } else {
-        LOG_INFO("[dsm_lock] Je suis en file d'attente. Un autre thread gère déjà la "
-                 "requête.");
+        return -1;
     }
+    pthread_mutex_unlock(send_lock);
 
     LOG_INFO("[dsm_lock] J'ai envoyé LOCK_REQ et j'attends LOCK_ACK");
     pthread_mutex_lock(&entry_list->mutex);
-    {
+    while (entry_list->locked == 0) {
         pthread_cond_wait(&entry_list->cond, &entry_list->mutex);
         LOG_INFO("J'attends mon LOCK_ACK!!!!!!!!!!!!!!!!!!!!");
     }
-
+    LOG_INFO("LOCK_ACK reçu!!");
     pthread_mutex_unlock(&entry_list->mutex);
     return 0;
 }
@@ -359,21 +337,10 @@ int dsm_unlock(void *addr) {
     }
     dsm_hash_safe_get_end(&dsm_wkr_ctx->locks_reg, page_id);
 
-    // 1. On verrouille la liste pour la section critique (utilise pthread_rwlock_wrlock
-    // en interne)
     dsm_safe_list_lock(&found->locks_list);
 
-    // 2. On vérifie que la liste n'est pas vide.
-    // Note : on utilise dsm_list_empty (de list.h) et pas dsm_safe_list_empty car on
-    // détient déjà le verrou !
     if (!dsm_list_empty(&found->locks_list.head)) {
-
-        // 3. Le premier élément chaîné est juste après la tête
         dsm_list_head *first_node = found->locks_list.head.next;
-
-        // 4. On utilise la macro pour remonter à la structure complète
-        // dsm_locks_list_entry[cite: 2] "node" correspond au nom du champ dsm_list_head
-        // dans votre structure dsm_locks_list_entry
         first_entry = dsm_container_of(first_node, dsm_locks_list_entry, node);
     }
     dsm_safe_list_unlock(&found->locks_list);
