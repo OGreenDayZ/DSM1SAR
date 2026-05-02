@@ -159,6 +159,6 @@ void dispatch_call_uffd(void *arg);
 void dispatch_call_wkr(void *arg);
 
 dsm_requests_reg_entry *get_request_entry(unsigned long page_id); 
-pthread_mutex_t get_mgr_send_lock_for_page(unsigned long page_id); 
+pthread_mutex_t *get_mgr_send_lock_for_page(unsigned long page_id);
 
 #endif // DSM_WORKER_H

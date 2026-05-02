@@ -267,7 +267,7 @@ void *dsm_alloc(void) {
 int dsm_lock(void *addr) {
     unsigned int page_id = addr_to_page_id((uint64_t)addr);
     int fd_sock = get_mgr_node_socket_for_page(page_id);
-    pthread_mutex_t send_lock = get_mgr_send_lock_for_page(page_id);
+    pthread_mutex_t *send_lock = get_mgr_send_lock_for_page(page_id);
     dsm_locks_reg_entry *locks_reg_entry = NULL, *found = NULL;
     dsm_locks_list_entry *entry_list = malloc(sizeof(dsm_locks_list_entry));
 
@@ -303,13 +303,13 @@ int dsm_lock(void *addr) {
     pthread_mutex_lock(&entry_list->mutex);
     dsm_safe_list_add_tail(&found->locks_list, &entry_list->node);
 
-    pthread_mutex_lock(&send_lock);
+    pthread_mutex_lock(send_lock);
     if (send_wkr_req(page_id, LOCK_REQ, fd_sock) < 0) {
-        pthread_mutex_unlock(&send_lock);
+        pthread_mutex_unlock(send_lock);
         pthread_mutex_unlock(&entry_list->mutex);
         return -1;
     }
-    pthread_mutex_unlock(&send_lock);
+    pthread_mutex_unlock(send_lock);
 
     while (entry_list->locked == 0)
         pthread_cond_wait(&entry_list->cond, &entry_list->mutex);

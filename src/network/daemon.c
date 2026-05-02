@@ -128,6 +128,10 @@ static int handle_socket_event(int recv_sock) {
         goto exit_err_payload;
     }
 
+    LOG_INFO("[handle_socket_event] On a reçu le message CODE=%d chez le noeud %d de la "
+             "part de %d",
+             msg_ctx->header.code, dsm_ctx->node_id, msg_ctx->header.id);
+
     if (dsm_ctx->config.net.node.role == DSM_ROLE_MANAGER) {
 
         if (pool_add_task(dmn_ctx->pool, dispatch_call_mgr, msg_ctx) < 0) {
@@ -207,7 +211,7 @@ int dsm_daemon_start(void) {
             ret = -1;
             goto exit;
         }
-        LOG_ERROR("J'attends un message");
+
         for (int i = 0; i < max_fds; i++) {
             if (fds[i].revents & POLLIN) {
 
@@ -216,7 +220,7 @@ int dsm_daemon_start(void) {
                         continue;
                     }
                 } else {
-
+                    LOG_INFO("Message reçu sur la socket");
                     ret = handle_socket_event(fds[i].fd);
                     if (ret < 0) {
                         if (ret == DSM_ERR_TCP_CONN_CLOSE) {

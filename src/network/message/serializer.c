@@ -319,7 +319,10 @@ int dsm_srlze_wkr_req(uint32_t page_id, uint8_t mode, uint8_t *buf, size_t buf_s
     if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header)) {
         return -1;
     }
-    memcpy(buf + offset, &payload, sizeof(payload));
+    if (memcpy(buf + offset, &payload, sizeof(payload)) == NULL) {
+        LOG_ERROR("[dsm_srlze_wkr_req] memcpy a fail");
+        return -1;
+    }
 
     return offset + sizeof(payload);
 }
@@ -345,8 +348,11 @@ int dsm_srlze_mgr_inva_req(uint32_t page_id, uint8_t is_sync, uint8_t *buf,
     if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header)) {
         return -1;
     }
-    memcpy(buf + offset, &payload, sizeof(payload));
 
+    if (memcpy(buf + offset, &payload, sizeof(payload)) == NULL) {
+        LOG_ERROR("[dsm_srlze_mgr_inva_req] memcpy a fail");
+        return -1;
+    }
     return offset + sizeof(payload);
 }
 
@@ -372,8 +378,11 @@ int dsm_srlze_mgr_data_req(uint32_t page_id, uint8_t is_invalidate, uint8_t *buf
     if (offset < 0 || (size_t)offset != sizeof(dsm_msg_header)) {
         return -1;
     }
-    memcpy(buf + offset, &payload, sizeof(payload));
 
+    if (memcpy(buf + offset, &payload, sizeof(payload)) == NULL) {
+        LOG_ERROR("[dsm_srlze_mgr_data_req] memcpy a fail");
+        return -1;
+    }
     return offset + sizeof(payload);
 }
 
@@ -397,7 +406,10 @@ int dsm_srlze_wkr_inva_ack(uint32_t page_id, uint8_t *buf, size_t buf_sz) {
         return -1;
     }
 
-    memcpy(buf + offset, &payload, sizeof(payload));
+    if (memcpy(buf + offset, &payload, sizeof(payload)) == NULL) {
+        LOG_ERROR("[dsm_srlze_wkr_inva_ack] memcpy a fail");
+        return -1;
+    }
     return offset + sizeof(payload);
 }
 
@@ -425,7 +437,11 @@ int dsm_srlze_wkr_data_ack(uint32_t page_id, uint8_t *data, uint8_t *buf, size_t
     }
 
     LOG_INFO("FLAGGGGGGGGG ANTI FOUUUUUUUUUUUUUUU 444444444444444");
-    memcpy(buf + offset, &payload, sizeof(payload));
+
+    if (memcpy(buf + offset, &payload, sizeof(payload)) == NULL) {
+        LOG_ERROR("[dsm_srlze_wkr_inva_ack] memcpy  1 a fail");
+        return -1;
+    }
     LOG_INFO("FLAGGGGGGGGG ANTI FOUUUUUUUUUUUUUUU 55555555555555");
 
     offset += sizeof(payload);
@@ -434,7 +450,12 @@ int dsm_srlze_wkr_data_ack(uint32_t page_id, uint8_t *data, uint8_t *buf, size_t
         LOG_ERROR("ERREUR FATALE : data est NULL avant memcpy");
         return -1;
     }
-    memcpy(buf + offset, data, EFFECTIVE_PAGESIZE);
+
+    if (memcpy(buf + offset, data, EFFECTIVE_PAGESIZE) == NULL) {
+        LOG_ERROR("[dsm_srlze_wkr_inva_ack] memcpy 2 a fail");
+        return -1;
+    }
+    // memcpy(buf + offset, data, EFFECTIVE_PAGESIZE);
     LOG_INFO("FLAGGGGGGGGG ANTI FOUUUUUUUUUUUUUUU 33333333333333");
     return offset + EFFECTIVE_PAGESIZE;
 }
