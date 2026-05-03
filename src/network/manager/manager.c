@@ -154,7 +154,7 @@ static int treat_wkr_read_req(dsm_page_content *page_content,
             break;
 
         case PAGE_LOCKED:
-            LOG_ERROR("Erreur Algo : LOCKED sans UNLOCK_REQ ?!");
+            LOG_ERROR("[treat_wkr_read_req] Erreur Algo : LOCKED sans UNLOCK_REQ ?!");
             return -1;
 
         default:
@@ -188,7 +188,7 @@ static int treat_wkr_write_req(dsm_page_content *page_content,
             break;
 
         case PAGE_LOCKED:
-            LOG_ERROR("Erreur Algo : LOCKED sans UNLOCK_REQ ?!");
+            LOG_ERROR("[treat_wkr_write_req] Erreur Algo : LOCKED sans UNLOCK_REQ ?!");
             return -1;
 
         default:
@@ -222,7 +222,7 @@ static int treat_wkr_lock_req(dsm_page_content *page_content,
             break;
 
         case PAGE_LOCKED:
-            LOG_ERROR("Erreur Algo : LOCKED sans UNLOCK_REQ ?!");
+            LOG_ERROR("[treat_wkr_lock_req] Erreur Algo : LOCKED sans UNLOCK_REQ ?!");
             return -1;
 
         default:

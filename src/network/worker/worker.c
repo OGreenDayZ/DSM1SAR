@@ -343,6 +343,40 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     }
     dsm_requests_reg_entry *req_entry = get_request_entry(payload->page_id);
 
+    switch (payload->data_info) {
+        case EMPTY_INIT:
+            printf("[treat_mgr_req_ack] EMPTY_INIT - la page est vide et ca va la "
+                   "remplir pour regler la page fault\n");
+            if (pager_copy(
+                    dsm_wkr_ctx->uffd, payload->page_id, (__u64)zero_page,
+                    (payload->req_mode == WRITE_REQ || payload->req_mode == LOCK_REQ)
+                        ? 0
+                        : UFFDIO_COPY_MODE_WP) < 0) {
+                goto error;
+            }
+            printf("[treat_mgr_req_ack] EMPTY_INIT - la faute est reglééééééé \n");
+            break;
+        case NOT_EMPTY:
+            printf("[treat_mgr_req_ack] NOT_EMPTY - La page a des données \n");
+            if (pager_copy(
+                    dsm_wkr_ctx->uffd, payload->page_id, (__u64)payload->data,
+                    (payload->req_mode == WRITE_REQ || payload->req_mode == LOCK_REQ)
+                        ? 0
+                        : UFFDIO_COPY_MODE_WP) < 0) {
+                goto error;
+            }
+            break;
+        case PROMOTE_ONLY:
+            printf("[treat_mgr_req_ack] PROMOTE_ONLY - J'ai les données \n");
+            if (pager_protect(dsm_wkr_ctx->uffd, payload->page_id, 0) < 0) {
+                goto error;
+            }
+            break;
+        default:
+            LOG_ERROR("Jai aucune info sur les données");
+            break;
+    }
+
     switch (payload->req_mode) {
         case LOCK_REQ:
             LOG_INFO("[treat_mgr_req_ack] LOCK_ACK reçu");
@@ -354,7 +388,10 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
             // donc on parcours la liste a la recherche de la 1ere demande de lock
             // associé a cette page
 
+            // TODO : est ce que quand on recoit LOCK_REQ on recoit les données ?
+
             pthread_mutex_lock(&req_entry->mutex);
+
             LOG_INFO("[treat_mgr_req_ack] J'ai pris le lock de req_entry\n");
             if (req_entry->state == WRITE_SENT) {
                 req_entry->state = NONE;
@@ -368,15 +405,6 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
                 }
             }
             dsm_hash_safe_get_end(&dsm_wkr_ctx->locks_reg, payload->page_id);
-
-            // dsm_safe_list_for_each_entry(&found->locks_list, entry_list, node) {
-            //     pthread_mutex_lock(&entry_list->mutex);
-            //     entry_list->locked = 1;
-            //     pthread_cond_signal(&entry_list->cond);
-            //     pthread_mutex_unlock(&entry_list->mutex);
-            //     dsm_safe_list_unlock(&found->locks_list);
-            //     break;
-            // }
 
             dsm_safe_list_lock(&found->locks_list);
             if (!dsm_list_empty(&found->locks_list.head)) {
@@ -417,39 +445,6 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
             LOG_ERROR("C'est pas une requete que je connais sorry");
     }
 
-    switch (payload->data_info) {
-        case EMPTY_INIT:
-            printf("[treat_mgr_req_ack] EMPTY_INIT - la page est vide et ca va la "
-                   "remplir pour regler la page fault\n");
-            if (pager_copy(
-                    dsm_wkr_ctx->uffd, payload->page_id, (__u64)zero_page,
-                    (payload->req_mode == WRITE_REQ || payload->req_mode == LOCK_REQ)
-                        ? 0
-                        : UFFDIO_COPY_MODE_WP) < 0) {
-                goto error;
-            }
-            printf("[treat_mgr_req_ack] EMPTY_INIT - la faute est reglééééééé \n");
-            break;
-        case NOT_EMPTY:
-            printf("[treat_mgr_req_ack] NOT_EMPTY - La page a des données \n");
-            if (pager_copy(
-                    dsm_wkr_ctx->uffd, payload->page_id, (__u64)payload->data,
-                    (payload->req_mode == WRITE_REQ || payload->req_mode == LOCK_REQ)
-                        ? 0
-                        : UFFDIO_COPY_MODE_WP) < 0) {
-                goto error;
-            }
-            break;
-        case PROMOTE_ONLY:
-            printf("[treat_mgr_req_ack] PROMOTE_ONLY - J'ai les données \n");
-            if (pager_protect(dsm_wkr_ctx->uffd, payload->page_id, 0) < 0) {
-                goto error;
-            }
-            break;
-        default:
-            LOG_ERROR("Jai aucune info sur les données");
-            break;
-    }
     free(zero_page);
     return 0;
 error:

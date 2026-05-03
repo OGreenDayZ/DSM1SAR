@@ -174,8 +174,9 @@ int main(int argc, char *argv[]) {
 
     // 3. Nettoyage (Si implémenté)
     printf("\n" CLR_STEP "Étape Final: Fin des tests." CLR_RESET "\n");
-    // sleep(60);
+    // sleep(90);
     // dsm_ctx_cleanup(); // Si exposé
     dsm_finalize();
+    printf("\n" CLR_STEP "Fin totale avec dsm_finalize" CLR_RESET "\n");
     return EXIT_SUCCESS;
 }

@@ -302,14 +302,13 @@ int dsm_lock(void *addr) {
 
     dsm_safe_list_lock(&found->locks_list);
     dsm_list_add_tail(&found->locks_list.head, &entry_list->node);
-    dsm_safe_list_unlock(&found->locks_list);
-
     pthread_mutex_lock(send_lock);
     if (send_wkr_req(page_id, LOCK_REQ, fd_sock) < 0) {
         pthread_mutex_unlock(send_lock);
         return -1;
     }
     pthread_mutex_unlock(send_lock);
+    dsm_safe_list_unlock(&found->locks_list);
 
     LOG_INFO("[dsm_lock] J'ai envoyé LOCK_REQ et j'attends LOCK_ACK");
     pthread_mutex_lock(&entry_list->mutex);
