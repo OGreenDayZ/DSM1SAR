@@ -62,13 +62,13 @@ int main() {
     config.net.system.nb_managers = 1;
     config.net.node.role = DSM_ROLE_WORKER;
 
-    if (dsm_init(&config) != 0) {
+    if (dsm_init(&config) < 0) {
         fprintf(stderr, "Échec d'initialisation DSM\n");
         return -1;
     }
 
     // Allocation d'une page
-    void *page_ptr = dsm_alloc();
+    void *page_ptr = (void *)dsm_alloc();
     if (!page_ptr)
         return -1;
 

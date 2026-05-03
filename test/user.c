@@ -40,5 +40,6 @@ int main() {
     shared_data[50] = 2 * 2;
 
     printf("Lecture de la donnée index 50 : %d\n", shared_data[50]);
+    dsm_finalize();
     return EXIT_SUCCESS;
 }
