@@ -102,6 +102,6 @@ int main() {
     for (int i = 3; i < 5; i++)
         pthread_join(threads[i], NULL);
 
-    // dsm_finalize();
+    dsm_finalize();
     return 0;
 }

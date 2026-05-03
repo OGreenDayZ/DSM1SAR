@@ -667,7 +667,7 @@ int treat_lock_req_poss_rw(dsm_page_content *page_content,
             return -1;
         }
 
-        *req_completed = true;
+        // *req_completed = true;
 
     } else {
         pthread_mutex_lock(&page_content->head_req_ctx.lock);
@@ -683,11 +683,12 @@ int treat_lock_req_poss_rw(dsm_page_content *page_content,
 
         page_content->head_req_ctx.missing_acks = 1;
 
-        *req_completed = false;
+        // *req_completed = false;
 
         pthread_mutex_unlock(&page_content->head_req_ctx.lock);
     }
 
+    *req_completed = false;
     LOG_INFO("Succès du traitement du CODE=%d", CODE_WKR_REQ);
     return 0;
 }
