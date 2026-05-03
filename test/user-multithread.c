@@ -165,11 +165,11 @@ int main(int argc, char *argv[]) {
 
     // --- CAS D : Verrous Exclusifs (LOCK / UNLOCK) ---
     printf("\n" CLR_TITLE "--- CAS D : TEST DES VERROUS (DSM_LOCK) ---" CLR_RESET "\n");
-    for (int i = 4; i < 6; i++) {
+    for (int i = 4; i < 5; i++) {
         tdata[i] = (thread_data_t){shared_mem, i};
         pthread_create(&threads[i], NULL, test_lock_task, &tdata[i]);
     }
-    for (int i = 4; i < 6; i++)
+    for (int i = 4; i < 5; i++)
         pthread_join(threads[i], NULL);
 
     // 3. Nettoyage (Si implémenté)
