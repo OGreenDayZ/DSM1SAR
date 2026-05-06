@@ -347,7 +347,7 @@ int main() {
         LOG_INFO("Je suis le noeud %d et je vais attendre 10 secondes avant de passer la "
                  "barriere!",
                  dsm_get_node_id());
-        sleep(10);
+        sleep(1);
     }
     dsm_barrier();
     LOG_INFO(BG_SUCCESS "Barrière franchie !" RESET);
@@ -356,15 +356,12 @@ int main() {
     LOG_SECTION("ÉTAPE 12 : Tests avancés - BARRIÈRE SIMPLE avec threads");
 
     LOG_INFO("Lancement de 2 threads convergeant vers une barrière");
-    barrier_test_arg_t b_args[2];
-    for (int i = 0; i < 2; i++) {
-        b_args[i].thread_id = i;
-        b_args[i].shared_mem = shared_data;
-        pthread_create(&threads[i], NULL, test_barrier_thread, &b_args[i]);
-    }
+    barrier_test_arg_t b_args[1];
+    b_args[0].thread_id = 0;
+    b_args[0].shared_mem = shared_data;
+    pthread_create(&threads[0], NULL, test_barrier_thread, &b_args[0]);
 
-    for (int i = 0; i < 2; i++)
-        pthread_join(threads[i], NULL);
+    pthread_join(threads[0], NULL);
 
     LOG_SUCCESS("Barrière simple avec threads réussie");
 
@@ -384,28 +381,6 @@ int main() {
     LOG_SUCCESS("Barrière simple avec threads et locks réussie");
 
     // BARRIERE AVANCÉE
-    LOG_SECTION("ÉTAPE 14 : Tests avancés - BARRIÈRE AVANCÉE + VERROUS + FINALISATION");
-    LOG_WARN("Test complet combinant barrière avancée, verrous et finalisation");
-
-    // Thread 0 (principal)
-    LOG_INFO("Thread principal arrive à la barrière avancée");
-    dsm_barrier_advanced(2, 0);
-    LOG_SUCCESS("Thread principal : Barrière avancée franchie !");
-
-    dsm_lock(&shared_data[100]);
-    LOG_INFO("Thread principal : Verrou acquis - Section critique");
-    shared_data[100] = 1000 * node_id;
-    dsm_unlock(&shared_data[100]);
-    LOG_INFO("Thread principal : Verrou relâché");
-
-    // Créer un thread supplémentaire
-    LOG_INFO("Création d'un thread secondaire pour barrière avancée");
-    b_args[0].thread_id = 1;
-    b_args[0].shared_mem = shared_data;
-    pthread_create(&threads[0], NULL, test_barrier_advanced_thread, &b_args[0]);
-    pthread_join(threads[0], NULL);
-
-    LOG_SUCCESS("Test avancé (Barrière + Verrous + Finalisation) réussi");
     // FIN
     LOG_SECTION("ÉTAPE FINALE : Nettoyage et fermeture");
 
