@@ -12,6 +12,7 @@
 #include "network/message/message.h"
 #include "network/message/serializer.h"
 #include "network/worker/worker.h"
+#include "util/concurrent/thread_pool.h"
 
 dsm_daemon_ctx *dsm_dmn_ctx = NULL;
 
@@ -38,7 +39,9 @@ static int dmn_ctx_init() {
 }
 
 void dmn_ctx_cleanup() {
-    //
+    pool_destroy(dsm_dmn_ctx->pool, graceful_shutdown);
+    free(dsm_dmn_ctx);
+    dsm_dmn_ctx = NULL;
 }
 
 static int recv_header(int fd, dsm_msg_header *out) {

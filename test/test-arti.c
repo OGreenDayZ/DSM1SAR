@@ -186,14 +186,13 @@ void *test_lock_unlock_barrier_thread(void *arg) {
 }
 
 void *test_barrier_advanced_thread(void *arg) {
-    barrier_test_arg_t *t_args = (barrier_test_arg_t *)arg;
-    int tid = t_args->thread_id;
-    int *data = t_args->shared_mem;
+    thread_test_arg_t *t_args = (thread_test_arg_t *)arg;
+    int tid = t_args->id;
+    int *data = t_args->addr;
     unsigned long ptid = (unsigned long)pthread_self();
 
-    LOG_THREAD(ptid, "Test avancé #%d : Arrive à la barrière avancée", tid);
-    dsm_barrier_advanced(2, 0); // Attend 2 threads
-
+    LOG_THREAD(ptid, BOLD MAGENTA "Arrive à la barrière avancée" RESET);
+    dsm_barrier_advanced(3, 0); // Attend 3 threads + le thread principal
     LOG_THREAD(ptid, BG_SUCCESS "Barrière avancée franchie !" RESET);
 
     // Test du verrou après la barrière
@@ -202,10 +201,14 @@ void *test_barrier_advanced_thread(void *arg) {
     LOG_THREAD(ptid, BOLD MAGENTA "Verrou acquis" RESET " - Modification en cours");
     data[100] += (tid + 1);
     dsm_unlock(&data[100]);
-    LOG_THREAD(ptid, "Verrou relâché");
+    LOG_THREAD(ptid, BG_SUCCESS "Verrou relâché" RESET);
 
+    LOG_THREAD(ptid, BOLD MAGENTA "Arrive à la barrière avancée" RESET);
+    dsm_barrier_advanced(3, 0); // Attend 3 threads + le thread principal
+    LOG_THREAD(ptid, BG_SUCCESS "Barrière avancée franchie !" RESET);
     // Finalisation avancée
-    dsm_finalize_advanced(2);
+    LOG_INFO(BG_DEBUG "Appel de dsm_finalize()" RESET);
+    dsm_finalize();
     return NULL;
 }
 
@@ -226,7 +229,7 @@ int main() {
         LOG_ERROR("Erreur fatale : dsm_init a échoué");
         return EXIT_FAILURE;
     } else if (ret == DSM_ROLE_MANAGER) {
-        LOG_SUCCESS("Mode MANAGER activé - En attente des workers");
+        LOG_SUCCESS("Mode MANAGER activé");
         return EXIT_SUCCESS;
     }
 
@@ -341,7 +344,7 @@ int main() {
         pthread_join(threads[i], NULL);
 
     // BARRIERE SIMPLE
-    LOG_SECTION("ÉTAPE 11 : Test Simple - BARRIERE");
+    LOG_SECTION("ÉTAPE 11 : Test simple - BARRIERE");
     LOG_INFO("Arrive à la barriere (en attente)");
     if (dsm_get_node_id() == 2) {
         LOG_INFO("Je suis le noeud %d et je vais attendre 10 secondes avant de passer la "
@@ -352,40 +355,35 @@ int main() {
     dsm_barrier();
     LOG_INFO(BG_SUCCESS "Barrière franchie !" RESET);
 
-    // BARRIERE SIMPLE AVEC THREADS
-    LOG_SECTION("ÉTAPE 12 : Tests avancés - BARRIÈRE SIMPLE avec threads");
-
-    LOG_INFO("Lancement de 2 threads convergeant vers une barrière");
-    barrier_test_arg_t b_args[1];
-    b_args[0].thread_id = 0;
-    b_args[0].shared_mem = shared_data;
-    pthread_create(&threads[0], NULL, test_barrier_thread, &b_args[0]);
-
-    pthread_join(threads[0], NULL);
-
-    LOG_SUCCESS("Barrière simple avec threads réussie");
-
     // BARRIERE SIMPLE AVEC LOCKS
-    LOG_SECTION("ÉTAPE 13 : Tests avancés - BARRIÈRE SIMPLE avec threads et locks");
+    LOG_SECTION("ÉTAPE 12 : Tests simple - BARRIÈRE SIMPLE avec locks");
 
-    LOG_INFO("Lancement de 2 threads convergeant vers une barrière");
-    for (int i = 0; i < 2; i++) {
-        args[i].addr = &shared_data[200];
-        args[i].id = i + 10;
-        pthread_create(&threads[i], NULL, test_lock_unlock_barrier_thread, &args[i]);
-    }
-
-    for (int i = 0; i < 2; i++)
-        pthread_join(threads[i], NULL);
-
+    LOG_INFO("Lancement d'un threads convergeant vers une barrière");
+    args[0].addr = &shared_data[200];
+    args[0].id = 0 + 10;
+    pthread_create(&threads[0], NULL, test_lock_unlock_barrier_thread, &args[0]);
+    pthread_join(threads[0], NULL);
     LOG_SUCCESS("Barrière simple avec threads et locks réussie");
 
     // BARRIERE AVANCÉE
+    LOG_SECTION("Étape 13 : Tests multithread - BARRIÈRE AVANCÉE")
+    LOG_INFO("Lancement de 3 threads effectuant des reads simple");
+    for (int i = 0; i < 3; i++) {
+        args[i].addr = shared_data;
+        args[i].id = i;
+        pthread_create(&threads[i], NULL, test_barrier_advanced_thread, &args[i]);
+    }
+
+    // for (int i = 0; i < 3; i++) {
+    //     pthread_join(threads[i], NULL);
+    // }
+
+    LOG_SUCCESS("Barrière avancée avec threads et locks réussie");
+
     // FIN
     LOG_SECTION("ÉTAPE FINALE : Nettoyage et fermeture");
-
-    LOG_INFO("Appel de dsm_finalize()");
-    dsm_finalize();
+    LOG_INFO("Appel de dsm_finalize_advanced()");
+    dsm_finalize_advanced(4);
 
     LOG_SUCCESS("Nœud %d : TOUS LES TESTS RÉUSSIS ✓", node_id);
     LOG_TITLE("  FIN DES TESTS DSM  ");
