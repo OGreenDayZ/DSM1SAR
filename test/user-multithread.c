@@ -98,14 +98,19 @@ int main(int argc, char *argv[]) {
     dsm_config config;
     dsm_get_default_config(&config);
 
-    config.net.system.nb_nodes = 3;
-    config.net.system.nb_managers = 1;
+    config.net.system.nb_nodes = 4;
+    config.net.system.nb_managers = 2;
     config.net.node.role = DSM_ROLE_WORKER;
 
     TEST_LOG(CLR_STEP, "Étape 1: Initialisation du contexte DSM...");
-    if (dsm_init(&config) < 0) {
+    int ret = dsm_init(&config);
+    if (ret < 0) {
         TEST_LOG(CLR_ERR, "Erreur fatale : dsm_init a échoué.");
         return EXIT_FAILURE;
+    } else if (ret == DSM_ROLE_MANAGER) {
+        printf(CLR_INFO
+               "[MANAGER] Le manager est prêt et attend les connexions.\n" CLR_RESET);
+        return EXIT_SUCCESS;
     }
 
     // 2. Allocation de mémoire DSM

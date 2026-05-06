@@ -108,6 +108,5 @@ int dsm_barrier_advanced(unsigned int threads_count, unsigned int manager_id);
 int dsm_finalize(void);
 int dsm_finalize_advanced(unsigned int threads_count);
 int dsm_get_node_id();
-int dsm_get_role();
 
 #endif // DSM1SAR_H

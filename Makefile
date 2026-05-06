@@ -7,7 +7,7 @@ BUILD_DIR = build
 
 # Compilateur et options
 CC = gcc # Utiliser clang si on veut détecter + de warnings, sinon gcc
-CFLAGS = -Wall -g -I$(INCLUDE_DIR) -I$(SRC_DIR)
+CFLAGS = -Wall -fsanitize=address -fsanitize=leak -g -I$(INCLUDE_DIR) -I$(SRC_DIR)
 
 SRC_SRCS = $(shell find $(SRC_DIR) $(LIB_DIR) -name "*.c" 2>/dev/null)
 SRC_OBJS = $(addprefix $(BUILD_DIR)/, $(notdir $(SRC_SRCS:.c=.o)))

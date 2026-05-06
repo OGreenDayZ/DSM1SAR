@@ -178,7 +178,6 @@ static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
             return ret;
         }
         pthread_mutex_unlock(&entry->mutex);
-        printf("[treat_uffd_pagefault] NO SEND - READ_REQ not sent\n");
     } else if (mode == WRITE_REQ) {
         pthread_mutex_lock(&entry->mutex);
         if (entry->state < WRITE_SENT) {
@@ -187,14 +186,12 @@ static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
 
             pthread_mutex_lock(send_lock);
             LOG_INFO("[uffd_fault] Lock acquis pour page %d\n", page_id);
-            printf("[treat_uffd_pagefault] SEND - WRITE_REQ sent\n");
             send_wkr_req(page_id, WRITE_REQ, fd_sock_mgr);
             LOG_INFO("[uffd_fault] Relâchement du lock pour page %d\n", page_id);
             pthread_mutex_unlock(send_lock);
             return ret;
         }
         pthread_mutex_unlock(&entry->mutex);
-        printf("[treat_uffd_pagefault] NO SEND - WRITE_REQ not sent\n");
     }
 
     return ret;
@@ -242,24 +239,11 @@ static int treat_mgr_inva_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     dsm_requests_reg_entry *req_entry = get_request_entry(payload.page_id);
     void *addr = (void *)(uintptr_t)page_id_to_addr(payload.page_id);
 
-    // TODO - majda : voir si c'est vraiment ca
     if (req_entry) {
         pthread_mutex_lock(&req_entry->mutex);
         req_entry->state = NONE; /* reset : un nouveau fault pourra re-envoyer */
         pthread_mutex_unlock(&req_entry->mutex);
     }
-    // pthread_mutex_lock(&req_entry->mutex);
-    // LOG_INFO(
-    //     "[treat_mgr_inva_req] J'ai pris le lock de req_entry et entry->state == %d \n",
-    //     req_entry->state);
-    // if (req_entry->state == WRITE_SENT) {
-    //     LOG_WARNING("[treat_mgr_inva_req] Je suis entrain de traiter le WRITE alors "
-    //                 "j'inva paaaaas");
-    //     pthread_mutex_unlock(&req_entry->mutex);
-    //     return 0;
-    // }
-    // LOG_INFO("[treat_mgr_inva_req] Faut  j'invalide");
-    // pthread_mutex_unlock(&req_entry->mutex);
 
     if (madvise(addr, EFFECTIVE_PAGESIZE, MADV_DONTNEED) < 0) {
         LOG_ERROR("madvise");
@@ -345,8 +329,6 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
 
     switch (payload->data_info) {
         case EMPTY_INIT:
-            printf("[treat_mgr_req_ack] EMPTY_INIT - la page est vide et ca va la "
-                   "remplir pour regler la page fault\n");
             if (pager_copy(
                     dsm_wkr_ctx->uffd, payload->page_id, (__u64)zero_page,
                     (payload->req_mode == WRITE_REQ || payload->req_mode == LOCK_REQ)
@@ -354,10 +336,8 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
                         : UFFDIO_COPY_MODE_WP) < 0) {
                 goto error;
             }
-            printf("[treat_mgr_req_ack] EMPTY_INIT - la faute est reglééééééé \n");
             break;
         case NOT_EMPTY:
-            printf("[treat_mgr_req_ack] NOT_EMPTY - La page a des données \n");
             if (pager_copy(
                     dsm_wkr_ctx->uffd, payload->page_id, (__u64)payload->data,
                     (payload->req_mode == WRITE_REQ || payload->req_mode == LOCK_REQ)
@@ -367,7 +347,6 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
             }
             break;
         case PROMOTE_ONLY:
-            printf("[treat_mgr_req_ack] PROMOTE_ONLY - J'ai les données \n");
             if (pager_protect(dsm_wkr_ctx->uffd, payload->page_id, 0) < 0) {
                 goto error;
             }
@@ -387,9 +366,6 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
             // envoyé sa requete est le 1er a être réveillé
             // donc on parcours la liste a la recherche de la 1ere demande de lock
             // associé a cette page
-
-            // TODO : est ce que quand on recoit LOCK_REQ on recoit les données ?
-
             pthread_mutex_lock(&req_entry->mutex);
 
             LOG_INFO("[treat_mgr_req_ack] J'ai pris le lock de req_entry\n");
@@ -445,6 +421,7 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
             LOG_ERROR("C'est pas une requete que je connais sorry");
     }
 
+    free(payload);
     free(zero_page);
     return 0;
 error:
