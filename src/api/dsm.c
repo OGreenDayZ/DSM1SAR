@@ -418,11 +418,3 @@ int dsm_get_node_id() {
     }
     return dsm_ctx->node_id;
 }
-
-int dsm_get_role() {
-    if (!dsm_ctx) {
-        LOG_ERROR("DSM non initialisé");
-        return -1;
-    }
-    return dsm_ctx->config.net.node.role;
-}
