@@ -1,6 +1,7 @@
 #include "manager.h"
 
 #include <stdatomic.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -287,6 +288,7 @@ static int drain_reqs(dsm_page_content *page_content) {
          * @warning : On ne pop que si elle est finalisée !
          */
         int empty = dsm_dq_pop(&page_content->pending_reqs);
+        free(req_content);
         if (empty) {
             reset_head_req_ctx(page_content);
             break;
@@ -347,6 +349,7 @@ static int try_unlock(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
 
     (*out_page_content)->mode = PAGE_RW;
     *is_drainer = !dsm_dq_pop(&(*out_page_content)->pending_reqs);
+    free(front_req_content);
     reset_head_req_ctx((*out_page_content));
 
     LOG_INFO("Requête UNLOCK_REQ traitée avec succès (page_id=%u)", req->page_id);
@@ -439,16 +442,12 @@ static int try_send_req_ack(dsm_page_content *page_content, bool *is_drainer) {
         return -1;
     }
 
-    // *is_drainer =
-    //     !dsm_dq_pop(&page_content->pending_reqs) && page_content->mode != PAGE_LOCKED;
-    // reset_head_req_ctx(page_content);
-
-    // return 0;
     if (page_content->mode == PAGE_LOCKED) {
         *is_drainer = false;
+
     } else {
         *is_drainer = !dsm_dq_pop(&page_content->pending_reqs);
-
+        free(req_content);
         reset_head_req_ctx(page_content);
     }
 
