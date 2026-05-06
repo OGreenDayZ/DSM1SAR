@@ -1,7 +1,5 @@
-#include "debug/debug.h"
 #include "dsm.h"
 #include <stdio.h>
-#include <string.h>
 #include <unistd.h>
 
 int main(int argc, char const *argv[]) {
@@ -40,15 +38,6 @@ int main(int argc, char const *argv[]) {
         fprintf(stderr, "Erreur d'allocation DSM\n");
         return -1;
     }
-
-    printf("Je vais lire les données avant initialisation \n");
-    printf("%d\n", shared_data[0]);
-
-    printf("J'initialise les données...\n");
-    // Ici, userfaultfd intercepte l'écriture
-    shared_data[50]++;
-
-    printf("Lecture de la donnée : %d\n", shared_data[50]);
 
     dsm_finalize();
 

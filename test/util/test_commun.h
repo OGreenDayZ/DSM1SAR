@@ -1,7 +1,13 @@
 #ifndef TEST_LOG_H
 #define TEST_LOG_H
 
-#include <pthread.h>
+#include <stdio.h>
+
+typedef struct {
+    void *addr;
+    int id;
+} thread_test_arg_t;
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PALETTE DE COULEURS ANSI UNIFIÉE
@@ -54,5 +60,6 @@
 
 #define LOG_THREAD(tid, fmt, ...)                                                        \
     printf(BG_THREAD "[Thread %lu]" RESET " " fmt "\n", tid, ##__VA_ARGS__)
+
 
 #endif
