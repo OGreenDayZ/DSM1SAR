@@ -390,7 +390,7 @@ int treat_write_req_poss_rw(dsm_page_content *page_content,
     page_content->owner_id = cb_id;
 
     int ret = 0;
-    if (cb_id == owner_id) {
+    if (cb_id == owner_id) { // CHECK INCOHERENCE RW->RW ?, cas impossible
 
         pthread_mutex_lock(&cb_node->send_lock);
         ret = send_mgr_req_ack(page_content->page_id, req_content->info.mode,
