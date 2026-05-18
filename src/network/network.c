@@ -1,12 +1,15 @@
 #include "network.h"
 
+#include <asm-generic/socket.h>
 #include <ifaddrs.h>
 #include <net/if.h>
+#include <netinet/in.h>
+#include <stdint.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <unistd.h>
 
 #include "debug/debug.h"
-#include "network/discover/net_discover.h"
 
 int dsm_get_local_ip(uint32_t *ip) {
     struct ifaddrs *ifaddr, *ifa;

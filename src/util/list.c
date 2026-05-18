@@ -1,5 +1,7 @@
 #include "list.h"
 
+#include <stddef.h>
+
 void dsm_list_add(dsm_list_head *head, dsm_list_head *new) {
     dsm_list_head *prev = head;
     dsm_list_head *next = head->next;

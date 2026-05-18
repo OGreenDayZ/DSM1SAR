@@ -3,6 +3,8 @@
 
 #include <linux/userfaultfd.h>
 #include <netinet/in.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <sys/types.h>
 
 #define DSM_MSG_RECV_TIMEOUT_SEC 5

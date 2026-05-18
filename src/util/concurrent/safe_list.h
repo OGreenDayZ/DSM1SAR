@@ -1,10 +1,11 @@
 #ifndef DSM_SAFE_LIST_H
 #define DSM_SAFE_LIST_H
 
-#include "util/list.h"
-
 #include <pthread.h>
 #include <stddef.h>
+
+#include "util/container_of.h"
+#include "util/list.h"
 
 typedef struct {
     dsm_list_head head;
@@ -53,9 +54,8 @@ size_t dsm_safe_list_count(dsm_safe_list *list);
                                          : (pthread_rwlock_unlock(&(list)->lock), 0);    \
          pos = dsm_container_of((pos)->member.next, typeof(*(pos)), member))
 
-
 /**
- * @example 
+ * @example
  * Parcourir une liste de manière sûre pour la suppression d'éléments :
  * @code
  * my_item *pos, *n;
@@ -84,6 +84,6 @@ size_t dsm_safe_list_count(dsm_safe_list *list);
  */
 void dsm_safe_list_unlock(dsm_safe_list *list);
 
-void dsm_safe_list_lock(dsm_safe_list *list); 
+void dsm_safe_list_lock(dsm_safe_list *list);
 
 #endif /* DSM_SAFE_LIST_H */

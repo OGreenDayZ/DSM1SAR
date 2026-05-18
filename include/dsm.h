@@ -2,12 +2,13 @@
 #define DSM1SAR_H
 
 #include <arpa/inet.h>
-#include <linux/types.h>
+#include <netinet/in.h>
 
 // API Publique (seul fichier inclus par l'utilisateur)
 
 /* --- Memoire --- */
 typedef struct {
+    // TODO CAST LONG -> INT & IN MSG STRUCT
     unsigned long nb_pages; // Nombre de pages
     unsigned int page_size; // Taille d'une page en octets
     //+
@@ -108,5 +109,9 @@ int dsm_barrier_advanced(unsigned int threads_count, unsigned int manager_id);
 int dsm_finalize(void);
 int dsm_finalize_advanced(unsigned int threads_count);
 int dsm_get_node_id();
+
+int dsm_get_uffd_count();
+int dsm_get_data_count();
+int dsm_get_inva_count();
 
 #endif // DSM1SAR_H

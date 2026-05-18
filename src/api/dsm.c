@@ -1,5 +1,12 @@
 #include "dsm.h"
 
+#include <netinet/in.h>
+#include <pthread.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+
 #include "debug/debug.h"
 #include "internal.h"
 #include "network/daemon.h"
@@ -7,13 +14,15 @@
 #include "network/manager/manager.h"
 #include "network/network.h"
 #include "network/pager/pager_msg.h"
+#include "network/worker/sync.h"
 #include "network/worker/worker.h"
 #include "pager/pager.h"
 #include "util/concurrent/safe_list.h"
 #include "util/concurrent/safe_map.h"
 #include "util/concurrent/thread_pool.h"
-#include <pthread.h>
-#include <stdlib.h>
+#include "util/container_of.h"
+#include "util/hlist.h"
+#include "util/list.h"
 
 dsm_context *dsm_ctx = NULL;
 
@@ -21,7 +30,7 @@ void dsm_get_default_config(dsm_config *config) {
     // Pour certains champs, si 0 => soulève erreur à l'init (ex:nb_nodes)
     // et #accept si la valeur sera redéfinie en interne si non spécifiée par l'user
     if (!config) {
-        LOG_ERROR("USER NO ON T'AS DIS D'INITIALISER CONFIG!!!!!");
+        LOG_ERROR("config NULL passé à dsm_get_default_config");
         return;
     }
     config->pager.nb_pages = DSM_DEFAULT_NB_PAGES;
@@ -163,7 +172,7 @@ static void print_convert_reg() {
     }
 }
 
-void *daemon_thread_start(void *arg) {
+void *daemon_thread_start(__attribute__((unused)) void *arg) {
     LOG_INFO("Worker : Démarrage du daemon de DSM...");
     if (dsm_daemon_start() < 0) {
         LOG_ERROR("Erreur dsm_daemon_start");
@@ -270,6 +279,11 @@ void *dsm_alloc(void) {
 }
 
 int dsm_lock(void *addr) {
+    if (!dsm_wkr_ctx) {
+        LOG_ERROR("Worker context non initialisé");
+        return -1;
+    }
+
     unsigned int page_id = addr_to_page_id((uint64_t)addr);
     int fd_sock = get_mgr_node_socket_for_page(page_id);
     pthread_mutex_t *send_lock = get_mgr_send_lock_for_page(page_id);
@@ -312,18 +326,20 @@ int dsm_lock(void *addr) {
     pthread_mutex_unlock(send_lock);
     dsm_safe_list_unlock(&found->locks_list);
 
-    LOG_INFO("[dsm_lock] J'ai envoyé LOCK_REQ et j'attends LOCK_ACK");
     pthread_mutex_lock(&entry_list->mutex);
     while (entry_list->locked == 0) {
         pthread_cond_wait(&entry_list->cond, &entry_list->mutex);
-        LOG_INFO("J'attends mon LOCK_ACK!!!!!!!!!!!!!!!!!!!!");
     }
-    LOG_INFO("LOCK_ACK reçu!!");
     pthread_mutex_unlock(&entry_list->mutex);
     return 0;
 }
 
 int dsm_unlock(void *addr) {
+    if (!dsm_wkr_ctx) {
+        LOG_ERROR("Worker context non initialisé");
+        return -1;
+    }
+
     unsigned int page_id = addr_to_page_id((uint64_t)addr);
     int fd_sock = get_mgr_node_socket_for_page(page_id);
     pthread_mutex_t *send_lock = get_mgr_send_lock_for_page(page_id);
@@ -362,6 +378,10 @@ int dsm_unlock(void *addr) {
 }
 
 int dsm_barrier_advanced(unsigned int threads_count, unsigned int manager_id) {
+    if (!dsm_wkr_ctx) {
+        LOG_ERROR("Worker context non initialisé");
+        return -1;
+    }
 
     pthread_mutex_lock(&dsm_wkr_ctx->sync.barr.lock);
 
@@ -386,6 +406,11 @@ int dsm_barrier(void) {
 }
 
 int dsm_finalize_advanced(unsigned int threads_count) {
+    if (!dsm_wkr_ctx) {
+        LOG_ERROR("Worker context non initialisé");
+        return -1;
+    }
+
     pthread_mutex_lock(&dsm_wkr_ctx->sync.fina.lock);
 
     if (finalize_define(&dsm_wkr_ctx->sync.fina, threads_count) < 0) {

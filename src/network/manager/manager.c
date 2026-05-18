@@ -1,6 +1,8 @@
 #include "manager.h"
 
+#include <pthread.h>
 #include <stdatomic.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -9,11 +11,15 @@
 #include "internal.h"
 #include "network/daemon.h"
 #include "network/manager/mgr_factory.h"
+#include "network/message/message.h"
 #include "network/message/serializer.h"
 #include "network/pager/pager_msg.h"
 #include "pager/pager.h"
+#include "util/concurrent/drain_queue.h"
 #include "util/concurrent/safe_list.h"
 #include "util/concurrent/safe_map.h"
+#include "util/container_of.h"
+#include "util/hlist.h"
 
 dsm_manager_ctx *dsm_mgr_ctx = NULL;
 
@@ -44,7 +50,8 @@ int dsm_mgr_ctx_init() {
     return 0;
 }
 
-void dsm_mgr_ctx_cleanup() {}
+void dsm_mgr_ctx_cleanup() { // TODO
+}
 
 static dsm_request_content *make_req_content(dsm_msg_tcpss_thread_ctx *msg_ctx,
                                              dsm_msg_wkr_req *req) {
@@ -102,7 +109,7 @@ static dsm_request_content *req_content_of(dsm_dq_node *n) {
 static int push_req(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
                     dsm_page_content **out_page_content, bool *is_drainer) {
 
-    LOG_INFO("Push d'une requête de worker ...");
+    LOG_INFO("Push d'une requête du worker (NODE=%d)...", msg_ctx->header.id);
 
     dsm_page_content *obj;
     dsm_page_content *page_content = make_page_content(req->page_id);
@@ -126,8 +133,9 @@ static int push_req(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
         *out_page_content = page_content;
     }
 
-    LOG_INFO("Requête de worker poussée avec succès (page_id=%u, mode=%d)", req->page_id,
-             req->mode);
+    LOG_INFO("Requête du worker (NODE=%d) poussée avec succès (page_id=%u, mode=%d)",
+             msg_ctx->header.id, req->page_id, req->mode);
+
     return 0;
 }
 
@@ -155,7 +163,7 @@ static int treat_wkr_read_req(dsm_page_content *page_content,
             break;
 
         case PAGE_LOCKED:
-            LOG_ERROR("[treat_wkr_read_req] Erreur Algo : LOCKED sans UNLOCK_REQ ?!");
+            LOG_ERROR("Erreur Algo : LOCKED sans UNLOCK_REQ ?!");
             return -1;
 
         default:
@@ -189,7 +197,7 @@ static int treat_wkr_write_req(dsm_page_content *page_content,
             break;
 
         case PAGE_LOCKED:
-            LOG_ERROR("[treat_wkr_write_req] Erreur Algo : LOCKED sans UNLOCK_REQ ?!");
+            LOG_ERROR("Erreur Algo : LOCKED sans UNLOCK_REQ ?!");
             return -1;
 
         default:
@@ -223,7 +231,7 @@ static int treat_wkr_lock_req(dsm_page_content *page_content,
             break;
 
         case PAGE_LOCKED:
-            LOG_ERROR("[treat_wkr_lock_req] Erreur Algo : LOCKED sans UNLOCK_REQ ?!");
+            LOG_ERROR("Erreur Algo : LOCKED sans UNLOCK_REQ ?!");
             return -1;
 
         default:
@@ -249,7 +257,7 @@ static void reset_head_req_ctx(dsm_page_content *page_content) {
  *  - la requête en tête est bloquante (nécessite des ACKs)
  */
 static int drain_reqs(dsm_page_content *page_content) {
-    LOG_INFO("Drain-Début pour la page %u", page_content->page_id);
+    LOG_INFO("Drain : Début pour la page %u", page_content->page_id);
 
     dsm_dq_node *cur;
     while ((cur = dsm_dq_front(&page_content->pending_reqs)) != NULL) {
@@ -294,7 +302,7 @@ static int drain_reqs(dsm_page_content *page_content) {
             break;
         }
     }
-    LOG_INFO("Drain-Fin pour la page %u", page_content->page_id);
+    LOG_INFO("Drain : Fin pour la page %u", page_content->page_id);
     return 0;
 }
 
@@ -311,7 +319,8 @@ static dsm_page_content *find_page_content(uint32_t page_id) {
 static int try_unlock(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
                       dsm_page_content **out_page_content, bool *is_drainer) {
 
-    LOG_INFO("Traitement d'une requête UNLOCK_REQ...");
+    LOG_INFO("Traitement d'une requête UNLOCK_REQ du worker (NODE=%d)...",
+             msg_ctx->header.id);
 
     *out_page_content = find_page_content(req->page_id);
     if (!*out_page_content) {
@@ -390,7 +399,7 @@ static int treat_wkr_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
 }
 
 /**
- * @warning : Toujours appeler cette fonction après avoir lock le head_req_ctx de la page
+ * @warning : Toujours lock le head_req_ctx de la page avant d'appeler cette fonction
  *
  */
 static int try_send_req_ack(dsm_page_content *page_content, bool *is_drainer) {
@@ -463,7 +472,8 @@ static int inject_data(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_data_ack *
         return -1;
     }
 
-    unsigned int msg_cb_id = msg_ctx->header.id;
+    // est utile que dans les LOG_ERROR
+    __attribute__((unused)) unsigned int msg_cb_id = msg_ctx->header.id;
 
     pthread_mutex_lock(&(*out_page_content)->head_req_ctx.lock);
     if ((*out_page_content)->head_req_ctx.missing_acks == 0) {
@@ -551,7 +561,8 @@ unlock_return:
 }
 
 static int treat_wkr_data_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
-    LOG_INFO("Traitement d'un CODE=%d ...", CODE_WKR_DATA_ACK);
+    LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d | DATA_ACK", CODE_WKR_DATA_ACK,
+             msg_ctx->header.id);
 
     dsm_msg_wkr_data_ack *data_ack;
     if (dsm_dsrlze_wkr_data_ack(msg_ctx->payload, msg_ctx->header.payload_len,
@@ -575,7 +586,8 @@ static int treat_wkr_data_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
 }
 
 static int treat_wkr_inva_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
-    LOG_INFO("Traitement d'un CODE=%d ...", CODE_WKR_INVA_ACK);
+    LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d | INVA_ACK", CODE_WKR_INVA_ACK,
+             msg_ctx->header.id);
 
     dsm_msg_wkr_inva_ack inva_ack;
     if (dsm_dsrlze_wkr_inva_ack(msg_ctx->payload, msg_ctx->header.payload_len,
@@ -597,8 +609,9 @@ static int treat_wkr_inva_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     return 0;
 }
 
-static int treat_sync_barrier_req() {
-    LOG_INFO("Traitement d'un CODE=%d ...", CODE_SYNC_BARRIER_REQ);
+static int treat_sync_barrier_req(__attribute__((unused)) unsigned int sender_id) {
+    LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d | BARRIER_REQ",
+             CODE_SYNC_BARRIER_REQ, sender_id);
 
     pthread_mutex_lock(&dsm_mgr_ctx->sync.lock);
 
@@ -635,8 +648,8 @@ static int treat_sync_barrier_req() {
     return 0;
 }
 
-static int treat_sync_finalize_req() {
-    LOG_INFO("Traitement d'un CODE=%d ...", CODE_SYNC_FINALIZE_REQ);
+static int treat_sync_finalize_req(__attribute__((unused)) unsigned int sender_id) {
+    LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d", CODE_SYNC_FINALIZE_REQ, sender_id);
 
     pthread_mutex_lock(&dsm_mgr_ctx->sync.lock);
 
@@ -677,36 +690,31 @@ void dispatch_call_mgr(void *arg) {
 
     switch (msg_ctx->header.code) {
         case CODE_WKR_REQ:
-            LOG_INFO("[dispatch_call_mgr] code=CODE_WKR_REQ reçu du noeud %d",
-                     msg_ctx->header.id);
             if (treat_wkr_req(msg_ctx) < 0) {
                 LOG_WARNING("Message non traité : CODE=%d", CODE_WKR_REQ);
             }
             break;
 
         case CODE_WKR_DATA_ACK:
-            LOG_INFO("[dispatch_call_mgr] code=CODE_WKR_DATA_ACK reçu du noeud %d",
-                     msg_ctx->header.id);
             if (treat_wkr_data_ack(msg_ctx) < 0) {
                 LOG_WARNING("Message non traité : CODE=%d", CODE_WKR_DATA_ACK);
             }
             break;
 
         case CODE_WKR_INVA_ACK:
-            LOG_INFO("[dispatch_call_mgr] code=CODE_WKR_INVA_ACK reçu du noeud %d",
-                     msg_ctx->header.id);
             if (treat_wkr_inva_ack(msg_ctx) < 0) {
                 LOG_WARNING("Message non traité : CODE=%d", CODE_WKR_INVA_ACK);
             }
             break;
 
         case CODE_SYNC_BARRIER_REQ:
-            if (treat_sync_barrier_req() < 0) {
+            if (treat_sync_barrier_req(msg_ctx->header.id) < 0) {
                 LOG_WARNING("Message non traité : CODE=%d", CODE_SYNC_BARRIER_REQ);
             }
             break;
+
         case CODE_SYNC_FINALIZE_REQ:
-            if (treat_sync_finalize_req() < 0) {
+            if (treat_sync_finalize_req(msg_ctx->header.id) < 0) {
                 LOG_WARNING("Message non traité : CODE=%d", CODE_SYNC_FINALIZE_REQ);
             }
             break;

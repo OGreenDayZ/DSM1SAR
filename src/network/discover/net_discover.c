@@ -1,12 +1,22 @@
 #include "net_discover.h"
 
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <unistd.h>
+
 #include "debug/debug.h"
 #include "internal.h"
 #include "network/discover/candidate.h"
 #include "network/discover/supervisor.h"
+#include "network/message/message.h"
 #include "network/message/serializer.h"
 #include "network/network.h"
-#include <sys/time.h>
 
 static dsm_discover_ctx *dscv_ctx;
 

@@ -1,8 +1,10 @@
 #ifndef DSM_SERIALIZER_H
 #define DSM_SERIALIZER_H
 
-#include "network/message/message.h"
+#include <stddef.h>
 #include <stdint.h>
+
+#include "network/message/message.h"
 
 /** Lexique
  * @srlze: serialize

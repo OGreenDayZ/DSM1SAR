@@ -1,11 +1,15 @@
 #ifndef DSM_MANAGER_H
 #define DSM_MANAGER_H
 
-#include "network/message/message.h"
+#include <stddef.h>
+#include <stdint.h>
 
+#include "network/message/message.h"
 #include "util/concurrent/drain_queue.h"
 #include "util/concurrent/safe_list.h"
 #include "util/concurrent/safe_map.h"
+#include "util/hlist.h"
+#include "util/list.h"
 
 #define DSM_MGR_PAGE_HASH_BITS 12
 

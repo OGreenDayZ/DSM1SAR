@@ -9,6 +9,7 @@
 #include "util/concurrent/safe_list.h"
 #include "util/concurrent/safe_map.h"
 #include "util/hlist.h"
+#include "util/list.h"
 
 #define DSM_WKR_NODE_HASH_BITS 4
 #define DSM_WKR_PAGE_HASH_BITS 12
@@ -30,14 +31,14 @@ typedef struct {
 } dsm_wkr_sync; // Pour sync
 
 typedef enum {
-    NONE, 
-    READ_SENT, 
-    WRITE_SENT, 
-} reqs_state; 
+    NONE,
+    READ_SENT,
+    WRITE_SENT,
+} reqs_state;
 typedef struct {
     unsigned int page_id; // clé
-    reqs_state state; 
-    pthread_mutex_t mutex; 
+    reqs_state state;
+    pthread_mutex_t mutex;
     struct dsm_hlist_node node; // pour la map requests_reg
 } dsm_requests_reg_entry;       // entrée de requests_reg
 

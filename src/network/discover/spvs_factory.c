@@ -1,11 +1,23 @@
 #include "spvs_factory.h"
 
+#include <stdatomic.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <unistd.h>
+
 #include "debug/debug.h"
 #include "dsm.h"
 #include "internal.h"
+#include "network/discover/net_discover.h"
+#include "network/discover/supervisor.h"
+#include "network/message/message.h"
 #include "network/message/serializer.h"
 #include "network/network.h"
 #include "network/worker/worker.h"
+#include "util/concurrent/safe_list.h"
+#include "util/concurrent/safe_map.h"
+#include "util/hlist.h"
 
 static int send_dscv_spvs_data(uint32_t ip_dst, uint16_t port_dst) {
     LOG_INFO("Envoi d'un CODE=%d ...", CODE_DISCOVER_SUPERVISOR_DATA);

@@ -1,6 +1,7 @@
 #ifndef DSM_PAGER_H
 #define DSM_PAGER_H
 
+#include <asm-generic/int-ll64.h>
 #include <linux/userfaultfd.h>
 #include <stdint.h>
 
@@ -17,15 +18,15 @@
  */
 typedef enum {
     UNLOCK_REQ, /**< Libération du verrou exclusif. */
-    READ_REQ,  /**< Demande d'accès en lecture. */
-    WRITE_REQ, /**< Demande d'accès en écriture (implique l'invalidation
-                *   de la page chez les autres workers). */
-    LOCK_REQ,  /**< Demande de verrouillage exclusif. */
+    READ_REQ,   /**< Demande d'accès en lecture. */
+    WRITE_REQ,  /**< Demande d'accès en écriture (implique l'invalidation
+                 *   de la page chez les autres workers). */
+    LOCK_REQ,   /**< Demande de verrouillage exclusif. */
 } page_mode_req;
 
 typedef enum {
-    NOT_EMPTY, 
-    EMPTY_INIT, 
+    NOT_EMPTY,
+    EMPTY_INIT,
     PROMOTE_ONLY
 } data_info;
 
@@ -46,12 +47,13 @@ int userfaultfd_init(int *out_uffd, uint64_t *out_range_start);
  * Active ou désactive la protection en écriture sur une page déjà présente en mémoire.
  *
  * @param page_id  page_id de la page à protéger en écriture.
- * @param protection 0 = désactiver la protection, UFFDIO_WRITEPROTECT_MODE_WP = active la protection. 
+ * @param protection 0 = désactiver la protection, UFFDIO_WRITEPROTECT_MODE_WP = active la
+ * protection.
  *
  * @return 0 en cas de succès.
  * @return -1 en cas d'erreur.
  */
-int pager_protect(int uffd, int page_id, int protection); 
+int pager_protect(int uffd, int page_id, int protection);
 
 /**
  * Copie une page dans la plage surveillée par userfaultfd.
@@ -74,10 +76,10 @@ int pager_protect(int uffd, int page_id, int protection);
 int pager_copy(int uffd, int page_id, __u64 src, int mode);
 
 /**
- * Libère toute les ressources alloué par le pager. 
- * 
- * @return 0 en cas de succés. 
- * @return -1 en cas d'erreur. 
+ * Libère toute les ressources alloué par le pager.
+ *
+ * @return 0 en cas de succés.
+ * @return -1 en cas d'erreur.
  */
 int pager_destroy();
 

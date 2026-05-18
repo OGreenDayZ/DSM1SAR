@@ -7,6 +7,7 @@
  * sockets
  */
 
+#include "network/discover/net_discover.h"
 #include "network/discover/supervisor.h"
 #include "network/message/message.h"
 

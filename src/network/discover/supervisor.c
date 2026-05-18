@@ -1,15 +1,32 @@
 #include "supervisor.h"
 
+#include <netinet/in.h>
 #include <poll.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/poll.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #include "debug/debug.h"
+#include "dsm.h"
 #include "internal.h"
+#include "network/discover/net_discover.h"
 #include "network/discover/spvs_factory.h"
 #include "network/manager/manager.h"
+#include "network/message/message.h"
 #include "network/message/serializer.h"
 #include "network/network.h"
+#include "network/worker/worker.h"
 #include "util/concurrent/atomicity.h"
+#include "util/concurrent/safe_list.h"
+#include "util/concurrent/safe_map.h"
+#include "util/concurrent/thread_pool.h"
+#include "util/hlist.h"
+#include "util/list.h"
 
 static dsm_supervisor_ctx *spvs_ctx;
 
@@ -424,10 +441,11 @@ static void accept_entry(void *arg) {
     dsm_supervising_node *node_content;
     dsm_poll_update_entry *update_entry;
     unsigned int id_node;
+    bool added;
 found:
 
-    bool added = increment_if_less_ext(&spvs_ctx->id_count,
-                                       dsm_ctx->config.net.system.nb_nodes - 1, &id_node);
+    added = increment_if_less_ext(&spvs_ctx->id_count,
+                                  dsm_ctx->config.net.system.nb_nodes - 1, &id_node);
 
     if (!added) {
         LOG_WARNING("Refus d'un client : nombre maximum de nodes déjà atteint");
@@ -554,7 +572,6 @@ static int handle_tcp_recv(int poll_index) {
         goto exit_err_ctx;
     }
 
-    // malloc 0 ? TODO
     msg_ctx->payload = malloc(msg_ctx->header.payload_len);
     if (!msg_ctx->payload) {
         LOG_ERROR("malloc : msg_ctx->payload");
@@ -582,7 +599,6 @@ static int handle_tcp_recv(int poll_index) {
 
     dsm_poll_update_entry *update_entry;
 exit_updt_close:
-    // TODO tolérance exit ?
     close(recv_sock);
     update_entry = malloc(sizeof(dsm_poll_update_entry));
     if (!update_entry) {

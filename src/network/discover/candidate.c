@@ -1,11 +1,24 @@
 #include "candidate.h"
 
+#include <netinet/in.h>
+#include <pthread.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 #include "debug/debug.h"
+#include "dsm.h"
 #include "internal.h"
+#include "network/discover/net_discover.h"
 #include "network/manager/manager.h"
+#include "network/message/message.h"
 #include "network/message/serializer.h"
 #include "network/network.h"
 #include "network/worker/worker.h"
+#include "util/concurrent/safe_map.h"
+#include "util/hlist.h"
 
 static dsm_candidate_ctx *cand_ctx;
 

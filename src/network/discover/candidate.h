@@ -1,11 +1,13 @@
 #ifndef DSM_CANDIDATE_H
 #define DSM_CANDIDATE_H
 
-#include "dsm.h"
+#include <stdint.h>
 
+#include "dsm.h"
 #include "network/discover/net_discover.h"
 #include "network/worker/worker.h"
 #include "util/concurrent/safe_map.h"
+#include "util/hlist.h"
 
 #define DSM_CAND_HASH_BITS 4
 

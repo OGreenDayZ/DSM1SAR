@@ -1,10 +1,14 @@
 #include "pager.h"
 
+#include <asm-generic/int-ll64.h>
 #include <fcntl.h>
+#include <linux/userfaultfd.h>
+#include <stdint.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include "debug/debug.h"
 #include "internal.h"
@@ -48,7 +52,7 @@ int userfaultfd_init(int *out_uffd, uint64_t *out_range_start) {
     }
 
     *out_uffd = fd;
-    LOG_INFO("dsm_init_pager OK, fd = %d \n", fd);
+    LOG_INFO("dsm_init_pager : OK, FD=%d \n", fd);
 
     return fd;
 error2:
@@ -59,8 +63,18 @@ error1:
 }
 
 int pager_protect(int uffd, int page_id, int protection) {
+    if (protection == 0) {
+        LOG_INFO("[PAGER] Promotion en écriture de la page %d", page_id);
+
+    } else if (protection == UFFDIO_WRITEPROTECT_MODE_WP) {
+        LOG_INFO("[PAGER] Protection en écriture de la page %d", page_id);
+
+    } else {
+        LOG_ERROR("[PAGER] Protection invalide dans pager_protect");
+        return -1;
+    }
+
     __u64 page = dsm_wkr_ctx->range_start + page_id * EFFECTIVE_PAGESIZE;
-    LOG_INFO("[PAGER] Je resout la faute avec writeprotect\n");
     struct uffdio_writeprotect wp = {.range = {.start = page, .len = EFFECTIVE_PAGESIZE},
                                      .mode = protection};
     if (ioctl(uffd, UFFDIO_WRITEPROTECT, &wp)) {
@@ -71,10 +85,20 @@ int pager_protect(int uffd, int page_id, int protection) {
 }
 
 int pager_copy(int uffd, int page_id, __u64 src, int mode) {
+    if (mode == 0) {
+        LOG_INFO("[PAGER] Copie & Promotion en écriture de la page %d", page_id);
+
+    } else if (mode == UFFDIO_COPY_MODE_WP) {
+        LOG_INFO("[PAGER] Copie & Protection en écriture immédiate de la page %d",
+                 page_id);
+
+    } else {
+        LOG_ERROR("[PAGER] Mode invalide dans pager_copy");
+    }
+
     __u64 dst = dsm_wkr_ctx->range_start + page_id * EFFECTIVE_PAGESIZE;
     struct uffdio_copy cp = {
         .dst = dst, .src = src, .len = EFFECTIVE_PAGESIZE, .mode = mode};
-    LOG_INFO("[PAGER] Je resout la faute avec copy\n");
     if (ioctl(uffd, UFFDIO_COPY, &cp)) {
         LOG_ERROR("ioctl copy");
         return -1;

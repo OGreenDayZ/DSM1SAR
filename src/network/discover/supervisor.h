@@ -2,6 +2,7 @@
 #define DSM_SUPERVISOR_H
 
 #include <stdatomic.h>
+#include <stdint.h>
 
 #include "dsm.h"
 #include "network/discover/net_discover.h"
@@ -9,6 +10,8 @@
 #include "util/concurrent/safe_list.h"
 #include "util/concurrent/safe_map.h"
 #include "util/concurrent/thread_pool.h"
+#include "util/hlist.h"
+#include "util/list.h"
 
 #define DSM_SPVS_POLL_FDS_SERVER 2
 #define DSM_SPVS_POLL_TIMEOUT_MS 100

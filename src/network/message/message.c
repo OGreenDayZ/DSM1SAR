@@ -1,5 +1,12 @@
 #include "message.h"
 
+#include <netinet/in.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+
 #include "debug/debug.h"
 #include "network/network.h"
 

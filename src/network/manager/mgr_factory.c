@@ -1,11 +1,19 @@
 #include "mgr_factory.h"
 
+#include <pthread.h>
+#include <stdint.h>
+#include <stdlib.h>
+
 #include "debug/debug.h"
 #include "internal.h"
 #include "network/manager/manager.h"
+#include "network/message/message.h"
 #include "network/message/serializer.h"
 #include "network/pager/pager_msg.h"
 #include "pager/pager.h"
+#include "util/concurrent/safe_list.h"
+#include "util/concurrent/safe_map.h"
+#include "util/list.h"
 
 /**
  * @note : cb = callback, le worker qui a initié la requete
@@ -16,7 +24,7 @@
 int treat_read_req_poss_init(dsm_page_content *page_content,
                              dsm_request_content *req_content, bool *req_completed) {
 
-    LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d| READ_REQ sur PAGE_INIT",
+    LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d | READ_REQ sur PAGE_INIT",
              CODE_WKR_REQ, req_content->header.id);
 
     unsigned int cb_id = req_content->header.id;
@@ -61,7 +69,7 @@ int treat_read_req_poss_init(dsm_page_content *page_content,
 int treat_read_req_poss_r(dsm_page_content *page_content,
                           dsm_request_content *req_content, bool *req_completed) {
 
-    LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d| READ_REQ sur PAGE_R", CODE_WKR_REQ,
+    LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d | READ_REQ sur PAGE_R", CODE_WKR_REQ,
              req_content->header.id);
 
     unsigned int owner_id = page_content->owner_id;
@@ -105,12 +113,11 @@ int treat_read_req_poss_r(dsm_page_content *page_content,
     return 0;
 }
 
-// TODO FACTO EN return treat_read_req_poss_r ?
 int treat_read_req_poss_rw(dsm_page_content *page_content,
                            dsm_request_content *req_content, bool *req_completed) {
 
-    LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d| READ_REQ sur PAGE_RW", CODE_WKR_REQ,
-             req_content->header.id);
+    LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d | READ_REQ sur PAGE_RW",
+             CODE_WKR_REQ, req_content->header.id);
     unsigned int owner_id = page_content->owner_id;
     dsm_node_content *node_content;
     dsm_node_content *owner_node = NULL;
@@ -155,7 +162,7 @@ int treat_read_req_poss_rw(dsm_page_content *page_content,
 int treat_write_req_poss_init(dsm_page_content *page_content,
                               dsm_request_content *req_content, bool *req_completed) {
 
-    LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d| WRITE_REQ sur PAGE_INIT",
+    LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d | WRITE_REQ sur PAGE_INIT",
              CODE_WKR_REQ, req_content->header.id);
     unsigned int cb_id = req_content->header.id;
     dsm_node_content *node_content;
@@ -231,8 +238,8 @@ int treat_write_req_poss_init(dsm_page_content *page_content,
 int treat_write_req_poss_r(dsm_page_content *page_content,
                            dsm_request_content *req_content, bool *req_completed) {
 
-    LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d| WRITE_REQ sur PAGE_R", CODE_WKR_REQ,
-             req_content->header.id);
+    LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d | WRITE_REQ sur PAGE_R",
+             CODE_WKR_REQ, req_content->header.id);
     dsm_node_content *node_content;
 
     unsigned int owner_id = page_content->owner_id;
@@ -354,7 +361,7 @@ int treat_write_req_poss_r(dsm_page_content *page_content,
 int treat_write_req_poss_rw(dsm_page_content *page_content,
                             dsm_request_content *req_content, bool *req_completed) {
 
-    LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d| WRITE_REQ sur PAGE_RW",
+    LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d | WRITE_REQ sur PAGE_RW",
              CODE_WKR_REQ, req_content->header.id);
     dsm_node_content *node_content;
 
@@ -425,7 +432,8 @@ int treat_write_req_poss_rw(dsm_page_content *page_content,
 int treat_lock_req_poss_init(dsm_page_content *page_content,
                              dsm_request_content *req_content, bool *req_completed) {
 
-    LOG_INFO("Traitement d'un CODE=%d ... | LOCK_REQ sur PAGE_INIT", CODE_WKR_REQ);
+    LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d | LOCK_REQ sur PAGE_INIT",
+             CODE_WKR_REQ, req_content->header.id);
 
     int inva_ack_count = 0;
     bool cb_is_reader = false;
@@ -493,7 +501,8 @@ int treat_lock_req_poss_init(dsm_page_content *page_content,
 int treat_lock_req_poss_r(dsm_page_content *page_content,
                           dsm_request_content *req_content, bool *req_completed) {
 
-    LOG_INFO("Traitement d'un CODE=%d ... | LOCK_REQ sur PAGE_R", CODE_WKR_REQ);
+    LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d | LOCK_REQ sur PAGE_R", CODE_WKR_REQ,
+             req_content->header.id);
 
     dsm_node_content *node_content;
 
@@ -618,7 +627,8 @@ int treat_lock_req_poss_r(dsm_page_content *page_content,
 int treat_lock_req_poss_rw(dsm_page_content *page_content,
                            dsm_request_content *req_content, bool *req_completed) {
 
-    LOG_INFO("Traitement d'un CODE=%d ... | LOCK_REQ sur PAGE_RW", CODE_WKR_REQ);
+    LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d | LOCK_REQ sur PAGE_RW",
+             CODE_WKR_REQ, req_content->header.id);
 
     dsm_node_content *node_content;
 

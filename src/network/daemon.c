@@ -3,7 +3,11 @@
 #include <linux/userfaultfd.h>
 #include <poll.h>
 #include <stdatomic.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/poll.h>
+#include <unistd.h>
 
 #include "debug/debug.h"
 #include "dsm.h"
@@ -12,6 +16,7 @@
 #include "network/message/message.h"
 #include "network/message/serializer.h"
 #include "network/worker/worker.h"
+#include "util/concurrent/safe_map.h"
 #include "util/concurrent/thread_pool.h"
 
 dsm_daemon_ctx *dsm_dmn_ctx = NULL;
@@ -92,7 +97,7 @@ exit_err_ctx:
 }
 
 static int handle_socket_event(int recv_sock) {
-    LOG_INFO("Message reçu sur socket %d", recv_sock);
+    LOG_INFO("Message reçu sur socket FD=%d", recv_sock);
 
     int ret = 0;
 
@@ -130,10 +135,6 @@ static int handle_socket_event(int recv_sock) {
     if (ret < 0) {
         goto exit_err_payload;
     }
-
-    LOG_INFO("[handle_socket_event] On a reçu le message CODE=%d chez le noeud %d de la "
-             "part de %d",
-             msg_ctx->header.code, dsm_ctx->node_id, msg_ctx->header.id);
 
     if (dsm_ctx->config.net.node.role == DSM_ROLE_MANAGER) {
 
@@ -223,7 +224,6 @@ int dsm_daemon_start(void) {
                         continue;
                     }
                 } else {
-                    LOG_INFO("Message reçu sur la socket");
                     ret = handle_socket_event(fds[i].fd);
                     if (ret < 0) {
                         if (ret == DSM_ERR_TCP_CONN_CLOSE) {

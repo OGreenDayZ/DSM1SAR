@@ -1,9 +1,16 @@
 #include "sync.h"
+
+#include <pthread.h>
+#include <stdatomic.h>
+#include <stdint.h>
+
 #include "debug/debug.h"
 #include "internal.h"
 #include "network/daemon.h"
+#include "network/message/message.h"
 #include "network/message/serializer.h"
 #include "network/worker/worker.h"
+#include "util/concurrent/safe_map.h"
 
 int send_sync_barr_req(int sock) {
     LOG_INFO("Envoi d'un CODE=%d ...", CODE_SYNC_BARRIER_REQ);

@@ -2,6 +2,7 @@
 #define DSM_NETWORK_H
 
 #include <netinet/in.h>
+#include <stdint.h>
 
 #define DSM_DEFAULT_MULTICAST_IP "239.1.2.3"
 #define DSM_DEFAULT_MULTICAST_PORT 54321

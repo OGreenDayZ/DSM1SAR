@@ -1,5 +1,10 @@
 #include "safe_list.h"
 
+#include <pthread.h>
+#include <stddef.h>
+
+#include "util/list.h"
+
 void dsm_safe_list_lock(dsm_safe_list *list) {
     pthread_rwlock_wrlock(&list->lock);
 }

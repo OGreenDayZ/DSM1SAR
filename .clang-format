@@ -18,3 +18,19 @@ AllowShortEnumsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: Inline
 
 IndentCaseLabels: true
+
+SortIncludes: CaseSensitive
+
+IncludeBlocks: Regroup
+
+IncludeCategories:
+
+  # Priorité 0 : Le header principal automatiquement détecté
+  
+  # Priorité 1 : Les bibliothèques système et standards (<...>)
+  - Regex:           '^<.*>'
+    Priority:        1
+    
+  # Priorité 2 : Les en-têtes locaux de ton projet ("...")
+  - Regex:           '^".*"'
+    Priority:        2

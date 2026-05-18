@@ -1,12 +1,12 @@
 #ifndef DSM_SAFE_MAP_H
 #define DSM_SAFE_MAP_H
 
-#include "util/hashmap.h"
-
 #include <pthread.h>
-
 #include <stddef.h>
 #include <stdlib.h>
+
+#include "util/hashmap.h"
+#include "util/hlist.h"
 
 /**
  * @param heads  nodes
@@ -102,7 +102,7 @@ static inline void dsm_safe_map_destroy(dsm_safe_map *m) {
 
 /**
  * @brief Itère sur les entrées d'une hash map thread-safe correspondant à une clé.
- * 
+ *
  * @warning TOUJOURS appeler dsm_hash_safe_get_end après la boucle, même si
  * aucune entrée n'est trouvée
  * @warning Ne pas faire de break ou return qui échappe au end
