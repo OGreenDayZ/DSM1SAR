@@ -10,6 +10,7 @@
 #include "network/worker/worker.h"
 #include "pager/pager.h"
 #include "util/concurrent/safe_list.h"
+#include "util/concurrent/safe_map.h"
 #include "util/concurrent/thread_pool.h"
 #include <pthread.h>
 #include <stdlib.h>
@@ -282,6 +283,7 @@ int dsm_lock(void *addr) {
     dsm_hash_safe_get(&dsm_wkr_ctx->locks_reg, locks_reg_entry, node, page_id) {
         if (locks_reg_entry->page_id == page_id) {
             found = locks_reg_entry;
+            // dsm_hash_safe_unlock(&dsm_wkr_ctx->locks_reg, page_id);
             break;
         }
     }

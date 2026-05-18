@@ -67,7 +67,46 @@ int dsm_wkr_ctx_init() {
     return 0;
 }
 
-void dsm_wkr_ctx_cleanup() {}
+void dsm_wkr_ctx_cleanup() {
+    // Cleanup du worker
+    dsm_requests_reg_entry *entry_requests;
+    dsm_locks_reg_entry *entry_locks;
+    dsm_locks_list_entry *pos, *n;
+    struct dsm_hlist_node *tmp;
+    dsm_mgr_to_node_content *mgr_entry;
+    unsigned int bkt;
+
+    dsm_hash_safe_for_each_safe(&dsm_wkr_ctx->requests_reg, bkt, tmp, entry_requests,
+                                node) {
+        dsm_hlist_del_init(&entry_requests->node);
+        pthread_mutex_destroy(&entry_requests->mutex);
+        free(entry_requests);
+    }
+    dsm_safe_map_destroy(&dsm_wkr_ctx->requests_reg);
+
+    dsm_hash_safe_for_each_safe(&dsm_wkr_ctx->locks_reg, bkt, tmp, entry_locks, node) {
+        dsm_hlist_del_init(&entry_locks->node);
+        dsm_safe_list_for_each_entry_safe(&entry_locks->locks_list, pos, n, node) {
+            dsm_list_del(&pos->node);
+            pthread_mutex_destroy(&pos->mutex);
+            pthread_cond_destroy(&pos->cond);
+            free(pos);
+        }
+        free(entry_locks);
+    }
+    dsm_safe_map_destroy(&dsm_wkr_ctx->locks_reg);
+
+    dsm_hash_safe_for_each_safe(&dsm_wkr_ctx->managerID_to_nodeID, bkt, tmp, mgr_entry,
+                                node) {
+        dsm_hlist_del_init(&mgr_entry->node);
+        free(mgr_entry);
+    }
+    dsm_safe_map_destroy(&dsm_wkr_ctx->managerID_to_nodeID);
+    close(dsm_wkr_ctx->uffd);
+    // Barriere et FINA
+    free(dsm_wkr_ctx);
+    dsm_wkr_ctx = NULL;
+}
 
 long addr_to_page_id(uint64_t addr) {
     if (addr < dsm_wkr_ctx->range_start ||
