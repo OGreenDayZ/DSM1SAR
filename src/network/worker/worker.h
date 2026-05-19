@@ -5,7 +5,9 @@
 #include <stdint.h>
 
 #include "internal.h"
+#include "network/message/message.h"
 #include "network/worker/sync.h"
+#include "util/concurrent/drain_queue.h"
 #include "util/concurrent/safe_list.h"
 #include "util/concurrent/safe_map.h"
 #include "util/hlist.h"
@@ -35,10 +37,16 @@ typedef enum {
     READ_SENT,
     WRITE_SENT,
 } reqs_state;
+
+typedef struct {
+    dsm_msg_tcpss_thread_ctx *msg_ctx;
+    struct dsm_dq_node node;
+} dsm_pdg_msg_content; // Pour pending_msgs
 typedef struct {
     unsigned int page_id; // clé
     reqs_state state;
     pthread_mutex_t mutex;
+    dsm_drain_queue pending_msgs;
     struct dsm_hlist_node node; // pour la map requests_reg
 } dsm_requests_reg_entry;       // entrée de requests_reg
 

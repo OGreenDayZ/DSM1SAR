@@ -19,6 +19,7 @@
 #include "network/worker/sync.h"
 #include "network/worker/worker.h"
 #include "pager/pager.h"
+#include "util/concurrent/drain_queue.h"
 #include "util/concurrent/safe_list.h"
 #include "util/concurrent/safe_map.h"
 #include "util/concurrent/thread_pool.h"
@@ -238,47 +239,60 @@ void *dsm_alloc(void) {
         return NULL;
     }
 
-    dsm_requests_reg_entry *map_entry = malloc(sizeof(dsm_requests_reg_entry));
+    dsm_requests_reg_entry *map_reqs_entry = NULL;
+    dsm_locks_reg_entry *map_locks_entry = NULL;
     dsm_requests_reg_entry *obj = NULL;
-    dsm_locks_reg_entry *map_locks_entry = malloc(sizeof(dsm_locks_reg_entry)),
-                        *obj_locks = NULL;
+    dsm_locks_reg_entry *obj_locks = NULL;
+
+    map_reqs_entry = malloc(sizeof(dsm_requests_reg_entry));
+    map_locks_entry = malloc(sizeof(dsm_locks_reg_entry));
+
     uintptr_t debut = (uintptr_t)dsm_wkr_ctx->range_start + dsm_wkr_ctx->page_counter;
     LOG_INFO("Allocation de %lu octets à l'adresse %p", EFFECTIVE_PAGESIZE,
              (void *)debut);
 
+    if (!map_reqs_entry || !map_locks_entry) {
+        LOG_ERROR("malloc dsm_requests_reg_entry ou dsm_locks_reg_entry");
+        goto exit_error;
+    }
+
     map_locks_entry->page_id = dsm_wkr_ctx->page_counter;
     if (dsm_safe_list_init(&map_locks_entry->locks_list) < 0) {
         LOG_ERROR("[dsm_alloc] dsm_safe_list_init map_locks_entry->locks_list");
-        free(map_locks_entry);
-        free(map_entry);
-        return NULL;
+        goto exit_error;
     }
-    map_entry->page_id = dsm_wkr_ctx->page_counter;
-    map_entry->state = NONE;
+    map_reqs_entry->page_id = dsm_wkr_ctx->page_counter;
+    map_reqs_entry->state = NONE;
+    dsm_dq_init(&map_reqs_entry->pending_msgs);
 
-    if (pthread_mutex_init(&map_entry->mutex, NULL) < 0) {
+    if (pthread_mutex_init(&map_reqs_entry->mutex, NULL) < 0) {
         LOG_ERROR("[dsm_alloc] pthread_mutex_init");
-        free(map_entry);
-        return NULL;
+        goto exit_error;
     }
 
     // Ajout de l'entrée pour cette page dans la map
-    int inserted = dsm_hash_safe_add_unique(&dsm_wkr_ctx->requests_reg, &map_entry->node,
-                                            obj, node, page_id, map_entry->page_id);
+    int inserted =
+        dsm_hash_safe_add_unique(&dsm_wkr_ctx->requests_reg, &map_reqs_entry->node, obj,
+                                 node, page_id, map_reqs_entry->page_id);
     if (inserted == 0) {
-        // L'entrée existe deja pas besoin d'une nouvelle
-        pthread_mutex_destroy(&map_entry->mutex);
-        free(map_entry);
+        goto exit_error;
     }
 
     inserted =
         dsm_hash_safe_add_unique(&dsm_wkr_ctx->locks_reg, &map_locks_entry->node,
                                  obj_locks, node, page_id, map_locks_entry->page_id);
     if (inserted == 0) {
-        free(map_locks_entry);
+        goto exit_error;
     }
+
     dsm_wkr_ctx->page_counter++;
+
     return (void *)debut;
+
+exit_error:
+    free(map_reqs_entry);
+    free(map_locks_entry);
+    return NULL;
 }
 
 int dsm_lock(void *addr) {

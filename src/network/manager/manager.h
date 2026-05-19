@@ -100,6 +100,12 @@ extern dsm_manager_ctx *dsm_mgr_ctx;
 int dsm_mgr_ctx_init();
 void dsm_mgr_ctx_cleanup();
 
+int push_req(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
+             dsm_page_content **out_page_content, bool *is_drainer);
+int try_unlock(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
+               dsm_page_content **out_page_content, bool *is_drainer);
+
+void drain_call_mgr(void *arg);
 void dispatch_call_mgr(void *arg);
 
 #endif // DSM_MANAGER_H

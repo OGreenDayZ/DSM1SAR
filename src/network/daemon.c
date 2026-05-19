@@ -16,6 +16,7 @@
 #include "network/message/message.h"
 #include "network/message/serializer.h"
 #include "network/worker/worker.h"
+#include "pager/pager.h"
 #include "util/concurrent/safe_map.h"
 #include "util/concurrent/thread_pool.h"
 
@@ -137,11 +138,46 @@ static int handle_socket_event(int recv_sock) {
     }
 
     if (dsm_ctx->config.net.node.role == DSM_ROLE_MANAGER) {
+        if (msg_ctx->header.code == CODE_WKR_REQ) {
+            dsm_msg_wkr_req req;
+            if (dsm_dsrlze_wkr_req(msg_ctx->payload, msg_ctx->header.payload_len, &req) <
+                0) {
+                goto exit_err_payload;
+            }
 
-        if (pool_add_task(dsm_dmn_ctx->pool, dispatch_call_mgr, msg_ctx) < 0) {
-            ret = -1;
-            goto exit_err_payload;
+            bool is_drainer = false;
+            dsm_page_content *page_content;
+            if (req.mode == READ_REQ || req.mode == WRITE_REQ || req.mode == LOCK_REQ) {
+
+                if (push_req(msg_ctx, &req, &page_content, &is_drainer) < 0) {
+                    goto exit_err_payload;
+                }
+
+            } else if (req.mode == UNLOCK_REQ) {
+                if (try_unlock(msg_ctx, &req, &page_content, &is_drainer) < 0) {
+                    goto exit_err_payload;
+                }
+
+            } else {
+                LOG_ERROR("Mode de requête de page inconnu : %d", req.mode);
+                goto exit_err_payload;
+            }
+
+            if (is_drainer &&
+                pool_add_task(dsm_dmn_ctx->pool, drain_call_mgr, page_content) < 0) {
+                goto exit_err_payload;
+            }
+
+            free(msg_ctx->payload);
+            free(msg_ctx);
+
+        } else {
+            if (pool_add_task(dsm_dmn_ctx->pool, dispatch_call_mgr, msg_ctx) < 0) {
+                ret = -1;
+                goto exit_err_payload;
+            }
         }
+
     } else {
         LOG_WARNING("CODE=%d RECU ORDRE", msg_ctx->header.code);
         if (pool_add_task(dsm_dmn_ctx->pool, dispatch_call_wkr, msg_ctx) < 0) {
