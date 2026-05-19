@@ -202,8 +202,9 @@ dsm_node_role dsm_init(const dsm_config *config) {
 
     if (dsm_ctx->config.net.node.role == DSM_ROLE_WORKER) {
         print_convert_reg();
-
-        if (pthread_create(&dsm_wkr_ctx->daemon, NULL, daemon_thread_start, NULL) != 0) {
+        pthread_t daemon_thread;
+        if (pthread_create(&daemon_thread, NULL, daemon_thread_start, NULL) != 0 ||
+            pthread_detach(daemon_thread) != 0) {
             LOG_ERROR("Erreur pthread_create : daemon");
             dsm_ctx_cleanup();
             return -1;
@@ -232,7 +233,7 @@ void *dsm_alloc(void) {
         LOG_ERROR("Worker context non initialisé");
         return NULL;
     }
-    if (dsm_wkr_ctx->page_counter > EFFECTIVE_NB_PAGES) {
+    if ((unsigned int)dsm_wkr_ctx->page_counter > EFFECTIVE_NB_PAGES) {
         LOG_ERROR("Adresse d'allocation dépasse la taille de la mémoire alloué");
         return NULL;
     }

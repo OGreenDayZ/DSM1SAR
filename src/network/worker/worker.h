@@ -71,8 +71,6 @@ typedef struct {
     dsm_safe_map locks_reg;
     dsm_wkr_sync sync;
 
-    pthread_t daemon;
-
     /* Stats */
     atomic_ulong uffd_count;
     atomic_ulong data_count;

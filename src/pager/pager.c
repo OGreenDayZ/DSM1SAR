@@ -1,9 +1,12 @@
 #include "pager.h"
 
+#include <asm-generic/errno-base.h>
 #include <asm-generic/int-ll64.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <linux/userfaultfd.h>
 #include <stdint.h>
+#include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
@@ -100,6 +103,21 @@ int pager_copy(int uffd, int page_id, __u64 src, int mode) {
     struct uffdio_copy cp = {
         .dst = dst, .src = src, .len = EFFECTIVE_PAGESIZE, .mode = mode};
     if (ioctl(uffd, UFFDIO_COPY, &cp)) {
+        if (errno == EEXIST) {
+            LOG_WARNING(
+                "[PAGER] La page %d existe déjà (EEXIST). Vérification du contenu...",
+                page_id);
+
+            // Comparaison des blocs mémoire de la source et de la destination
+            if (memcmp((void *)dst, (void *)src, EFFECTIVE_PAGESIZE) == 0) {
+                LOG_WARNING("[PAGER] -> Succès : Les deux pages sont IDENTIQUES.");
+                return 0; // On peut considérer cela comme un faux problème
+            } else {
+                LOG_ERROR(
+                    "[PAGER] -> ALERTE : Les pages sont DIFFÉRENTES ! Conflit détecté.");
+                return -1;
+            }
+        }
         LOG_ERROR("ioctl copy");
         return -1;
     }

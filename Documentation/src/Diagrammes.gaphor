@@ -505,8 +505,8 @@ wkr_inva_ack(pageID)</val>
 <UML:Comment id="d18d450e-421d-11f1-b537-ca858e243edf">
 <body>
 <val>dataInfo :
-NOT_EMPTY 
 EMPTY_INIT 
+NOT_EMPTY 
 PROMOTE_ONLY </val>
 </body>
 <presentation>
@@ -5317,8 +5317,8 @@ PAGE_INIT</val>
 <UML:Lifeline id="aec40bfe-4985-11f1-83de-00d86131a9dd">
 <coveredBy>
 <reflist>
-<ref refid="aec44416-4985-11f1-a53f-00d86131a9dd"/>
 <ref refid="aec40856-4985-11f1-9f15-00d86131a9dd"/>
+<ref refid="aec44416-4985-11f1-a53f-00d86131a9dd"/>
 </reflist>
 </coveredBy>
 <interaction>
@@ -5949,10 +5949,10 @@ PAGE_INIT</val>
 <UML:Lifeline id="f281fd3e-4985-11f1-aaab-00d86131a9dd">
 <coveredBy>
 <reflist>
+<ref refid="f281f9fb-4985-11f1-a999-00d86131a9dd"/>
 <ref refid="f282e207-4985-11f1-bfb5-00d86131a9dd"/>
 <ref refid="f28d1ad4-4985-11f1-bb74-00d86131a9dd"/>
 <ref refid="f28236b0-4985-11f1-b5ac-00d86131a9dd"/>
-<ref refid="f281f9fb-4985-11f1-a999-00d86131a9dd"/>
 <ref refid="6ee4b10c-4986-11f1-98da-00d86131a9dd"/>
 <ref refid="f289ab2e-4985-11f1-809b-00d86131a9dd"/>
 </reflist>
@@ -6588,12 +6588,12 @@ PAGE_R</val>
 <UML:Lifeline id="aae0313e-4986-11f1-93d6-00d86131a9dd">
 <coveredBy>
 <reflist>
+<ref refid="aae02e36-4986-11f1-a17c-00d86131a9dd"/>
 <ref refid="aae067e1-4986-11f1-a056-00d86131a9dd"/>
 <ref refid="aae771ff-4986-11f1-8294-00d86131a9dd"/>
 <ref refid="aaeaed18-4986-11f1-a561-00d86131a9dd"/>
 <ref refid="aaeb9ed8-4986-11f1-b11d-00d86131a9dd"/>
 <ref refid="aaf1899f-4986-11f1-b373-00d86131a9dd"/>
-<ref refid="aae02e36-4986-11f1-a17c-00d86131a9dd"/>
 </reflist>
 </coveredBy>
 <interaction>

@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -217,9 +218,11 @@ static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
                              ? WRITE_REQ
                              : READ_REQ;
     dsm_requests_reg_entry *entry = get_request_entry(page_id);
-    LOG_INFO("[uffd_fault] Thread %lu tente d'accéder à page %d en %s\n",
+    LOG_INFO("[uffd_fault] Thread %lu tente d'accéder à page %d en %s (possession "
+             "actuelle : %s)",
              (unsigned long)pthread_self(), page_id,
-             (mode == WRITE_REQ ? "WRITE" : "READ"));
+             (mode == WRITE_REQ ? "WRITE" : "READ"),
+             (flags & UFFD_PAGEFAULT_FLAG_WP) ? "READ" : "MISSING");
 
     if (mode == READ_REQ) {
         pthread_mutex_lock(&entry->mutex);
@@ -293,6 +296,7 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     LOG_INFO("Traitement d'un CODE=%d ...", CODE_MGR_REQ_ACK);
 
     dsm_msg_mgr_req_ack *payload;
+    // TODO MOVE ZERO PAGE
     void *zero_page =
         calloc(1, EFFECTIVE_PAGESIZE); // alloue une plage de EFFECTIVE_PAGESIZE
                                        // contigue initialisée à 0
@@ -311,6 +315,7 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
                     (payload->req_mode == WRITE_REQ || payload->req_mode == LOCK_REQ)
                         ? 0
                         : UFFDIO_COPY_MODE_WP) < 0) {
+                perror("pager_copy 1");
                 goto error;
             }
             break;
@@ -320,6 +325,7 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
                     (payload->req_mode == WRITE_REQ || payload->req_mode == LOCK_REQ)
                         ? 0
                         : UFFDIO_COPY_MODE_WP) < 0) {
+                perror("pager_copy 2");
                 goto error;
             }
             break;

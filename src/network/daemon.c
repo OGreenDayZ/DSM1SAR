@@ -143,6 +143,7 @@ static int handle_socket_event(int recv_sock) {
             goto exit_err_payload;
         }
     } else {
+        LOG_WARNING("CODE=%d RECU ORDRE", msg_ctx->header.code);
         if (pool_add_task(dsm_dmn_ctx->pool, dispatch_call_wkr, msg_ctx) < 0) {
             ret = -1;
             goto exit_err_payload;
@@ -158,11 +159,6 @@ exit_err_ctx:
     free(msg_ctx);
 
     return ret;
-}
-
-static int update_dmn_state() {
-    // TODO
-    return 0;
 }
 
 int dsm_daemon_start(void) {
@@ -200,10 +196,6 @@ int dsm_daemon_start(void) {
     }
 
     while (atomic_load(&dsm_dmn_ctx->state) != DSM_DMN_STATE_TERMINATING) {
-        if (update_dmn_state() < 0) {
-            ret = -1;
-            goto exit;
-        }
 
         int n = poll(fds, max_fds, DSM_DMN_TIMEOUT_POLL);
 

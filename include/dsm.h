@@ -9,8 +9,7 @@
 
 /* --- Memoire --- */
 typedef struct {
-    // TODO CAST LONG -> INT & IN MSG STRUCT
-    unsigned long nb_pages; // Nombre de pages
+    unsigned int nb_pages;  // Nombre de pages
     unsigned int page_size; // Taille d'une page en octets
 } dsm_pager_config;
 

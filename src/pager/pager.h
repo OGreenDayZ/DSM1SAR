@@ -25,8 +25,8 @@ typedef enum {
 } page_mode_req;
 
 typedef enum {
-    NOT_EMPTY,
     EMPTY_INIT,
+    NOT_EMPTY,
     PROMOTE_ONLY
 } data_info;
 
