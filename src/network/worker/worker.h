@@ -73,9 +73,12 @@ typedef struct {
 
     pthread_t daemon;
 
-} dsm_worker_ctx;
+    /* Stats */
+    atomic_ulong uffd_count;
+    atomic_ulong data_count;
+    atomic_ulong inva_count;
 
-// J'ai besoin d'une
+} dsm_worker_ctx;
 
 extern dsm_worker_ctx *dsm_wkr_ctx;
 

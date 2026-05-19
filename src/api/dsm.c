@@ -1,7 +1,9 @@
 #include "dsm.h"
 
+#include <bits/pthreadtypes.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -444,4 +446,58 @@ int dsm_get_node_id() {
         return -1;
     }
     return dsm_ctx->node_id;
+}
+
+bool dsm_get_uffd_count(unsigned long *out) {
+    if (!dsm_wkr_ctx) {
+        LOG_ERROR("Worker context non initialisé");
+        return false;
+    }
+    *out = atomic_load(&dsm_wkr_ctx->uffd_count);
+    return true;
+}
+
+bool dsm_get_data_count(unsigned long *out) {
+    if (!dsm_wkr_ctx) {
+        LOG_ERROR("Worker context non initialisé");
+        return false;
+    }
+    *out = atomic_load(&dsm_wkr_ctx->data_count);
+    return true;
+}
+
+bool dsm_get_inva_count(unsigned long *out) {
+    if (!dsm_wkr_ctx) {
+        LOG_ERROR("Worker context non initialisé");
+        return false;
+    }
+    *out = atomic_load(&dsm_wkr_ctx->inva_count);
+    return true;
+}
+
+bool dsm_reset_uffd_count() {
+    if (!dsm_wkr_ctx) {
+        LOG_ERROR("Worker context non initialisé");
+        return false;
+    }
+    atomic_store(&dsm_wkr_ctx->uffd_count, 0);
+    return true;
+}
+
+bool dsm_reset_data_count() {
+    if (!dsm_wkr_ctx) {
+        LOG_ERROR("Worker context non initialisé");
+        return false;
+    }
+    atomic_store(&dsm_wkr_ctx->data_count, 0);
+    return true;
+}
+
+bool dsm_reset_inva_count() {
+    if (!dsm_wkr_ctx) {
+        LOG_ERROR("Worker context non initialisé");
+        return false;
+    }
+    atomic_store(&dsm_wkr_ctx->inva_count, 0);
+    return true;
 }

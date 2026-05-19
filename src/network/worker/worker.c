@@ -4,6 +4,7 @@
 #include <bits/pthreadtypes.h>
 #include <linux/userfaultfd.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,6 +45,8 @@ int dsm_wkr_ctx_init() {
         return -1;
     }
 
+    dsm_wkr_ctx->page_counter = 0;
+
     if (dsm_safe_map_init(&dsm_wkr_ctx->managerID_to_nodeID, DSM_WKR_NODE_HASH_BITS) <
         0) {
         return -1;
@@ -69,7 +72,10 @@ int dsm_wkr_ctx_init() {
         return -1;
     }
 
-    dsm_wkr_ctx->page_counter = 0;
+    atomic_store(&dsm_wkr_ctx->uffd_count, 0);
+    atomic_store(&dsm_wkr_ctx->data_count, 0);
+    atomic_store(&dsm_wkr_ctx->inva_count, 0);
+
     return 0;
 }
 
@@ -255,7 +261,7 @@ void dispatch_call_uffd(void *arg) {
 
     switch (fault_msg->event) {
         case UFFD_EVENT_PAGEFAULT:
-
+            atomic_fetch_add(&dsm_wkr_ctx->uffd_count, 1);
             if (treat_uffd_pagefault(fault_msg) < 0) {
                 LOG_ERROR("Erreur lors du traitement du pagefault");
             }
@@ -544,12 +550,14 @@ void dispatch_call_wkr(void *arg) {
             break;
 
         case CODE_MGR_INVA_REQ:
+            atomic_fetch_add(&dsm_wkr_ctx->inva_count, 1);
             if (treat_mgr_inva_req(msg_ctx) < 0) {
                 LOG_WARNING("Message non traité : CODE=%d", CODE_MGR_INVA_REQ);
             }
             break;
 
         case CODE_MGR_DATA_REQ:
+            atomic_fetch_add(&dsm_wkr_ctx->data_count, 1);
             if (treat_mgr_data_req(msg_ctx) < 0) {
                 LOG_WARNING("Message non traité : CODE=%d", CODE_MGR_DATA_REQ);
             }
