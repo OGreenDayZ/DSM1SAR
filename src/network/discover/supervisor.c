@@ -28,7 +28,7 @@
 #include "util/hlist.h"
 #include "util/list.h"
 
-static dsm_supervisor_ctx *spvs_ctx;
+static dsm_supervisor_ctx *spvs_ctx = NULL;
 
 static int spvs_ctx_init(dsm_discover_ctx *dscv_ctx) {
     LOG_INFO("Initialisation du contexte du superviseur ...");
@@ -90,6 +90,10 @@ static int spvs_ctx_init(dsm_discover_ctx *dscv_ctx) {
 }
 
 static void spvs_ctx_cleanup(dsm_discover_ctx *dscv_ctx) {
+
+    if (!spvs_ctx) {
+        return;
+    }
 
     close(dscv_ctx->sock_tcp_listen);
     dscv_ctx->sock_tcp_listen = -1;

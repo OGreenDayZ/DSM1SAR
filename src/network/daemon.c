@@ -45,6 +45,11 @@ static int dmn_ctx_init() {
 }
 
 void dmn_ctx_cleanup() {
+
+    if (!dsm_dmn_ctx) {
+        return;
+    }
+
     pool_destroy(dsm_dmn_ctx->pool, graceful_shutdown);
     free(dsm_dmn_ctx);
     dsm_dmn_ctx = NULL;
@@ -180,7 +185,6 @@ static int handle_socket_event(int recv_sock) {
         }
 
     } else {
-        LOG_WARNING("CODE=%d RECU ORDRE", code); // TODO NETTOYAGE
         if (code == CODE_MGR_REQ_ACK || code == CODE_MGR_INVA_REQ ||
             code == CODE_MGR_DATA_REQ) {
 

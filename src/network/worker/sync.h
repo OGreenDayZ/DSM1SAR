@@ -55,11 +55,13 @@ int barrier_define(sync_barrier *barr, unsigned int threads_count,
                    unsigned int manager_id);
 int barrier_wait(sync_barrier *barr);
 int barrier_trigger(sync_barrier *barr);
+void barrier_destroy(sync_barrier *barr);
 
 int finalize_init(sync_finalize *fina);
 int finalize_define(sync_finalize *fina, unsigned int threads_count);
 int finalize_wait(sync_finalize *fina);
 int finalize_trigger(sync_finalize *fina);
+void finalize_destroy(sync_finalize *fina);
 /* ******************** */
 
 #endif // DSM_SYNC_H

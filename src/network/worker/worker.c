@@ -6,7 +6,6 @@
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -81,7 +80,16 @@ int dsm_wkr_ctx_init() {
     return 0;
 }
 
+static dsm_pdg_msg_content *msg_content_of(dsm_dq_node *n) {
+    return dsm_container_of(n, dsm_pdg_msg_content, node);
+}
+
 void dsm_wkr_ctx_cleanup() {
+
+    if (!dsm_wkr_ctx) {
+        return;
+    }
+
     // Cleanup du worker
     dsm_requests_reg_entry *entry_requests;
     dsm_locks_reg_entry *entry_locks;
@@ -90,10 +98,35 @@ void dsm_wkr_ctx_cleanup() {
     dsm_mgr_to_node_content *mgr_entry;
     unsigned int bkt;
 
+    close(dsm_wkr_ctx->uffd);
+    dsm_wkr_ctx->uffd = -1;
+
+    dsm_hash_safe_for_each_safe(&dsm_wkr_ctx->managerID_to_nodeID, bkt, tmp, mgr_entry,
+                                node) {
+        dsm_hlist_del_init(&mgr_entry->node);
+        free(mgr_entry);
+    }
+    dsm_safe_map_destroy(&dsm_wkr_ctx->managerID_to_nodeID);
+
     dsm_hash_safe_for_each_safe(&dsm_wkr_ctx->requests_reg, bkt, tmp, entry_requests,
                                 node) {
         dsm_hlist_del_init(&entry_requests->node);
         pthread_mutex_destroy(&entry_requests->mutex);
+
+        dsm_dq_node *cur;
+        int count = 0;
+        while ((cur = dsm_dq_front(&entry_requests->pending_msgs)) != NULL) {
+            dsm_pdg_msg_content *msg_content = msg_content_of(cur);
+            dsm_dq_pop(&entry_requests->pending_msgs);
+            free(msg_content);
+            count++;
+        }
+        dsm_dq_destroy(&entry_requests->pending_msgs);
+        if (count > 0) {
+            LOG_WARNING("Suppression de %d messages en queue pour la page %u", count,
+                        entry_requests->page_id);
+        }
+
         free(entry_requests);
     }
     dsm_safe_map_destroy(&dsm_wkr_ctx->requests_reg);
@@ -110,14 +143,9 @@ void dsm_wkr_ctx_cleanup() {
     }
     dsm_safe_map_destroy(&dsm_wkr_ctx->locks_reg);
 
-    dsm_hash_safe_for_each_safe(&dsm_wkr_ctx->managerID_to_nodeID, bkt, tmp, mgr_entry,
-                                node) {
-        dsm_hlist_del_init(&mgr_entry->node);
-        free(mgr_entry);
-    }
-    dsm_safe_map_destroy(&dsm_wkr_ctx->managerID_to_nodeID);
-    close(dsm_wkr_ctx->uffd);
-    // Barriere et FINA
+    barrier_destroy(&dsm_wkr_ctx->sync.barr);
+    finalize_destroy(&dsm_wkr_ctx->sync.fina);
+
     free(dsm_wkr_ctx);
     dsm_wkr_ctx = NULL;
 }
@@ -296,7 +324,6 @@ void dispatch_call_uffd(void *arg) {
 static int treat_mgr_req_ack(dsm_msg_mgr_req_ack *payload) {
     LOG_INFO("Traitement d'un CODE=%d ...", CODE_MGR_REQ_ACK);
 
-    // TODO MOVE ZERO PAGE
     void *zero_page = NULL;
     dsm_locks_reg_entry *entry = NULL, *found = NULL;
     dsm_requests_reg_entry *req_entry = get_request_entry(payload->page_id);
@@ -311,7 +338,6 @@ static int treat_mgr_req_ack(dsm_msg_mgr_req_ack *payload) {
                     (payload->req_mode == WRITE_REQ || payload->req_mode == LOCK_REQ)
                         ? 0
                         : UFFDIO_COPY_MODE_WP) < 0) {
-                perror("pager_copy 1"); // TODO NETTOYAGE
                 goto error;
             }
             break;
@@ -322,7 +348,6 @@ static int treat_mgr_req_ack(dsm_msg_mgr_req_ack *payload) {
                     (payload->req_mode == WRITE_REQ || payload->req_mode == LOCK_REQ)
                         ? 0
                         : UFFDIO_COPY_MODE_WP) < 0) {
-                perror("pager_copy 2"); // TODO NETTOYAGE
                 goto error;
             }
             break;
@@ -496,7 +521,7 @@ static int treat_mgr_data_req(dsm_msg_tcpss_thread_ctx *msg_ctx,
 }
 
 static int treat_sync_barrier_ack() {
-    LOG_INFO("Traitement d'un CODE=%d ...", CODE_SYNC_BARRIER_REQ);
+    LOG_INFO("Traitement d'un CODE=%d ...", CODE_SYNC_BARRIER_ACK);
 
     pthread_mutex_lock(&dsm_wkr_ctx->sync.barr.lock);
     int ret = barrier_trigger(&dsm_wkr_ctx->sync.barr);
@@ -505,12 +530,12 @@ static int treat_sync_barrier_ack() {
         return -1;
     }
 
-    LOG_INFO("Succès du traitement du CODE=%d", CODE_SYNC_BARRIER_REQ);
+    LOG_INFO("Succès du traitement du CODE=%d", CODE_SYNC_BARRIER_ACK);
     return 0;
 }
 
 static int treat_sync_finalize_ack() {
-    LOG_INFO("Traitement d'un CODE=%d ...", CODE_SYNC_FINALIZE_REQ);
+    LOG_INFO("Traitement d'un CODE=%d ...", CODE_SYNC_FINALIZE_ACK);
 
     pthread_mutex_lock(&dsm_wkr_ctx->sync.fina.lock);
     int ret = finalize_trigger(&dsm_wkr_ctx->sync.fina);
@@ -519,7 +544,7 @@ static int treat_sync_finalize_ack() {
         return -1;
     }
 
-    LOG_INFO("Succès du traitement du CODE=%d", CODE_SYNC_FINALIZE_REQ);
+    LOG_INFO("Succès du traitement du CODE=%d", CODE_SYNC_FINALIZE_ACK);
     return 0;
 }
 
@@ -598,10 +623,6 @@ int wkr_push_req(dsm_msg_tcpss_thread_ctx *msg_ctx,
     return 0;
 }
 
-static dsm_pdg_msg_content *msg_content_of(dsm_dq_node *n) {
-    return dsm_container_of(n, dsm_pdg_msg_content, node);
-}
-
 static int wkr_drain_reqs(dsm_requests_reg_entry *reqs_entry) {
     LOG_INFO("Drain : Début pour la page %u", reqs_entry->page_id);
 
@@ -613,7 +634,6 @@ static int wkr_drain_reqs(dsm_requests_reg_entry *reqs_entry) {
         int ret = 0;
         switch (msg_ctx->header.code) {
             case CODE_MGR_REQ_ACK:
-                // TODO ECO
                 ret = treat_mgr_req_ack(msg_content->req.mgr_req_ack);
                 free(msg_content->req.mgr_req_ack);
                 break;
@@ -702,13 +722,13 @@ void dispatch_call_wkr(void *arg) {
 
         case CODE_SYNC_BARRIER_ACK:
             if (treat_sync_barrier_ack() < 0) {
-                LOG_WARNING("Message non traité : CODE=%d", CODE_SYNC_BARRIER_REQ);
+                LOG_WARNING("Message non traité : CODE=%d", CODE_SYNC_BARRIER_ACK);
             }
             break;
 
         case CODE_SYNC_FINALIZE_ACK:
             if (treat_sync_finalize_ack() < 0) {
-                LOG_WARNING("Message non traité : CODE=%d", CODE_SYNC_FINALIZE_REQ);
+                LOG_WARNING("Message non traité : CODE=%d", CODE_SYNC_FINALIZE_ACK);
             }
             break;
 
