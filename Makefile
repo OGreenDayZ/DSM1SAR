@@ -4,6 +4,8 @@ SRC_DIR = src
 TEST_DIR = test
 INCLUDE_DIR = include
 BUILD_DIR = build
+TEST_USER_ERROR_BIN = $(BUILD_DIR)/test-config
+TEST_USER_ERROR_SRC = $(TEST_DIR)/test-config.c
 
 # Compilateur et options
 CC = gcc # Utiliser clang si on veut détecter + de warnings, sinon gcc
@@ -19,6 +21,7 @@ TEST_OBJS = $(addprefix $(BUILD_DIR)/, $(notdir $(TEST_SRCS:.c=.o)))
 TEST_BINS = $(filter-out $(BUILD_DIR)/main, $(TEST_OBJS:.o=))
 
 SRC_DIRS = $(shell find $(SRC_DIR) $(LIB_DIR) $(TEST_DIR) -type d 2>/dev/null)
+SRC_WITHOUT_MAIN = $(filter-out $(BUILD_DIR)/main.o, $(SRC_OBJS))
 vpath %.c $(SRC_DIRS)
 
 # Par défaut, définir LOG_LEVEL à DEBUG, et LOG_TRIGGER à LOG_UNIQ
@@ -82,4 +85,13 @@ clean:
 # Reconstruction complète
 re: clean all
 
-.PHONY: all clean re debug info warning error max_debug max_info max_warning max_error tests
+test-config: $(SRC_WITHOUT_MAIN) $(BUILD_DIR)/test-config.o | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -o $(TEST_USER_ERROR_BIN) $^ \
+		-Wl,--wrap=dsm_discover \
+		-Wl,--wrap=dsm_daemon_start \
+		-Wl,--wrap=pthread_create \
+		-lpthread
+	@clear
+	./$(TEST_USER_ERROR_BIN)
+
+.PHONY: all clean re debug info warning error max_debug max_info max_warning max_error tests test_user_error

@@ -53,8 +53,7 @@ void dsm_get_default_config(dsm_config *config) {
 static int is_power_of_two(size_t x) {
     return (x != 0) && ((x & (x - 1)) == 0);
 }
-
-static int validate_config(dsm_config *config) {
+int validate_config(dsm_config *config) {
     if (config->pager.nb_pages == 0) {
         LOG_ERROR("nb_pages doit être > 0");
         return -DSM_ERROR_INIT_ARG_NB_PAGES;

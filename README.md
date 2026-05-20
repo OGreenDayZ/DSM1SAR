@@ -11,6 +11,7 @@ Le système prend la forme d'une API en C permettant aux développeurs d'allouer
 
 Notre projet est compatible uniquement avec les systemes Linux, car userfaultfd n'est pas supporté sur les autres OS.
 
-​
+​### Commande de tests 
+`make test-config` : exécute la suite de tests validant la robustesse du système face aux configurations invalides et aux échecs de découverte réseau.
 
 ​

@@ -113,5 +113,6 @@ int dsm_get_node_id();
 int dsm_get_uffd_count();
 int dsm_get_data_count();
 int dsm_get_inva_count();
+int validate_config(dsm_config *config) ; 
 
 #endif // DSM1SAR_H
