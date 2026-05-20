@@ -6,13 +6,14 @@
  * Execution   : ./test_thread_pool
  */
 
-#include "util/concurrent/thread_pool.h"
 #include <assert.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+
+#include "util/concurrent/thread_pool.h"
 
 /**
  * @author : claude
@@ -268,7 +269,7 @@ void test_add_after_shutdown(void) {
 /* ══════════════════════════════════════════════════════════════════════════════
  *  8. Thread-safety — écritures concurrentes sans corruption
  * ══════════════════════════════════════════════════════════════════════════════ */
-void test_concurrent_writes(void) {
+void tests_concurrent_writes(void) {
     TEST("Thread-safety : 500 écritures concurrentes dans un tableau");
 
     const int N = 500;
@@ -789,7 +790,7 @@ int main(void) {
     test_brutal_shutdown();
     test_graceful_shutdown();
     test_add_after_shutdown();
-    test_concurrent_writes();
+    tests_concurrent_writes();
     test_stress();
     test_single_thread();
     test_queue_size_one();

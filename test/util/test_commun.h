@@ -3,10 +3,6 @@
 
 #include <stdio.h>
 
-typedef struct {
-    void *addr;
-    int id;
-} thread_test_arg_t;
 
 
 // ═══════════════════════════════════════════════════════════════════════════

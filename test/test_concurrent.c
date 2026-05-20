@@ -1,169 +1,92 @@
-#include "dsm.h"
-#include "util/test_commun.h"
 #include <assert.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "dsm.h"
+#include "util/test_commun.h"
+#include "util/test_functions.h"
+
+unsigned long count_uffd;
+unsigned long count_data;
+unsigned long count_inva;
 pthread_t threads[4];
 thread_test_arg_t args[4];
+int count_test = 4;
+int test_ok = 0;
 
-void *test_simple_read(void *arg) {
-    thread_test_arg_t *data = (thread_test_arg_t *)arg;
-    unsigned long tid = (unsigned long)pthread_self();
-    LOG_THREAD(tid, "Tentative de LECTURE à %p", data->addr);
-    int val = *(int *)data->addr;
-    LOG_THREAD(tid, BG_SUCCESS "LECTURE réussie" RESET " → Valeur = %d", val);
+int test_concurrent_write(int *shared_data) {
+    LOG_SECTION("TEST 1 : Tests multithreads - ÉCRITURES CONCURRENTES");
 
-    return NULL;
-}
-
-void *test_simple_write(void *arg) {
-    thread_test_arg_t *data = (thread_test_arg_t *)arg;
-    unsigned long tid = (unsigned long)pthread_self();
-
-    int new_val = 100 + data->id;
-    LOG_THREAD(tid, "Tentative d'ÉCRITURE (val=%d) à %p", new_val, data->addr);
-    *(int *)data->addr = new_val;
-    LOG_THREAD(tid, BG_SUCCESS "ÉCRITURE réussie" RESET " → Nouvelle valeur = %d",
-               new_val);
-    LOG_INFO("Verification de la valeur : ");
-
-    return NULL;
-}
-
-void *test_concurrent_writes(void *arg) {
-    thread_test_arg_t *data = (thread_test_arg_t *)arg;
-    unsigned long tid = (unsigned long)pthread_self();
-
-    for (int i = 0; i < 3; i++) {
-        int val = (data->id * 1000) + i;
-        LOG_THREAD(tid, "Écriture concurrente #%d (val=%d)", i, val);
-        *(int *)data->addr = val;
-        // usleep(50000);
-    }
-
-    LOG_THREAD(tid, BG_SUCCESS "Écritures concurrentes terminées" RESET);
-    return NULL;
-}
-
-void *test_concurrent_writes_with_locks(void *arg) {
-    thread_test_arg_t *data = (thread_test_arg_t *)arg;
-    unsigned long tid = (unsigned long)pthread_self();
-    for (int i = 0; i < 3; i++) {
-        if (dsm_lock(data->addr) == 0) {
-            LOG_THREAD(tid, BOLD MAGENTA "VERROU ACQUIS" RESET " - Section critique");
-            int val = (data->id * 1000) + i;
-            LOG_THREAD(tid, "Écriture concurrente #%d (val=%d)", i, val);
-            *(int *)data->addr = val;
-            assert(val == *(int *)data->addr);
-            dsm_unlock(data->addr);
-            LOG_THREAD(tid, CYAN "VERROU LIBÉRÉ (dsm_unlock)" RESET);
-        } else {
-            LOG_ERROR("Thread %lu : Échec du lock !", tid);
-        }
-    }
-    LOG_THREAD(tid, BG_SUCCESS "Écritures concurrentes sous locks terminées" RESET);
-    return NULL;
-}
-
-void *test_concurrent_reads_with_locks(void *arg) {
-    thread_test_arg_t *data = (thread_test_arg_t *)arg;
-    unsigned long tid = (unsigned long)pthread_self();
-    for (int i = 0; i < 3; i++) {
-        if (dsm_lock(data->addr) == 0) {
-            LOG_THREAD(tid, BOLD MAGENTA "VERROU ACQUIS" RESET " - Section critique");
-            LOG_THREAD(tid, "Tentative de LECTURE à %p", data->addr);
-            int val = *(int *)data->addr;
-            LOG_THREAD(tid, BG_SUCCESS "LECTURE réussie" RESET " → Valeur = %d", val);
-            dsm_unlock(data->addr);
-            LOG_THREAD(tid, CYAN "VERROU LIBÉRÉ (dsm_unlock)" RESET);
-        } else {
-            LOG_ERROR("Thread %lu : Échec du lock !", tid);
-        }
-    }
-    LOG_THREAD(tid, BG_SUCCESS "Écritures concurrentes sous locks terminées" RESET);
-    return NULL;
-}
-
-void *test_lock_unlock(void *arg) {
-    thread_test_arg_t *data = (thread_test_arg_t *)arg;
-    unsigned long tid = (unsigned long)pthread_self();
-
-    LOG_THREAD(tid, "Demande de dsm_lock() sur %p", data->addr);
-
-    if (dsm_lock(data->addr) == 0) {
-        LOG_THREAD(tid, BOLD MAGENTA "VERROU ACQUIS" RESET " - Section critique");
-        sleep(1);
-        dsm_unlock(data->addr);
-        LOG_THREAD(tid, CYAN "VERROU LIBÉRÉ (dsm_unlock)" RESET);
-    } else {
-        LOG_ERROR("Thread %lu : Échec du lock !", tid);
-    }
-
-    return NULL;
-}
-
-void main_test_concurrent(int *shared_data) {
-    // ECRITURE CONCURRENTE
-    LOG_SECTION("Tests multithreads - ÉCRITURES CONCURRENTES");
-
-    LOG_WARN("⚠ Lancement de 3 threads en écriture CONCURRENTE (potentielle race "
-             "condition)");
+    LOG_INFO("Lancement de 3 threads en écriture concurrentes sur shared_data[0]");
     for (int i = 0; i < 3; i++) {
         args[i].addr = shared_data;
         args[i].id = i + 10;
         pthread_create(&threads[i], NULL, test_concurrent_writes, &args[i]);
     }
-    for (int i = 0; i < 3; i++)
+
+    for (int i = 0; i < 3; i++) {
         pthread_join(threads[i], NULL);
+        if (args[i].ret < 0)
+            return -1;
+    }
 
-    LOG_SUCCESS("Écritures concurrentes terminées (Valeur finale : %d)", shared_data[0]);
+    LOG_SUCCESS(BOLD BG_SUCCESS
+                "Écritures concurrentes terminées (Valeur finale : %d)" RESET,
+                shared_data[0]);
+    return 0;
+}
 
-    // LECTURE CONCURRENTE
-    LOG_SECTION("Tests multithreads - LECTURES CONCURRENTES");
-    LOG_INFO("Lancement de 3 threads en lecture concurrente");
+int test_concurrent_read(int *shared_data) {
+    LOG_SECTION("TEST 2 :  Tests multithreads - LECTURES CONCURRENTES");
+
+    LOG_INFO("Lancement de 3 threads en lecture concurrente sur shared_data[0]");
     for (int i = 0; i < 3; i++) {
         args[i].addr = shared_data;
         args[i].id = i;
         pthread_create(&threads[i], NULL, test_simple_read, &args[i]);
     }
 
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 3; i++) {
         pthread_join(threads[i], NULL);
-
+        if (args[i].ret < 0)
+            return -1;
+    }
     LOG_SUCCESS("Toutes les lectures concurrentes sont terminées");
+    return 0;
 }
 
-int main(int argc, char *argv[]) {
-    LOG_TITLE("  TEST SIMPLE DSM   ");
-    LOG_SECTION("Initialisation du contexte DSM");
-    dsm_config config;
-    dsm_get_default_config(&config);
-
-    if (argc >= 3) {
-        config.net.system.nb_nodes = atoi(argv[1]);
-        config.net.system.nb_managers = atoi(argv[2]);
+int test_locks_multithread(int *shared_data) {
+    if (test_ok == 2) {
+        LOG_SECTION("TEST 3 : Tests multithreads - VERROUS EXCLUSIFS");
     } else {
-        config.net.system.nb_nodes = 4;
-        config.net.system.nb_managers = 1;
+        LOG_SECTION("TEST 4 : Tests multithreads - VERROUS EXCLUSIFS (les noeuds "
+                    "demandent le lock au même moment)");
+    }
+    LOG_INFO("Lancement de 2 threads avec dsm_lock/dsm_unlock sur shared_data[100]");
+    for (int i = 0; i < 2; i++) {
+        args[i].addr = &shared_data[100];
+        args[i].id = i;
+        pthread_create(&threads[i], NULL, test_lock_unlock, &args[i]);
     }
 
-    LOG_INFO("Configuration: %d nœuds, %d managers", config.net.system.nb_nodes,
-             config.net.system.nb_managers);
+    for (int i = 0; i < 2; i++) {
+        pthread_join(threads[i], NULL);
+        if (args[i].ret < 0)
+            return -1;
+    }
 
-    int ret = dsm_init(&config);
-    if (ret < 0) {
-        LOG_ERROR("Erreur fatale : dsm_init a échoué");
-        return EXIT_FAILURE;
-    } else if (ret == DSM_ROLE_MANAGER) {
-        LOG_SUCCESS("Mode MANAGER activé");
+    LOG_SUCCESS("Tests de verrous terminés");
+    return 0;
+}
+
+int main() {
+    dsm_config config;
+    int node_id;
+    if (test_init(&config, &node_id) == 2) {
         return EXIT_SUCCESS;
     }
-    int node_id = dsm_get_node_id();
-    LOG_SUCCESS("Mode WORKER activé (Node ID: %d)", node_id);
 
-    LOG_SECTION("Allocation de mémoire partagée");
     int *shared_data = (int *)dsm_alloc();
     if (!shared_data) {
         LOG_ERROR("Erreur d'allocation DSM");
@@ -171,14 +94,43 @@ int main(int argc, char *argv[]) {
     }
     LOG_SUCCESS("Page allouée à l'adresse : %p", (void *)shared_data);
 
-    main_test_concurrent((int *)shared_data);
+    if (test_concurrent_write(shared_data) < 0)
+        goto cleanup;
+    else
+        test_ok++;
 
-    // FIN
-    LOG_SECTION("Nettoyage et fermeture");
-    LOG_INFO("Appel de dsm_finalize()");
+    if (test_concurrent_read(shared_data) < 0)
+        goto cleanup;
+    else
+        test_ok++;
+
+    if (test_locks_multithread(shared_data) < 0)
+        goto cleanup;
+    else
+        test_ok++;
+    // Barriere ici pour que les 2 noeuds arrive aux locks en même temps
+    dsm_barrier();
+    if (test_locks_multithread(shared_data) < 0)
+        goto cleanup;
+    else
+        test_ok++;
+
     dsm_finalize();
+    LOG_TITLE("--- Bilan des Statistiques (Nœud %d) ---", dsm_get_node_id());
 
-    LOG_SUCCESS("Nœud %d : TOUS LES TESTS RÉUSSIS ✓", node_id);
-    LOG_TITLE("  FIN DES TESTS DSM  ");
+    // Récupération des compteurs via ton API dsm.h
+    dsm_get_uffd_count(&count_uffd);
+    dsm_get_data_count(&count_data);
+    dsm_get_inva_count(&count_inva);
+
+    LOG_INFO("  • Déclenchements Page Faults (uffd) : %lu", count_uffd);
+    LOG_INFO("  • Messages de données reçus (DATA)  : %lu", count_data);
+    LOG_INFO("  • Requêtes d'invalidation reçues    : %lu", count_inva);
+
+    LOG_TITLE("Tests réussis : %d/%d", test_ok, count_test)
+
     return EXIT_SUCCESS;
+cleanup:
+    dsm_finalize();
+    return EXIT_FAILURE;
 }
