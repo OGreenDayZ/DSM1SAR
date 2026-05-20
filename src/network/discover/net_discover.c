@@ -18,7 +18,7 @@
 #include "network/message/serializer.h"
 #include "network/network.h"
 
-static dsm_discover_ctx *dscv_ctx;
+static dsm_discover_ctx *dscv_ctx = NULL;
 
 static int dscv_ctx_init() {
     LOG_INFO("Initialisation du contexte de découverte ...");
@@ -90,6 +90,11 @@ exit_udp_error:
  * @note : si des fonctions précédentes sortent par -1, peut faire effet
  */
 static void dscv_ctx_cleanup() {
+
+    if (!dscv_ctx) {
+        return;
+    }
+
     if (dscv_ctx->sock_tcp_listen >= 0) {
         LOG_INFO("Fermeture du socket TCP d'écoute ...");
         close(dscv_ctx->sock_tcp_listen);

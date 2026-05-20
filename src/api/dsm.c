@@ -28,6 +28,11 @@
 #include "util/list.h"
 
 dsm_context *dsm_ctx = NULL;
+dsm_restart_ctx restart_ctx = {
+    .can_restart = true,
+    .lock = PTHREAD_MUTEX_INITIALIZER,
+    .cond = PTHREAD_COND_INITIALIZER,
+};
 
 void dsm_get_default_config(dsm_config *config) {
     // Pour certains champs, si 0 => soulève erreur à l'init (ex:nb_nodes)
@@ -124,14 +129,15 @@ static int dsm_ctx_init(const dsm_config *config) {
 }
 
 static void dsm_ctx_cleanup() {
+
+    if (!dsm_ctx) {
+        return;
+    }
+
     dsm_node_content *pos;
     unsigned int bkt;
     struct dsm_hlist_node *tmp;
 
-    if (!dsm_ctx) {
-        LOG_ERROR("DSM non initialisé");
-        return;
-    }
     dsm_hash_safe_for_each_safe(&dsm_ctx->nodes_reg, bkt, tmp, pos, node) {
         dsm_hlist_del_init(&pos->node);
         free(pos);
@@ -141,6 +147,11 @@ static void dsm_ctx_cleanup() {
 
     free(dsm_ctx);
     dsm_ctx = NULL;
+
+    pthread_mutex_lock(&restart_ctx.lock);
+    restart_ctx.can_restart = true;
+    pthread_cond_signal(&restart_ctx.cond);
+    pthread_mutex_unlock(&restart_ctx.lock);
 }
 
 static void print_nodes_reg() {
@@ -187,6 +198,15 @@ void *daemon_thread_start(__attribute__((unused)) void *arg) {
 
 dsm_node_role dsm_init(const dsm_config *config) {
     LOG_INFO("Initialisation de DSM1SAR...");
+
+    pthread_mutex_lock(&restart_ctx.lock);
+    while (!restart_ctx.can_restart) {
+        LOG_INFO("Attente de la possibilité de redémarrage...");
+        pthread_cond_wait(&restart_ctx.cond, &restart_ctx.lock);
+    }
+    restart_ctx.can_restart = false;
+    pthread_mutex_unlock(&restart_ctx.lock);
+
     if (dsm_ctx_init(config) < 0) {
         return -1;
     }

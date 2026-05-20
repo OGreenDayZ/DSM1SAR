@@ -20,7 +20,7 @@
 #include "util/concurrent/safe_map.h"
 #include "util/hlist.h"
 
-static dsm_candidate_ctx *cand_ctx;
+static dsm_candidate_ctx *cand_ctx = NULL;
 
 static int cand_ctx_init(uint32_t spvs_ip, uint16_t spvs_tcp_port) {
     LOG_INFO("Initialisation du contexte du candidat ...");
@@ -48,6 +48,10 @@ static int cand_ctx_init(uint32_t spvs_ip, uint16_t spvs_tcp_port) {
 }
 
 static void cand_ctx_cleanup() {
+
+    if (!cand_ctx) {
+        return;
+    }
 
     if (cand_ctx->supervisor_role == dsm_ctx->config.net.node.role) {
         close(cand_ctx->supervisor_tcp_sock);

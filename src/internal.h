@@ -1,11 +1,10 @@
 #ifndef DSM_INTERNAL_H
 #define DSM_INTERNAL_H
 
-#include "dsm.h"
-
 #include <stdint.h>
 #include <unistd.h>
 
+#include "dsm.h"
 #include "util/concurrent/safe_map.h"
 #include "util/hlist.h"
 
@@ -34,7 +33,14 @@ typedef struct {
 
 } dsm_context;
 
+typedef struct {
+    bool can_restart;
+    pthread_mutex_t lock;
+    pthread_cond_t cond;
+} dsm_restart_ctx;
+
 extern dsm_context *dsm_ctx; // Initialisé dans dsm.c
+extern dsm_restart_ctx restart_ctx;
 
 /** ALIAS */
 

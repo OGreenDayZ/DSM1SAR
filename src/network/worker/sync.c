@@ -165,6 +165,11 @@ int finalize_init(sync_finalize *fina) {
     return 0;
 }
 
+void barrier_destroy(sync_barrier *barr) {
+    pthread_mutex_destroy(&barr->lock);
+    pthread_cond_destroy(&barr->wait_cond);
+}
+
 int finalize_define(sync_finalize *fina, unsigned int threads_count) {
     if (fina->state != FINA_RESET) {
         LOG_INFO("Une finalisation est déjà en cours");
@@ -246,4 +251,9 @@ int finalize_trigger(sync_finalize *fina) {
     }
 
     return 0;
+}
+
+void finalize_destroy(sync_finalize *fina) {
+    pthread_mutex_destroy(&fina->lock);
+    pthread_cond_destroy(&fina->wait_cond);
 }

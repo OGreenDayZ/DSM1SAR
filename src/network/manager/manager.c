@@ -20,6 +20,7 @@
 #include "util/concurrent/safe_map.h"
 #include "util/container_of.h"
 #include "util/hlist.h"
+#include "util/list.h"
 
 dsm_manager_ctx *dsm_mgr_ctx = NULL;
 
@@ -50,7 +51,60 @@ int dsm_mgr_ctx_init() {
     return 0;
 }
 
-void dsm_mgr_ctx_cleanup() { // TODO
+static dsm_request_content *req_content_of(dsm_dq_node *n) {
+    return dsm_container_of(n, dsm_request_content, node);
+}
+
+void dsm_mgr_ctx_cleanup() {
+
+    if (!dsm_mgr_ctx) {
+        return;
+    }
+
+    unsigned int bkt;
+    struct dsm_hlist_node *tmp;
+    dsm_page_content *page_pos;
+
+    dsm_reader_info *reader_pos, *tmp_pos_r;
+
+    dsm_hash_safe_for_each_safe(&dsm_mgr_ctx->pages_reg, bkt, tmp, page_pos, node) {
+
+        dsm_safe_list_for_each_entry_safe(&page_pos->readers, reader_pos, tmp_pos_r,
+                                          node) {
+            dsm_list_del(&reader_pos->node);
+            free(reader_pos);
+        }
+        dsm_safe_list_destroy(&page_pos->readers);
+
+        dsm_dq_node *cur;
+        int count = 0;
+        while ((cur = dsm_dq_front(&page_pos->pending_reqs)) != NULL) {
+            dsm_request_content *req_content = req_content_of(cur);
+            dsm_dq_pop(&page_pos->pending_reqs);
+            free(req_content);
+            count++;
+        }
+        dsm_dq_destroy(&page_pos->pending_reqs);
+        if (count > 0) {
+            LOG_WARNING("Suppression de %d requêtes en queue pour la page %u", count,
+                        page_pos->page_id);
+        }
+
+        pthread_mutex_destroy(&page_pos->head_req_ctx.lock);
+        if (page_pos->head_req_ctx.data) {
+            free(page_pos->head_req_ctx.data);
+        }
+
+        dsm_hlist_del_init(&page_pos->node);
+        free(page_pos);
+    }
+
+    dsm_safe_map_destroy(&dsm_mgr_ctx->pages_reg);
+
+    pthread_mutex_destroy(&dsm_mgr_ctx->sync.lock);
+
+    free(dsm_mgr_ctx);
+    dsm_mgr_ctx = NULL;
 }
 
 static dsm_request_content *make_req_content(dsm_msg_tcpss_thread_ctx *msg_ctx,
@@ -92,10 +146,6 @@ static dsm_page_content *make_page_content(unsigned int page_id) {
     dsm_init_hlist_node(&page_content->node);
 
     return page_content;
-}
-
-static dsm_request_content *req_content_of(dsm_dq_node *n) {
-    return dsm_container_of(n, dsm_request_content, node);
 }
 
 /**
@@ -263,7 +313,6 @@ static int mgr_drain_reqs(dsm_page_content *page_content) {
     while ((cur = dsm_dq_front(&page_content->pending_reqs)) != NULL) {
         dsm_request_content *req_content = req_content_of(cur);
         bool req_completed;
-        // TODO COHERENCE CHECK
         switch (req_content->info.mode) {
             case READ_REQ:
                 if (treat_wkr_read_req(page_content, req_content, &req_completed) < 0) {
