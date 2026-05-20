@@ -187,13 +187,11 @@ void *daemon_thread_start(__attribute__((unused)) void *arg) {
 dsm_node_role dsm_init(const dsm_config *config) {
     LOG_INFO("Initialisation de DSM1SAR...");
     if (dsm_ctx_init(config) < 0) {
-        printf("ctx_init fail");
         return -1;
     }
 
     if (dsm_discover() < 0) {
         LOG_ERROR("Erreur dsm_discover");
-        printf("dsm_discover fail");
         dsm_ctx_cleanup();
         return -1;
     }
