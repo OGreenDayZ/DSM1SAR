@@ -90,6 +90,7 @@ test-config: $(SRC_WITHOUT_MAIN) $(BUILD_DIR)/test-config.o | $(BUILD_DIR)
 		-Wl,--wrap=dsm_discover \
 		-Wl,--wrap=dsm_daemon_start \
 		-Wl,--wrap=pthread_create \
+		-Wl,--wrap=pthread_detach \
 		-lpthread
 	@clear
 	./$(TEST_USER_ERROR_BIN)

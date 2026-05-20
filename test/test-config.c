@@ -29,6 +29,10 @@ int __wrap_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
     return 0; // Succès simulé
 }
 
+int __wrap_pthread_detach(pthread_t thread) {
+    LOG_INFO("[MOCK] pthread_detach intercepté.");
+    return 0; // Succès simulé
+}
 // Fonction utilitaire pour préparer une bonne configuration
 void setup_valid_config(dsm_config *config) {
     dsm_get_default_config(config);
@@ -178,7 +182,11 @@ void test_dsm_init_manager_success() {
 
     LOG_INFO("Appels dsm_daemon_start : %d (Attendu : 1)", count_daemon_called);
     assert(count_daemon_called == 1 && "Le daemon du manager aurait dû démarrer");
-
+    if (dsm_ctx != NULL) {
+        dsm_safe_map_destroy(&dsm_ctx->nodes_reg);
+        free(dsm_ctx);
+        dsm_ctx = NULL;
+    }
     LOG_SUCCESS("Initialisation du Manager réussie et flux respecté");
 }
 
