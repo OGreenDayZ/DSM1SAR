@@ -86,6 +86,7 @@ void *test_lock_unlock(void *arg) {
 void *test_concurrent_write_with_locks(void *arg) {
     thread_test_arg_t *data = (thread_test_arg_t *)arg;
     unsigned long tid = (unsigned long)pthread_self();
+    LOG_INFO("demande lock");
     if (dsm_lock(data->addr) == 0) {
         LOG_THREAD(tid, BOLD MAGENTA "VERROU ACQUIS" RESET " - Section critique");
         int val = *(int *)data->addr;

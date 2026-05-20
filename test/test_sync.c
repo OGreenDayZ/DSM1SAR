@@ -16,19 +16,15 @@ int count_test = 1;
 int test_ok = 0;
 
 int test_concurrent_write_with_lock(int *shared_data) {
-    LOG_SECTION("TEST 1 : Tests multithreads - VERROUS EXCLUSIFS AVEC ECRITURE");
+    LOG_SECTION("TEST 1 : Test - VERROUS EXCLUSIFS AVEC ECRITURE ");
     LOG_INFO("Lancement de 2 threads avec dsm_lock/dsm_unlock et écriture concurrentes "
              "sur shared_data[200]");
-    for (int i = 0; i < 2; i++) {
-        args[i].addr = &shared_data[200];
-        args[i].id = i;
-        pthread_create(&threads[i], NULL, test_concurrent_write_with_locks, &args[i]);
-    }
-    for (int i = 0; i < 2; i++) {
-        pthread_join(threads[i], NULL);
-        if (args[i].ret < 0)
-            return -1;
-    }
+    args[0].addr = &shared_data[200];
+    args[0].id = 0;
+    test_concurrent_write_with_locks(&args[0]);
+
+    if (args[0].ret < 0)
+        return -1;
 
     dsm_lock(shared_data + 200);
     LOG_SUCCESS("Tests de verrous avec écriture terminés (Valeur finale - %d)",
@@ -37,6 +33,23 @@ int test_concurrent_write_with_lock(int *shared_data) {
     return 0;
 }
 
+int test_concurrent_writes_with_lock(int *shared_data) {
+    LOG_SECTION("TEST 2 : Tests multithreads - VERROUS EXCLUSIFS AVEC ECRITURE");
+    LOG_INFO("Lancement de 2 threads avec dsm_lock/dsm_unlock et écriture concurrentes");
+    for (int i = 0; i < 2; i++) {
+        args[i].addr = &shared_data[200];
+        args[i].id = i + 10;
+        pthread_create(&threads[i], NULL, test_concurrent_writes_with_locks, &args[i]);
+    }
+    for (int i = 0; i < 2; i++) {
+        pthread_join(threads[i], NULL);
+        if (args[i].ret < 0)
+            return -1;
+    }
+    
+    LOG_SUCCESS("Tests de verrous avec écriture terminés");
+    return 0;
+}
 int main() {
     dsm_config config;
     int node_id;
@@ -49,17 +62,15 @@ int main() {
         LOG_ERROR("Erreur d'allocation DSM");
         return EXIT_FAILURE;
     }
-    LOG_SUCCESS("Page allouée à l'adresse : %p", (void *)shared_data);
 
     if (test_concurrent_write_with_lock(shared_data) < 0)
         goto cleanup;
     else
         test_ok++;
     dsm_finalize();
-    
+
     LOG_TITLE("--- Bilan des Statistiques (Nœud %d) ---", dsm_get_node_id());
 
-    // Récupération des compteurs via ton API dsm.h
     dsm_get_uffd_count(&count_uffd);
     dsm_get_data_count(&count_data);
     dsm_get_inva_count(&count_inva);

@@ -102,8 +102,8 @@ SRC_DIR = src
 TEST_DIR = test
 INCLUDE_DIR = include
 BUILD_DIR = build
-TEST_USER_ERROR_BIN = $(BUILD_DIR)/test-config
-TEST_USER_ERROR_SRC = $(TEST_DIR)/test-config.c
+TEST_USER_ERROR_BIN = $(BUILD_DIR)/test_config
+TEST_USER_ERROR_SRC = $(TEST_DIR)/test_config.c
 
 # --- CONFIGURATION DU COMPILATEUR ---
 CC = gcc
@@ -189,7 +189,7 @@ clean:
 re: clean all
 
 # Version simplifiée sur une seule ligne pour éviter le bug de pattern d'écharpage (\)
-test-config: $(SRC_WITHOUT_MAIN) $(BUILD_DIR)/test-config.o | $(BUILD_DIR)
+test-config: $(SRC_WITHOUT_MAIN) $(BUILD_DIR)/test_config.o | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -o $(TEST_USER_ERROR_BIN) $^ -Wl,--wrap=dsm_discover -Wl,--wrap=dsm_daemon_start -Wl,--wrap=pthread_create -Wl,--wrap=pthread_detach $(LIBS)
 	@clear
 	./$(TEST_USER_ERROR_BIN)

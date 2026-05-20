@@ -52,6 +52,13 @@ void setup_default_config(dsm_config *config, dsm_node_role role) {
     count_daemon_called = 0;
     mock_discover_return_value = 0;
     mock_daemon_return_value = 0;
+    // pthread_mutex_lock(&restart_ctx.lock);
+    // restart_ctx.can_restart = true;
+    // pthread_mutex_unlock(&restart_ctx.lock);
+    pthread_mutex_lock(&restart_ctx.lock);
+    restart_ctx.can_restart = true;
+    pthread_cond_signal(&restart_ctx.cond);
+    pthread_mutex_unlock(&restart_ctx.lock);
 }
 
 // ---------------------------------------------------------
