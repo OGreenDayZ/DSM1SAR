@@ -12,7 +12,6 @@
 typedef enum {
     DSM_DMN_STATE_ONGOING,
     DSM_DMN_STATE_TERMINATING,
-    // Si que 2 états -> to AtomicBool
 } dsm_deamon_state;
 
 typedef struct {

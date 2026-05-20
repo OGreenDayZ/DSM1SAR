@@ -3,15 +3,14 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <stdbool.h>
 
 // API Publique (seul fichier inclus par l'utilisateur)
 
 /* --- Memoire --- */
 typedef struct {
-    // TODO CAST LONG -> INT & IN MSG STRUCT
-    unsigned long nb_pages; // Nombre de pages
+    unsigned int nb_pages;  // Nombre de pages
     unsigned int page_size; // Taille d'une page en octets
-    //+
 } dsm_pager_config;
 
 /* --- Réseau --- */
@@ -93,7 +92,7 @@ void *dsm_alloc(void);
  * @brief Envoie une requete de LOCK sur la page qui contient addr
  *
  * @param addr
- * @return int : 0 en cas de succés, -1 en cas d'erreur
+ * @return int : 0 en cas de succès, -1 en cas d'erreur
  */
 int dsm_lock(void *addr);
 
@@ -101,7 +100,7 @@ int dsm_lock(void *addr);
  * @brief Envoie une requete de UNLOCK sur la page qui contient addr
  *
  * @param addr
- * @return int : 0 en cas de succés, -1 en cas d'erreur
+ * @return int : 0 en cas de succès, -1 en cas d'erreur
  */
 int dsm_unlock(void *addr);
 int dsm_barrier(void);
@@ -110,9 +109,13 @@ int dsm_finalize(void);
 int dsm_finalize_advanced(unsigned int threads_count);
 int dsm_get_node_id();
 
-int dsm_get_uffd_count();
-int dsm_get_data_count();
-int dsm_get_inva_count();
+bool dsm_get_uffd_count(unsigned long *out);
+bool dsm_get_data_count(unsigned long *out);
+bool dsm_get_inva_count(unsigned long *out);
+
+bool dsm_reset_uffd_count();
+bool dsm_reset_data_count();
+bool dsm_reset_inva_count();
 int validate_config(dsm_config *config) ; 
 
 #endif // DSM1SAR_H

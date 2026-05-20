@@ -4,7 +4,9 @@
 #include <bits/pthreadtypes.h>
 #include <linux/userfaultfd.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -17,6 +19,7 @@
 #include "network/pager/pager_msg.h"
 #include "network/worker/sync.h"
 #include "pager/pager.h"
+#include "util/concurrent/drain_queue.h"
 #include "util/concurrent/safe_list.h"
 #include "util/concurrent/safe_map.h"
 #include "util/container_of.h"
@@ -44,6 +47,8 @@ int dsm_wkr_ctx_init() {
         return -1;
     }
 
+    dsm_wkr_ctx->page_counter = 0;
+
     if (dsm_safe_map_init(&dsm_wkr_ctx->managerID_to_nodeID, DSM_WKR_NODE_HASH_BITS) <
         0) {
         return -1;
@@ -69,7 +74,10 @@ int dsm_wkr_ctx_init() {
         return -1;
     }
 
-    dsm_wkr_ctx->page_counter = 0;
+    atomic_store(&dsm_wkr_ctx->uffd_count, 0);
+    atomic_store(&dsm_wkr_ctx->data_count, 0);
+    atomic_store(&dsm_wkr_ctx->inva_count, 0);
+
     return 0;
 }
 
@@ -129,15 +137,15 @@ long page_id_to_addr(long page_id) {
     }
     return dsm_wkr_ctx->range_start + page_id * EFFECTIVE_PAGESIZE;
 }
-static unsigned int hash_page_to_mgr(unsigned long page_id) {
+static unsigned int hash_page_to_mgr(unsigned int page_id) {
     return page_id % dsm_ctx->config.net.system.nb_managers;
 }
 
-static unsigned int get_mgr_id_for_page(unsigned long page_id) {
+static unsigned int get_mgr_id_for_page(unsigned int page_id) {
     return hash_page_to_mgr(page_id);
 }
 
-static bool get_mgr_convert_node(unsigned long page_id,
+static bool get_mgr_convert_node(unsigned int page_id,
                                  dsm_mgr_to_node_content **out_content) {
     unsigned int mgr_id = get_mgr_id_for_page(page_id);
     bool found = false;
@@ -156,7 +164,7 @@ static bool get_mgr_convert_node(unsigned long page_id,
     return found;
 }
 
-int get_mgr_node_id_for_page(unsigned long page_id) {
+int get_mgr_node_id_for_page(unsigned int page_id) {
     dsm_mgr_to_node_content *content;
     if (!get_mgr_convert_node(page_id, &content)) {
         return -1;
@@ -164,7 +172,7 @@ int get_mgr_node_id_for_page(unsigned long page_id) {
     return content->node_id;
 }
 
-int get_mgr_node_socket_for_page(unsigned long page_id) {
+int get_mgr_node_socket_for_page(unsigned int page_id) {
     dsm_mgr_to_node_content *content;
     if (!get_mgr_convert_node(page_id, &content)) {
         return -1;
@@ -172,7 +180,7 @@ int get_mgr_node_socket_for_page(unsigned long page_id) {
     return content->to_node_content->tcp_sock;
 }
 
-pthread_mutex_t *get_mgr_send_lock_for_page(unsigned long page_id) {
+pthread_mutex_t *get_mgr_send_lock_for_page(unsigned int page_id) {
     dsm_mgr_to_node_content *manager = NULL;
     if (!get_mgr_convert_node(page_id, &manager)) {
         return NULL;
@@ -180,7 +188,7 @@ pthread_mutex_t *get_mgr_send_lock_for_page(unsigned long page_id) {
     return &manager->to_node_content->send_lock;
 }
 
-dsm_requests_reg_entry *get_request_entry(unsigned long page_id) {
+dsm_requests_reg_entry *get_request_entry(unsigned int page_id) {
     dsm_requests_reg_entry *entry_map = NULL, *found = NULL;
     dsm_hash_safe_get(&dsm_wkr_ctx->requests_reg, entry_map, node, page_id) {
         if (entry_map->page_id == page_id) {
@@ -211,9 +219,11 @@ static int treat_uffd_pagefault(struct uffd_msg *fault_msg) {
                              ? WRITE_REQ
                              : READ_REQ;
     dsm_requests_reg_entry *entry = get_request_entry(page_id);
-    LOG_INFO("[uffd_fault] Thread %lu tente d'accéder à page %d en %s\n",
+    LOG_INFO("[uffd_fault] Thread %lu tente d'accéder à page %d en %s (possession "
+             "actuelle : %s)",
              (unsigned long)pthread_self(), page_id,
-             (mode == WRITE_REQ ? "WRITE" : "READ"));
+             (mode == WRITE_REQ ? "WRITE" : "READ"),
+             (flags & UFFD_PAGEFAULT_FLAG_WP) ? "READ" : "MISSING");
 
     if (mode == READ_REQ) {
         pthread_mutex_lock(&entry->mutex);
@@ -255,7 +265,7 @@ void dispatch_call_uffd(void *arg) {
 
     switch (fault_msg->event) {
         case UFFD_EVENT_PAGEFAULT:
-
+            atomic_fetch_add(&dsm_wkr_ctx->uffd_count, 1);
             if (treat_uffd_pagefault(fault_msg) < 0) {
                 LOG_ERROR("Erreur lors du traitement du pagefault");
             }
@@ -283,45 +293,46 @@ void dispatch_call_uffd(void *arg) {
  * @param msg_ctx
  * @return int
  */
-static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
+static int treat_mgr_req_ack(dsm_msg_mgr_req_ack *payload) {
     LOG_INFO("Traitement d'un CODE=%d ...", CODE_MGR_REQ_ACK);
 
-    dsm_msg_mgr_req_ack *payload;
-    void *zero_page =
-        calloc(1, EFFECTIVE_PAGESIZE); // alloue une plage de EFFECTIVE_PAGESIZE
-                                       // contigue initialisée à 0
+    // TODO MOVE ZERO PAGE
+    void *zero_page = NULL;
     dsm_locks_reg_entry *entry = NULL, *found = NULL;
-    if (dsm_dsrlze_mgr_req_ack(msg_ctx->payload, msg_ctx->header.payload_len, &payload) <
-        0) {
-        LOG_ERROR("dsm_dsrlze_mgr_req_ack");
-        return -1;
-    }
     dsm_requests_reg_entry *req_entry = get_request_entry(payload->page_id);
 
     switch (payload->data_info) {
         case EMPTY_INIT:
+            zero_page =
+                calloc(1, EFFECTIVE_PAGESIZE); /* alloue une plage de EFFECTIVE_PAGESIZE
+                                                            contigue initialisée à 0 */
             if (pager_copy(
                     dsm_wkr_ctx->uffd, payload->page_id, (__u64)zero_page,
                     (payload->req_mode == WRITE_REQ || payload->req_mode == LOCK_REQ)
                         ? 0
                         : UFFDIO_COPY_MODE_WP) < 0) {
+                perror("pager_copy 1"); // TODO NETTOYAGE
                 goto error;
             }
             break;
+
         case NOT_EMPTY:
             if (pager_copy(
                     dsm_wkr_ctx->uffd, payload->page_id, (__u64)payload->data,
                     (payload->req_mode == WRITE_REQ || payload->req_mode == LOCK_REQ)
                         ? 0
                         : UFFDIO_COPY_MODE_WP) < 0) {
+                perror("pager_copy 2"); // TODO NETTOYAGE
                 goto error;
             }
             break;
+
         case PROMOTE_ONLY:
             if (pager_protect(dsm_wkr_ctx->uffd, payload->page_id, 0) < 0) {
                 goto error;
             }
             break;
+
         default:
             LOG_ERROR("data_info inconnu dans le payload du CODE_MGR_REQ_ACK");
             break;
@@ -393,11 +404,9 @@ static int treat_mgr_req_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     }
 
     LOG_INFO("Succès du traitement du CODE=%d", CODE_MGR_REQ_ACK);
-    free(payload);
     free(zero_page);
     return 0;
 error:
-    free(payload);
     free(zero_page);
     return -1;
 }
@@ -407,18 +416,12 @@ error:
  *
  * @return int
  */
-static int treat_mgr_inva_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
+static int treat_mgr_inva_req(dsm_msg_tcpss_thread_ctx *msg_ctx,
+                              dsm_msg_mgr_inva_req *payload) {
     LOG_INFO("Traitement d'un CODE=%d ...", CODE_MGR_INVA_REQ);
 
-    dsm_msg_mgr_inva_req payload;
-
-    if (dsm_dsrlze_mgr_inva_req(msg_ctx->payload, msg_ctx->header.payload_len, &payload) <
-        0) {
-        LOG_ERROR("dsm_dsrlze_mgr_inva_req");
-        return -1;
-    }
-    dsm_requests_reg_entry *req_entry = get_request_entry(payload.page_id);
-    void *addr = (void *)(uintptr_t)page_id_to_addr(payload.page_id);
+    dsm_requests_reg_entry *req_entry = get_request_entry(payload->page_id);
+    void *addr = (void *)(uintptr_t)page_id_to_addr(payload->page_id);
 
     if (req_entry) {
         pthread_mutex_lock(&req_entry->mutex);
@@ -426,18 +429,18 @@ static int treat_mgr_inva_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
         pthread_mutex_unlock(&req_entry->mutex);
     }
 
-    LOG_INFO("[treat_mgr_inva_req] Invalidation de la page %d", payload.page_id);
+    LOG_INFO("[treat_mgr_inva_req] Invalidation de la page %d", payload->page_id);
     if (madvise(addr, EFFECTIVE_PAGESIZE, MADV_DONTNEED) < 0) {
         LOG_ERROR("madvise");
         return -1;
     }
 
-    if (payload.is_sync) {
+    if (payload->is_sync) {
         /**
          * Faut repondre avec msg_wkr_inva_ack
          */
         pthread_mutex_lock(msg_ctx->send_lock);
-        int ret = send_wkr_inva_ack(payload.page_id, msg_ctx->sock);
+        int ret = send_wkr_inva_ack(payload->page_id, msg_ctx->sock);
         pthread_mutex_unlock(msg_ctx->send_lock);
         if (ret < 0) {
             return -1;
@@ -453,31 +456,26 @@ static int treat_mgr_inva_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
  *
  * @return int
  */
-static int treat_mgr_data_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
+static int treat_mgr_data_req(dsm_msg_tcpss_thread_ctx *msg_ctx,
+                              dsm_msg_mgr_data_req *payload) {
     LOG_INFO("Traitement d'un CODE=%d ...", CODE_MGR_DATA_REQ);
 
-    dsm_msg_mgr_data_req payload;
-    if (dsm_dsrlze_mgr_data_req(msg_ctx->payload, msg_ctx->header.payload_len, &payload) <
-        0) {
-        LOG_ERROR("dsm_dsrlze_mgr_data_req");
-        return -1;
-    }
-    void *addr = (void *)page_id_to_addr(payload.page_id);
+    void *addr = (void *)page_id_to_addr(payload->page_id);
     void *data = malloc(EFFECTIVE_PAGESIZE);
     memcpy(data, addr, EFFECTIVE_PAGESIZE);
 
-    if (payload.is_invalidate) {
+    if (payload->is_invalidate) {
         /**
          * On invalide la page
          */
-        LOG_INFO("[treat_mgr_data_req] Invalidation de la page %d", payload.page_id);
+        LOG_INFO("[treat_mgr_data_req] Invalidation de la page %d", payload->page_id);
         if (madvise(addr, EFFECTIVE_PAGESIZE, MADV_DONTNEED) < 0) {
             LOG_ERROR("madvise");
             return -1;
         }
 
     } else {
-        if (pager_protect(dsm_wkr_ctx->uffd, payload.page_id,
+        if (pager_protect(dsm_wkr_ctx->uffd, payload->page_id,
                           UFFDIO_WRITEPROTECT_MODE_WP) < 0) {
             return -1;
         }
@@ -487,7 +485,7 @@ static int treat_mgr_data_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
      * envoyer dsm_msg_wkr_data_ack
      */
     pthread_mutex_lock(msg_ctx->send_lock);
-    int ret = send_wkr_data_ack(payload.page_id, data, msg_ctx->sock);
+    int ret = send_wkr_data_ack(payload->page_id, data, msg_ctx->sock);
     pthread_mutex_unlock(msg_ctx->send_lock);
 
     free(data);
@@ -525,6 +523,145 @@ static int treat_sync_finalize_ack() {
     return 0;
 }
 
+static dsm_pdg_msg_content *make_msg_content(dsm_msg_tcpss_thread_ctx *msg_ctx,
+                                             unsigned int *out_page_id) {
+    dsm_pdg_msg_content *msg_content = malloc(sizeof(dsm_pdg_msg_content));
+    if (!msg_content) {
+        LOG_ERROR("malloc dsm_pdg_msg_content");
+        return NULL;
+    }
+
+    msg_content->msg_ctx = msg_ctx;
+
+    if (msg_ctx->header.code == CODE_MGR_REQ_ACK) {
+        dsm_msg_mgr_req_ack *payload;
+        if (dsm_dsrlze_mgr_req_ack(msg_ctx->payload, msg_ctx->header.payload_len,
+                                   &payload) < 0) {
+            LOG_ERROR("dsm_dsrlze_mgr_req_ack");
+            goto exit_error;
+        }
+        msg_content->req.mgr_req_ack = payload;
+        *out_page_id = msg_content->req.mgr_req_ack->page_id;
+
+    } else if (msg_ctx->header.code == CODE_MGR_DATA_REQ) {
+        if (dsm_dsrlze_mgr_data_req(msg_ctx->payload, msg_ctx->header.payload_len,
+                                    &msg_content->req.mgr_data_req) < 0) {
+            LOG_ERROR("dsm_dsrlze_mgr_data_req");
+            goto exit_error;
+        }
+        *out_page_id = msg_content->req.mgr_data_req.page_id;
+
+    } else if (msg_ctx->header.code == CODE_MGR_INVA_REQ) {
+        if (dsm_dsrlze_mgr_inva_req(msg_ctx->payload, msg_ctx->header.payload_len,
+                                    &msg_content->req.mgr_inva_req) < 0) {
+            LOG_ERROR("dsm_dsrlze_mgr_inva_req");
+            goto exit_error;
+        }
+        *out_page_id = msg_content->req.mgr_inva_req.page_id;
+
+    } else {
+        LOG_ERROR("Code de message TCP inconnu ou non traitable: %d",
+                  msg_ctx->header.code);
+        goto exit_error;
+    }
+
+    dsm_dq_node_init(&msg_content->node);
+
+    return msg_content;
+
+exit_error:
+    free(msg_content);
+    return NULL;
+}
+
+int wkr_push_req(dsm_msg_tcpss_thread_ctx *msg_ctx,
+                 dsm_requests_reg_entry **out_reqs_entry, bool *is_drainer) {
+    LOG_INFO("Push d'une requete du manager (NODE=%d)...", msg_ctx->header.id);
+
+    unsigned int page_id;
+    dsm_pdg_msg_content *msg_content = make_msg_content(msg_ctx, &page_id);
+    if (!msg_content) {
+        return -1;
+    }
+
+    *out_reqs_entry = get_request_entry(page_id);
+    if (!*out_reqs_entry) {
+        LOG_ERROR("Aucune entrée de requete trouvée pour la page %u", page_id);
+        free(msg_content);
+        return -1;
+    }
+
+    *is_drainer = dsm_dq_push(&(*out_reqs_entry)->pending_msgs, &msg_content->node);
+
+    LOG_INFO("Requête du manager (NODE=%d) poussée avec succès (page_id=%u)",
+             msg_ctx->header.id, page_id);
+    return 0;
+}
+
+static dsm_pdg_msg_content *msg_content_of(dsm_dq_node *n) {
+    return dsm_container_of(n, dsm_pdg_msg_content, node);
+}
+
+static int wkr_drain_reqs(dsm_requests_reg_entry *reqs_entry) {
+    LOG_INFO("Drain : Début pour la page %u", reqs_entry->page_id);
+
+    dsm_dq_node *cur;
+    while ((cur = dsm_dq_front(&reqs_entry->pending_msgs)) != NULL) {
+        dsm_pdg_msg_content *msg_content = msg_content_of(cur);
+        dsm_msg_tcpss_thread_ctx *msg_ctx = msg_content->msg_ctx;
+
+        int ret = 0;
+        switch (msg_ctx->header.code) {
+            case CODE_MGR_REQ_ACK:
+                // TODO ECO
+                ret = treat_mgr_req_ack(msg_content->req.mgr_req_ack);
+                free(msg_content->req.mgr_req_ack);
+                break;
+
+            case CODE_MGR_INVA_REQ:
+                atomic_fetch_add(&dsm_wkr_ctx->inva_count, 1);
+                ret = treat_mgr_inva_req(msg_ctx, &msg_content->req.mgr_inva_req);
+                break;
+
+            case CODE_MGR_DATA_REQ:
+                atomic_fetch_add(&dsm_wkr_ctx->data_count, 1);
+                ret = treat_mgr_data_req(msg_ctx, &msg_content->req.mgr_data_req);
+                break;
+
+            default:
+                LOG_ERROR("Code de message TCP inconnu ou non traitable: %d",
+                          msg_ctx->header.code);
+                ret = -1;
+                break;
+        }
+
+        if (ret < 0) {
+            LOG_ERROR("Erreur lors du traitement d'une requête du manager dans le drain "
+                      "(NODE=%d, page_id=%u)",
+                      msg_ctx->header.id, reqs_entry->page_id);
+            return -1;
+        }
+
+        free(msg_ctx->payload);
+        free(msg_ctx);
+
+        dsm_dq_pop(&reqs_entry->pending_msgs);
+        free(msg_content);
+    }
+
+    LOG_INFO("Drain : Fin pour la page %u", reqs_entry->page_id);
+    return 0;
+}
+
+void drain_call_wkr(void *arg) {
+    dsm_requests_reg_entry *reqs_entry = (dsm_requests_reg_entry *)arg;
+    if (wkr_drain_reqs(reqs_entry) < 0) {
+        LOG_ERROR("Erreur lors du drain des requêtes du manager pour la page %u",
+                  reqs_entry->page_id);
+    }
+    return;
+}
+
 void dispatch_call_wkr(void *arg) {
     /**
      * Contient :
@@ -538,21 +675,29 @@ void dispatch_call_wkr(void *arg) {
 
     switch (code) {
         case CODE_MGR_REQ_ACK:
-            if (treat_mgr_req_ack(msg_ctx) < 0) {
-                LOG_WARNING("Message non traité : CODE=%d", CODE_MGR_REQ_ACK);
-            }
+            /** @warning : Obsolète, voir handle_socket_event + drain_call_mgr */
+            // if (treat_mgr_req_ack(msg_ctx) < 0) {
+            //     LOG_WARNING("Message non traité : CODE=%d", CODE_MGR_REQ_ACK);
+            // }
+            LOG_ERROR("Erreur Algo : CODE_MGR_REQ_ACK reçu dans dispatch_call_wkr");
             break;
 
         case CODE_MGR_INVA_REQ:
-            if (treat_mgr_inva_req(msg_ctx) < 0) {
-                LOG_WARNING("Message non traité : CODE=%d", CODE_MGR_INVA_REQ);
-            }
+            /** @warning : Obsolète, voir handle_socket_event + drain_call_mgr */
+            // atomic_fetch_add(&dsm_wkr_ctx->inva_count, 1);
+            // if (treat_mgr_inva_req(msg_ctx) < 0) {
+            //     LOG_WARNING("Message non traité : CODE=%d", CODE_MGR_INVA_REQ);
+            // }
+            LOG_ERROR("Erreur Algo : CODE_MGR_INVA_REQ reçu dans dispatch_call_wkr");
             break;
 
         case CODE_MGR_DATA_REQ:
-            if (treat_mgr_data_req(msg_ctx) < 0) {
-                LOG_WARNING("Message non traité : CODE=%d", CODE_MGR_DATA_REQ);
-            }
+            /** @warning : Obsolète, voir handle_socket_event + drain_call_mgr */
+            // atomic_fetch_add(&dsm_wkr_ctx->data_count, 1);
+            // if (treat_mgr_data_req(msg_ctx) < 0) {
+            //     LOG_WARNING("Message non traité : CODE=%d", CODE_MGR_DATA_REQ);
+            // }
+            LOG_ERROR("Erreur Algo : CODE_MGR_DATA_REQ reçu dans dispatch_call_wkr");
             break;
 
         case CODE_SYNC_BARRIER_ACK:

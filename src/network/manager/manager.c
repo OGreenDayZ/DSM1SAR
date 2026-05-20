@@ -106,8 +106,8 @@ static dsm_request_content *req_content_of(dsm_dq_node *n) {
  *            Sauf pour @c readers, @c pending_reqs et @c head_req_ctx,
  *            qui sont protégés par leurs propres mécanismes de synchronisation.
  */
-static int push_req(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
-                    dsm_page_content **out_page_content, bool *is_drainer) {
+int mgr_push_req(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
+                 dsm_page_content **out_page_content, bool *is_drainer) {
 
     LOG_INFO("Push d'une requête du worker (NODE=%d)...", msg_ctx->header.id);
 
@@ -256,13 +256,14 @@ static void reset_head_req_ctx(dsm_page_content *page_content) {
  *  - la queue de requêtes devient vide
  *  - la requête en tête est bloquante (nécessite des ACKs)
  */
-static int drain_reqs(dsm_page_content *page_content) {
+static int mgr_drain_reqs(dsm_page_content *page_content) {
     LOG_INFO("Drain : Début pour la page %u", page_content->page_id);
 
     dsm_dq_node *cur;
     while ((cur = dsm_dq_front(&page_content->pending_reqs)) != NULL) {
         dsm_request_content *req_content = req_content_of(cur);
         bool req_completed;
+        // TODO COHERENCE CHECK
         switch (req_content->info.mode) {
             case READ_REQ:
                 if (treat_wkr_read_req(page_content, req_content, &req_completed) < 0) {
@@ -316,8 +317,8 @@ static dsm_page_content *find_page_content(uint32_t page_id) {
     }
 }
 
-static int try_unlock(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
-                      dsm_page_content **out_page_content, bool *is_drainer) {
+int mgr_try_unlock(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
+                   dsm_page_content **out_page_content, bool *is_drainer) {
 
     LOG_INFO("Traitement d'une requête UNLOCK_REQ du worker (NODE=%d)...",
              msg_ctx->header.id);
@@ -366,37 +367,40 @@ static int try_unlock(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
     return 0;
 }
 
-static int treat_wkr_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
+/**
+ * @warning : Obsolète, voir handle_socket_event + drain_call_mgr
+ */
+// static int treat_wkr_req(dsm_msg_tcpss_thread_ctx *msg_ctx) {
 
-    dsm_msg_wkr_req req;
-    if (dsm_dsrlze_wkr_req(msg_ctx->payload, msg_ctx->header.payload_len, &req) < 0) {
-        return -1;
-    }
+//     dsm_msg_wkr_req req;
+//     if (dsm_dsrlze_wkr_req(msg_ctx->payload, msg_ctx->header.payload_len, &req) < 0) {
+//         return -1;
+//     }
 
-    bool is_drainer = false;
-    dsm_page_content *page_content;
-    if (req.mode == READ_REQ || req.mode == WRITE_REQ || req.mode == LOCK_REQ) {
+//     bool is_drainer = false;
+//     dsm_page_content *page_content;
+//     if (req.mode == READ_REQ || req.mode == WRITE_REQ || req.mode == LOCK_REQ) {
 
-        if (push_req(msg_ctx, &req, &page_content, &is_drainer) < 0) {
-            return -1;
-        }
+//         if (mgr_push_req(msg_ctx, &req, &page_content, &is_drainer) < 0) {
+//             return -1;
+//         }
 
-    } else if (req.mode == UNLOCK_REQ) {
-        if (try_unlock(msg_ctx, &req, &page_content, &is_drainer) < 0) {
-            return -1;
-        }
+//     } else if (req.mode == UNLOCK_REQ) {
+//         if (try_unlock(msg_ctx, &req, &page_content, &is_drainer) < 0) {
+//             return -1;
+//         }
 
-    } else {
-        LOG_ERROR("Mode de requête de page inconnu : %d", req.mode);
-        return -1;
-    }
+//     } else {
+//         LOG_ERROR("Mode de requête de page inconnu : %d", req.mode);
+//         return -1;
+//     }
 
-    if (is_drainer && drain_reqs(page_content) < 0) {
-        return -1;
-    }
+//     if (is_drainer && mgr_drain_reqs(page_content) < 0) {
+//         return -1;
+//     }
 
-    return 0;
-}
+//     return 0;
+// }
 
 /**
  * @warning : Toujours lock le head_req_ctx de la page avant d'appeler cette fonction
@@ -576,7 +580,7 @@ static int treat_wkr_data_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
         return -1;
     }
 
-    if (is_drainer && drain_reqs(page_content) < 0) {
+    if (is_drainer && mgr_drain_reqs(page_content) < 0) {
         return -1;
     }
 
@@ -601,7 +605,7 @@ static int treat_wkr_inva_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
         return -1;
     }
 
-    if (is_drainer && drain_reqs(page_content) < 0) {
+    if (is_drainer && mgr_drain_reqs(page_content) < 0) {
         return -1;
     }
 
@@ -685,14 +689,27 @@ static int treat_sync_finalize_req(__attribute__((unused)) unsigned int sender_i
     return 0;
 }
 
+void drain_call_mgr(void *arg) {
+    dsm_page_content *page_content = (dsm_page_content *)arg;
+    if (mgr_drain_reqs(page_content) < 0) {
+        LOG_WARNING("Message non traité : CODE=%d", CODE_WKR_REQ);
+    }
+    return;
+}
+
 void dispatch_call_mgr(void *arg) {
     dsm_msg_tcpss_thread_ctx *msg_ctx = (dsm_msg_tcpss_thread_ctx *)arg;
 
     switch (msg_ctx->header.code) {
         case CODE_WKR_REQ:
-            if (treat_wkr_req(msg_ctx) < 0) {
-                LOG_WARNING("Message non traité : CODE=%d", CODE_WKR_REQ);
-            }
+            /**
+             * @warning : Obsolète, voir handle_socket_event + drain_call_mgr
+             */
+            // if (treat_wkr_req(msg_ctx) < 0) {
+            //     LOG_WARNING("Message non traité : CODE=%d", CODE_WKR_REQ);
+            // }
+            LOG_ERROR("Erreur Algo : CODE_WKR_REQ traité dans dispatch_call_mgr ?! "
+                      "(obsolète, voir handle_socket_event + drain_call_mgr)");
             break;
 
         case CODE_WKR_DATA_ACK:

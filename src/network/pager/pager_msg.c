@@ -1,11 +1,12 @@
 #include "pager_msg.h"
 
+#include <stdint.h>
+
 #include "debug/debug.h"
 #include "internal.h"
 #include "network/message/message.h"
 #include "network/message/serializer.h"
-
-#include <stdint.h>
+#include "pager/pager.h"
 
 int send_wkr_req(uint32_t page_id, uint8_t mode, int fd_sock) {
     LOG_INFO("Envoi d'un CODE=%d ... (mode=%d)", CODE_WKR_REQ, mode);
@@ -115,7 +116,7 @@ int send_mgr_req_ack(uint32_t page_id, uint8_t req_mode, uint8_t data_info, uint
     LOG_INFO("Envoi d'un CODE=%d ... (req_mode=%d, data_info=%d)", CODE_MGR_REQ_ACK,
              req_mode, data_info);
 
-    int data_len = (data_info ? 0 : EFFECTIVE_PAGESIZE);
+    int data_len = (data_info == NOT_EMPTY ? EFFECTIVE_PAGESIZE : 0);
     uint8_t msg_buf[sizeof(dsm_msg_header) + sizeof(dsm_msg_mgr_req_ack) + data_len];
     int msg_len = dsm_srlze_mgr_req_ack(page_id, req_mode, data_info, data, msg_buf,
                                         sizeof(msg_buf));

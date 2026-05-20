@@ -23,7 +23,7 @@ int dsm_srlze_dscv_share_reg_ack(uint16_t listen_port, uint8_t *buf, size_t buf_
 int dsm_srlze_dscv_wkr_id(uint8_t *buf, size_t buf_sz);
 int dsm_srlze_dscv_wkr_id_ack(uint8_t *buf, size_t buf_sz);
 int dsm_srlze_dscv_mgr_ready(uint8_t *buf, size_t buf_sz);
-int dsm_srlze_dscv_wkr_config(uint64_t nb_pages, uint32_t page_size, uint8_t *buf,
+int dsm_srlze_dscv_wkr_config(uint32_t nb_pages, uint32_t page_size, uint8_t *buf,
                               size_t buf_sz);
 int dsm_srlze_dscv_wkr_config_ack(uint8_t *buf, size_t buf_sz);
 int dsm_srlze_dscv_finalize(uint8_t *buf, size_t buf_sz);

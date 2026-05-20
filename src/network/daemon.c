@@ -16,6 +16,7 @@
 #include "network/message/message.h"
 #include "network/message/serializer.h"
 #include "network/worker/worker.h"
+#include "pager/pager.h"
 #include "util/concurrent/safe_map.h"
 #include "util/concurrent/thread_pool.h"
 
@@ -136,16 +137,71 @@ static int handle_socket_event(int recv_sock) {
         goto exit_err_payload;
     }
 
+    uint32_t code = msg_ctx->header.code;
     if (dsm_ctx->config.net.node.role == DSM_ROLE_MANAGER) {
+        if (code == CODE_WKR_REQ) {
+            dsm_msg_wkr_req req;
+            if (dsm_dsrlze_wkr_req(msg_ctx->payload, msg_ctx->header.payload_len, &req) <
+                0) {
+                goto exit_err_payload;
+            }
 
-        if (pool_add_task(dsm_dmn_ctx->pool, dispatch_call_mgr, msg_ctx) < 0) {
-            ret = -1;
-            goto exit_err_payload;
+            bool is_drainer = false;
+            dsm_page_content *page_content;
+            if (req.mode == READ_REQ || req.mode == WRITE_REQ || req.mode == LOCK_REQ) {
+
+                if (mgr_push_req(msg_ctx, &req, &page_content, &is_drainer) < 0) {
+                    goto exit_err_payload;
+                }
+
+            } else if (req.mode == UNLOCK_REQ) {
+                if (mgr_try_unlock(msg_ctx, &req, &page_content, &is_drainer) < 0) {
+                    goto exit_err_payload;
+                }
+
+            } else {
+                LOG_ERROR("Mode de requête de page inconnu : %d", req.mode);
+                goto exit_err_payload;
+            }
+
+            if (is_drainer &&
+                pool_add_task(dsm_dmn_ctx->pool, drain_call_mgr, page_content) < 0) {
+                goto exit_err_payload;
+            }
+
+            free(msg_ctx->payload);
+            free(msg_ctx);
+
+        } else {
+            if (pool_add_task(dsm_dmn_ctx->pool, dispatch_call_mgr, msg_ctx) < 0) {
+                ret = -1;
+                goto exit_err_payload;
+            }
         }
+
     } else {
-        if (pool_add_task(dsm_dmn_ctx->pool, dispatch_call_wkr, msg_ctx) < 0) {
-            ret = -1;
-            goto exit_err_payload;
+        LOG_WARNING("CODE=%d RECU ORDRE", code); // TODO NETTOYAGE
+        if (code == CODE_MGR_REQ_ACK || code == CODE_MGR_INVA_REQ ||
+            code == CODE_MGR_DATA_REQ) {
+
+            bool is_drainer = false;
+            dsm_requests_reg_entry *reqs_entry;
+            if (wkr_push_req(msg_ctx, &reqs_entry, &is_drainer) < 0) {
+                ret = -1;
+                goto exit_err_payload;
+            }
+
+            if (is_drainer &&
+                pool_add_task(dsm_dmn_ctx->pool, drain_call_wkr, reqs_entry) < 0) {
+                ret = -1;
+                goto exit_err_payload;
+            }
+
+        } else {
+            if (pool_add_task(dsm_dmn_ctx->pool, dispatch_call_wkr, msg_ctx) < 0) {
+                ret = -1;
+                goto exit_err_payload;
+            }
         }
     }
 
@@ -158,11 +214,6 @@ exit_err_ctx:
     free(msg_ctx);
 
     return ret;
-}
-
-static int update_dmn_state() {
-    // TODO
-    return 0;
 }
 
 int dsm_daemon_start(void) {
@@ -200,10 +251,6 @@ int dsm_daemon_start(void) {
     }
 
     while (atomic_load(&dsm_dmn_ctx->state) != DSM_DMN_STATE_TERMINATING) {
-        if (update_dmn_state() < 0) {
-            ret = -1;
-            goto exit;
-        }
 
         int n = poll(fds, max_fds, DSM_DMN_TIMEOUT_POLL);
 

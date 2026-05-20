@@ -1,9 +1,10 @@
-#include "dsm.h"
 #include <assert.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+
+#include "dsm.h"
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PALETTE DE COULEURS ANSI UNIFIÉE
@@ -221,6 +222,7 @@ int main() {
 
     config.net.system.nb_nodes = 4;
     config.net.system.nb_managers = 2;
+    config.net.node.role = DSM_ROLE_MANAGER;
 
     LOG_INFO("Configuration: 4 nœuds, 2 managers");
     int ret = dsm_init(&config);

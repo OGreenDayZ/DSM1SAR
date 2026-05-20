@@ -27,10 +27,10 @@ IncludeCategories:
 
   # Priorité 0 : Le header principal automatiquement détecté
   
-  # Priorité 1 : Les bibliothèques système et standards (<...>)
+  # Priorité 1 : Les bibliothèques système et standards 
   - Regex:           '^<.*>'
     Priority:        1
     
-  # Priorité 2 : Les en-têtes locaux de ton projet ("...")
+  # Priorité 2 : Les en-têtes locaux du projet
   - Regex:           '^".*"'
     Priority:        2
