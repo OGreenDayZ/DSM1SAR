@@ -39,7 +39,13 @@ typedef enum {
 } reqs_state;
 
 typedef struct {
-    dsm_msg_tcpss_thread_ctx *msg_ctx;
+    dsm_msg_tcpss_thread_ctx *msg_ctx; // Le champ payload du msg_ctx
+                                       // ne sera pas utilisé
+    union {
+        dsm_msg_mgr_req_ack *mgr_req_ack;
+        dsm_msg_mgr_data_req mgr_data_req;
+        dsm_msg_mgr_inva_req mgr_inva_req;
+    } req; // Remplace le payload du msg_ctx pour éviter de le parser plusieurs fois
     struct dsm_dq_node node;
 } dsm_pdg_msg_content; // Pour pending_msgs
 typedef struct {
@@ -116,7 +122,7 @@ long page_id_to_addr(long page_id);
  * @param page_id page dont on veut le manager
  * @return int node_id du manager, -1 en cas d'erreur
  */
-int get_mgr_node_id_for_page(unsigned long page_id);
+int get_mgr_node_id_for_page(unsigned int page_id);
 
 /**
  * @brief Recupere le fd de la socket du manager qui gere la page
@@ -124,7 +130,16 @@ int get_mgr_node_id_for_page(unsigned long page_id);
  * @param page_id la page dont on veut recupere le manager
  * @return int fd de la socket du manager, ou -1 en cas d'erreur
  */
-int get_mgr_node_socket_for_page(unsigned long page_id);
+int get_mgr_node_socket_for_page(unsigned int page_id);
+
+dsm_requests_reg_entry *get_request_entry(unsigned int page_id);
+pthread_mutex_t *get_mgr_send_lock_for_page(unsigned int page_id);
+
+int wkr_push_req(dsm_msg_tcpss_thread_ctx *msg_ctx,
+                 dsm_requests_reg_entry **out_reqs_entry, bool *is_drainer);
+
+void drain_call_wkr(void *arg);
+
 /**
  * @brief
  *
@@ -138,8 +153,5 @@ void dispatch_call_uffd(void *arg);
  * @param arg
  */
 void dispatch_call_wkr(void *arg);
-
-dsm_requests_reg_entry *get_request_entry(unsigned long page_id);
-pthread_mutex_t *get_mgr_send_lock_for_page(unsigned long page_id);
 
 #endif // DSM_WORKER_H
