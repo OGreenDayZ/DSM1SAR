@@ -82,12 +82,29 @@ int test_mesure_surcout_avec_lock(int *shared_data) {
 }
 
 int test_surcout_write(int *shared_data) {
-    LOG_SECTION("--- TEST 3 : Surcoût des écritures  ---");
+    LOG_SECTION("--- TEST 3 : Surcoût des écritures sans locks ---");
 
     struct timespec start, end;
-    long time_no_lock;
+    long time_local_pure, time_no_lock;
     int ITERATIONS = 10; // On fait 1000 itérations pour lisser les résultats
     int node_id = dsm_get_node_id();
+
+    int *local_data = malloc(ITERATIONS * sizeof(int));
+    if (!local_data)
+        return -1;
+
+    dsm_barrier();
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    for (int i = 0; i < ITERATIONS; i++) {
+        local_data[i] = i;
+    }
+    clock_gettime(CLOCK_MONOTONIC, &end);
+
+    time_local_pure = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
+
+    // Libération propre pour ASan
+    free(local_data);
 
     dsm_barrier();
 
@@ -100,24 +117,42 @@ int test_surcout_write(int *shared_data) {
     clock_gettime(CLOCK_MONOTONIC, &end);
 
     time_no_lock = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
-
     LOG_INFO("--- Résultats pour %d itérations ---", ITERATIONS);
+    LOG_INFO("Temps total accés RAM : %ld ns", time_local_pure);
     LOG_INFO("Temps total SANS lock : %ld ns", time_no_lock);
-
+    double ratio_dsm_base =
+        (double)time_no_lock / (time_local_pure > 0 ? time_local_pure : 1);
+    LOG_INFO("Surcoût DSM sans lock vs RAM : x%.2f", ratio_dsm_base);
     long avg_lock_cost = time_no_lock / ITERATIONS;
-    LOG_INFO("Coût moyen réseau d'une écriture : %ld ns (%.2f ms)", avg_lock_cost,
-             avg_lock_cost / 1e6);
-
+    LOG_INFO("Coût moyen réseau d'une écriture sans locks : %ld ns (%.2f ms)",
+             avg_lock_cost, avg_lock_cost / 1e6);
     return 0;
 }
 
 int test_surcout_write_locks(int *shared_data) {
-    LOG_SECTION("--- TEST 4 : Surcoût des écritures  ---");
+    LOG_SECTION("--- TEST 4 : Surcoût des écritures avec locks ---");
 
     struct timespec start, end;
-    long time_with_lock;
+    long time_local_pure, time_with_lock;
     int ITERATIONS = 10; // On fait 1000 itérations pour lisser les résultats
     int node_id = dsm_get_node_id();
+
+    int *local_data = malloc(ITERATIONS * sizeof(int));
+    if (!local_data)
+        return -1;
+
+    dsm_barrier();
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    for (int i = 0; i < ITERATIONS; i++) {
+        local_data[i] = i;
+    }
+    clock_gettime(CLOCK_MONOTONIC, &end);
+
+    time_local_pure = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
+
+    // Libération propre pour ASan
+    free(local_data);
 
     dsm_barrier();
 
@@ -131,15 +166,17 @@ int test_surcout_write_locks(int *shared_data) {
     clock_gettime(CLOCK_MONOTONIC, &end);
 
     time_with_lock = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
-
     dsm_barrier();
 
     LOG_INFO("--- Résultats pour %d itérations ---", ITERATIONS);
+    LOG_INFO("Temps total accés RAM : %ld ns", time_local_pure);
     LOG_INFO("Temps total AVEC lock : %ld ns", time_with_lock);
-
+    double ratio_dsm_lock =
+        (double)time_with_lock / (time_local_pure > 0 ? time_local_pure : 1);
+    LOG_INFO("Surcoût Verrous Réseau vs RAM  : x%.2f", ratio_dsm_lock);
     long avg_lock_cost = time_with_lock / ITERATIONS;
-    LOG_INFO("Coût moyen réseau d'un [Lock + Unlock] : %ld ns (%.2f ms)", avg_lock_cost,
-             avg_lock_cost / 1e6);
+    LOG_INFO("Coût moyen réseau d'une écriture avec [Lock + Unlock] : %ld ns (%.2f ms)",
+             avg_lock_cost, avg_lock_cost / 1e6);
 
     return 0;
 }
