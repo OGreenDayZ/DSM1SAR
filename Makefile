@@ -206,4 +206,16 @@ test-sync:
 	@echo "=== Exécution de test-sync ==="
 	@./$(BUILD_DIR)/test_sync
 
-.PHONY: all clean re debug info warning error max_debug max_info max_warning max_error tests test-config
+test-integrity: 
+	$(MAKE) tests
+	clear 
+	@echo "=== Exécution de test-integrity ==="
+	@./$(BUILD_DIR)/test_integrity
+
+test-profiling: 
+	$(MAKE) tests
+	clear 
+	@echo "=== Exécution de test-profiling ==="
+	@./$(BUILD_DIR)/test_profiling
+
+.PHONY: all clean re debug info warning error max_debug max_info max_warning max_error tests test-config test-simple test-sync test-integrity test-profiling
