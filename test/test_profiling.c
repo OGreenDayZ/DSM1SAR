@@ -5,10 +5,10 @@
 #include "util/test_commun.h"
 
 int test_ok = 0;
-int count_test = 2;
+int count_test = 4;
 
 int test_mesure_surcout(int *shared_data) {
-    LOG_SECTION("--- TEST 2 : Surcoût d'un Page Fault ---");
+    LOG_SECTION("--- TEST 1 : Surcoût d'un Page Fault ---");
     struct timespec start, end;
     long time_local, time_dsm;
 
@@ -44,7 +44,7 @@ int test_mesure_surcout(int *shared_data) {
 }
 
 int test_mesure_surcout_avec_lock(int *shared_data) {
-    LOG_SECTION("--- TEST 3 : Surcoût d'un Page Fault avec dsm_lock ---");
+    LOG_SECTION("--- TEST 2 : Surcoût d'un Page Fault avec dsm_lock ---");
     struct timespec start, end;
     long time_local, time_dsm;
 
@@ -81,6 +81,68 @@ int test_mesure_surcout_avec_lock(int *shared_data) {
     return 0;
 }
 
+int test_surcout_write(int *shared_data) {
+    LOG_SECTION("--- TEST 3 : Surcoût des écritures  ---");
+
+    struct timespec start, end;
+    long time_no_lock;
+    int ITERATIONS = 10; // On fait 1000 itérations pour lisser les résultats
+    int node_id = dsm_get_node_id();
+
+    dsm_barrier();
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    for (int i = 0; i < ITERATIONS; i++) {
+        // Chaque nœud écrit dans une zone séparée (ex: + node_id * 2000)
+        // pour éviter le "Faux Partage" (Ping-Pong) et mesurer l'écriture pure.
+        shared_data[node_id + i] = i;
+    }
+    clock_gettime(CLOCK_MONOTONIC, &end);
+
+    time_no_lock = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
+
+    LOG_INFO("--- Résultats pour %d itérations ---", ITERATIONS);
+    LOG_INFO("Temps total SANS lock : %ld ns", time_no_lock);
+
+    long avg_lock_cost = time_no_lock / ITERATIONS;
+    LOG_INFO("Coût moyen réseau d'une écriture : %ld ns (%.2f ms)", avg_lock_cost,
+             avg_lock_cost / 1e6);
+
+    return 0;
+}
+
+int test_surcout_write_locks(int *shared_data) {
+    LOG_SECTION("--- TEST 4 : Surcoût des écritures  ---");
+
+    struct timespec start, end;
+    long time_with_lock;
+    int ITERATIONS = 10; // On fait 1000 itérations pour lisser les résultats
+    int node_id = dsm_get_node_id();
+
+    dsm_barrier();
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    for (int i = 0; i < ITERATIONS; i++) {
+        // Tous les nœuds se battent pour la même case mémoire
+        dsm_lock(&shared_data[0]);
+        shared_data[node_id + i] = i;
+        dsm_unlock(&shared_data[0]);
+    }
+    clock_gettime(CLOCK_MONOTONIC, &end);
+
+    time_with_lock = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
+
+    dsm_barrier();
+
+    LOG_INFO("--- Résultats pour %d itérations ---", ITERATIONS);
+    LOG_INFO("Temps total AVEC lock : %ld ns", time_with_lock);
+
+    long avg_lock_cost = time_with_lock / ITERATIONS;
+    LOG_INFO("Coût moyen réseau d'un [Lock + Unlock] : %ld ns (%.2f ms)", avg_lock_cost,
+             avg_lock_cost / 1e6);
+
+    return 0;
+}
 int main(int argc, char const *argv[]) {
 
     dsm_config config;
@@ -123,6 +185,16 @@ int main(int argc, char const *argv[]) {
         test_ok++;
 
     if (test_mesure_surcout_avec_lock(shared_data) < 0)
+        goto cleanup;
+    else
+        test_ok++;
+
+    if (test_surcout_write(shared_data) < 0)
+        goto cleanup;
+    else
+        test_ok++;
+
+    if (test_surcout_write_locks(shared_data) < 0)
         goto cleanup;
     else
         test_ok++;

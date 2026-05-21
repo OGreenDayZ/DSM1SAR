@@ -259,10 +259,3 @@ int test_init(dsm_config *config, int *node_id) {
     LOG_SUCCESS("Page allouée à l'adresse : %p", (void *)shared_data);
     return EXIT_SUCCESS;
 }
-
-#if 0
-int main() {
-    // Ton ancien code de test temporaire
-    return 0;
-}
-#endif

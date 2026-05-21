@@ -96,7 +96,7 @@
 # 	./$(TEST_USER_ERROR_BIN)
 
 # .PHONY: all clean re debug info warning error max_debug max_info max_warning max_error tests test_user_error
-# TARGET = dsm1sar
+TARGET = dsm1sar
 
 SRC_DIR = src
 TEST_DIR = test
