@@ -28,13 +28,13 @@ int test_lecture_simple(int *shared_data) {
     return 0;
 }
 
-int test_ecriture_simple(int *shared_data) {
+int test_ecriture_simple(int *shared_data, unsigned int node_id) {
     LOG_SECTION("--- TEST 2 : Écriture Simple ---");
     args[0].addr = shared_data;
     args[0].id = 2;
     args[0].ret = 0;
 
-    test_simple_write(&args[0]);
+    test_simple_write(&args[0], node_id);
 
     if (args[0].ret < 0)
         return -1;
@@ -63,26 +63,26 @@ int test_verrous_exclusifs(int *shared_data) {
     return 0;
 }
 
-int test_barriere_temporisee(int *shared_data) {
+int test_barriere_temporisee(int *shared_data, unsigned int node_id) {
     LOG_SECTION("--- TEST 4 : Barrière Temporisée ---");
-    if (dsm_get_node_id() == 2) {
+    if (node_id == 2) {
         printf("[Nœud 2] Attente de 1 seconde avant la barrière...\n");
         sleep(1);
     }
 
     dsm_barrier();
 
-    LOG_INFO("[Nœud %d] Barrière franchie", dsm_get_node_id());
+    LOG_INFO("[Nœud %d] Barrière franchie", node_id);
     LOG_SUCCESS("Barriere réussi");
     return 0;
 }
 
-int test_coherence_multi_noeuds(int *shared_data) {
+int test_coherence_multi_noeuds(int *shared_data, unsigned int node_id) {
     LOG_SECTION("--- TEST 5 : Cohérence Multi-Nœuds ---");
     args[0].addr = shared_data;
     args[0].ret = 0;
 
-    test_coherence_read_write(&args[0]);
+    test_coherence_read_write(&args[0], node_id);
 
     if (args[0].ret < 0)
         return -1;
@@ -108,8 +108,8 @@ int main(int argc, char const *argv[]) {
 
     LOG_INFO("Configuration : %d nœuds, %d managers", config.net.system.nb_nodes,
              config.net.system.nb_managers);
-
-    int ret = dsm_init(&config);
+    unsigned int node_id;
+    int ret = dsm_init(&config, &node_id);
     if (ret < 0) {
         LOG_ERROR("dsm_init a échoué");
         return EXIT_FAILURE;
@@ -118,7 +118,6 @@ int main(int argc, char const *argv[]) {
         return EXIT_SUCCESS;
     }
 
-    int node_id = dsm_get_node_id();
     LOG_INFO("Mode WORKER actif (ID: %d)", node_id);
 
     int *shared_data = (int *)dsm_alloc();
@@ -134,7 +133,7 @@ int main(int argc, char const *argv[]) {
     else
         test_ok++;
 
-    if (test_ecriture_simple(shared_data) < 0)
+    if (test_ecriture_simple(shared_data, node_id) < 0)
         goto cleanup;
     else
         test_ok++;
@@ -144,19 +143,19 @@ int main(int argc, char const *argv[]) {
     else
         test_ok++;
 
-    if (test_barriere_temporisee(shared_data) < 0)
+    if (test_barriere_temporisee(shared_data, node_id) < 0)
         goto cleanup;
     else
         test_ok++;
 
-    if (test_coherence_multi_noeuds(shared_data) < 0)
+    if (test_coherence_multi_noeuds(shared_data, node_id) < 0)
         goto cleanup;
     else
         test_ok++;
 
     dsm_finalize();
 
-    LOG_TITLE("--- Bilan des Statistiques (Nœud %d) ---", dsm_get_node_id());
+    LOG_TITLE("--- Bilan des Statistiques (Nœud %d) ---", node_id);
 
     unsigned long data_msg_count = 0;
     unsigned long inva_msg_count = 0;

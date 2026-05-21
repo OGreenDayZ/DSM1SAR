@@ -195,7 +195,7 @@ void *daemon_thread_start(__attribute__((unused)) void *arg) {
     return NULL;
 }
 
-dsm_node_role dsm_init(const dsm_config *config) {
+dsm_node_role dsm_init(const dsm_config *config, unsigned int *out_node_id) {
     LOG_INFO("Initialisation de DSM1SAR...");
 
     pthread_mutex_lock(&restart_ctx.lock);
@@ -243,6 +243,10 @@ dsm_node_role dsm_init(const dsm_config *config) {
     } else { // role == DSM_ROLE_UNDEFINED
         dsm_ctx_cleanup();
         return -1;
+    }
+
+    if (out_node_id) {
+        *out_node_id = dsm_ctx->node_id;
     }
 
     return role;
@@ -467,19 +471,6 @@ error_unlock:
 
 int dsm_finalize(void) {
     return dsm_finalize_advanced(1);
-}
-
-/**
- * @note TODO - majda : a voir si c'est vraiment utile
- *
- * @return int
- */
-int dsm_get_node_id() {
-    if (!dsm_ctx) {
-        LOG_ERROR("DSM non initialisé");
-        return -1;
-    }
-    return dsm_ctx->node_id;
 }
 
 bool dsm_get_uffd_count(unsigned long *out) {

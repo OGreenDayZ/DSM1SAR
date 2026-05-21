@@ -73,7 +73,7 @@ void dsm_get_default_config(dsm_config *config);
  * @warning DSM_ROLE_UNDEFINED ne peut être jamais retourné par dsm_init, il est retourné
  * en tant que -1
  */
-dsm_node_role dsm_init(const dsm_config *config);
+dsm_node_role dsm_init(const dsm_config *config, unsigned int *out_node_id);
 
 /**
  * @brief Alloue un segment de mémoire dans l'espace d'adressage global partagé.
@@ -107,7 +107,6 @@ int dsm_barrier(void);
 int dsm_barrier_advanced(unsigned int threads_count, unsigned int manager_id);
 int dsm_finalize(void);
 int dsm_finalize_advanced(unsigned int threads_count);
-int dsm_get_node_id();
 
 bool dsm_get_uffd_count(unsigned long *out);
 bool dsm_get_data_count(unsigned long *out);
@@ -116,6 +115,6 @@ bool dsm_get_inva_count(unsigned long *out);
 bool dsm_reset_uffd_count();
 bool dsm_reset_data_count();
 bool dsm_reset_inva_count();
-int validate_config(dsm_config *config) ; 
+int validate_config(dsm_config *config);
 
 #endif // DSM1SAR_H

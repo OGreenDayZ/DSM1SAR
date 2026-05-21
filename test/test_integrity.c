@@ -6,11 +6,12 @@
 int test_ok = 0;
 int count_test = 2;
 
-int test_compteur_distibue(int *shared_data, int nb_nodes, int target) {
+int test_compteur_distibue(int *shared_data, int nb_nodes, int target,
+                           unsigned int node_id) {
     LOG_SECTION("--- TEST 1 : Test d'intégrité (Compteur à %d) sur shared_data[0] ---",
                 target);
     int increments_per_node = target / nb_nodes;
-    if (dsm_get_node_id() == 1) {
+    if (node_id == 1) {
         shared_data[0] = 0;
     }
     dsm_barrier();
@@ -47,12 +48,13 @@ int main(int argc, char const *argv[]) {
         config.net.system.nb_managers = 1;
     }
 
-    int ret = dsm_init(&config);
+    unsigned int node_id;
+    int ret = dsm_init(&config, &node_id);
     if (ret < 0) {
         LOG_ERROR("dsm_init a échoué");
         return EXIT_FAILURE;
     }
-    LOG_TITLE(">>> DSM TEST D'INTEGRITE (Noeud %d) <<<", dsm_get_node_id());
+    LOG_TITLE(">>> DSM TEST D'INTEGRITE (Noeud %d) <<<", node_id);
     LOG_INFO("Configuration : %d nœuds, %d managers", config.net.system.nb_nodes,
              config.net.system.nb_managers);
     if (ret == DSM_ROLE_MANAGER) {
@@ -69,11 +71,11 @@ int main(int argc, char const *argv[]) {
 
     if (test_compteur_distibue(shared_data,
                                config.net.system.nb_nodes - config.net.system.nb_managers,
-                               20000) < 0)
+                               20000, node_id) < 0)
         goto cleanup;
     else
         test_ok++;
-    LOG_TITLE("--- Bilan des Statistiques (Nœud %d) ---", dsm_get_node_id());
+    LOG_TITLE("--- Bilan des Statistiques (Nœud %d) ---", node_id);
 
     dsm_get_uffd_count(&count_uffd);
     dsm_get_data_count(&data_msg_count);
@@ -89,7 +91,7 @@ int main(int argc, char const *argv[]) {
     return EXIT_SUCCESS;
 
 cleanup:
-    LOG_TITLE("--- Bilan des Statistiques (Nœud %d) ---", dsm_get_node_id());
+    LOG_TITLE("--- Bilan des Statistiques (Nœud %d) ---", node_id);
 
     dsm_get_uffd_count(&count_uffd);
     dsm_get_data_count(&data_msg_count);
