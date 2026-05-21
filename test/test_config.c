@@ -177,9 +177,10 @@ void test_auto_correction_thread_pool() {
 void test_dsm_init_manager_success() {
     dsm_config config;
     setup_default_config(&config, DSM_ROLE_MANAGER);
+    unsigned int node_id = 0;
 
     LOG_INFO("Initialisation de dsm_init en tant que MANAGER...");
-    dsm_node_role role = dsm_init(&config);
+    dsm_node_role role = dsm_init(&config, &node_id);
 
     LOG_INFO("Rôle obtenu : %d (Attendu : %d)", role, DSM_ROLE_MANAGER);
     assert(role == DSM_ROLE_MANAGER && "Le rôle retourné doit être MANAGER");
@@ -200,9 +201,10 @@ void test_dsm_init_manager_success() {
 void test_dsm_init_worker_success() {
     dsm_config config;
     setup_default_config(&config, DSM_ROLE_WORKER);
+    unsigned int node_id = 0;
 
     LOG_INFO("Initialisation de dsm_init en tant que WORKER...");
-    dsm_node_role role = dsm_init(&config);
+    dsm_node_role role = dsm_init(&config, &node_id);
 
     LOG_INFO("Rôle obtenu : %d (Attendu : %d)", role, DSM_ROLE_WORKER);
     assert(role == DSM_ROLE_WORKER && "Le rôle retourné doit être WORKER");
@@ -225,11 +227,12 @@ void test_dsm_init_worker_success() {
 void test_dsm_init_discover_fails() {
     dsm_config config;
     setup_default_config(&config, DSM_ROLE_MANAGER);
+    unsigned int node_id = 0;
 
     LOG_WARN("Simulation d'un échec réseau (mock_discover_return_value = -1)");
     mock_discover_return_value = -1;
 
-    dsm_node_role role = dsm_init(&config);
+    dsm_node_role role = dsm_init(&config, &node_id);
 
     LOG_INFO("Rôle obtenu en cas d'erreur : %d (Attendu : -1)", (int)role);
     assert((int)role == -1 && "L'init doit échouer si discover échoue");

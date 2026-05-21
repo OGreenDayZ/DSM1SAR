@@ -159,7 +159,7 @@ int test_concurrent_barriere_advanced(int *shared_data) {
 
 int main() {
     dsm_config config;
-    int node_id;
+    unsigned int node_id;
     if (test_init(&config, &node_id) == 2) {
         return EXIT_SUCCESS;
     }
@@ -210,7 +210,7 @@ int main() {
 
     dsm_finalize();
 
-    LOG_TITLE("--- Bilan des Statistiques (Nœud %d) ---", dsm_get_node_id());
+    LOG_TITLE("--- Bilan des Statistiques (Nœud %d) ---", node_id);
 
     dsm_get_uffd_count(&count_uffd);
     dsm_get_data_count(&count_data);

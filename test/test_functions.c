@@ -19,10 +19,9 @@ void *test_simple_read(void *arg) {
     return NULL;
 }
 
-void *test_simple_write(void *arg) {
+void *test_simple_write(void *arg, unsigned int node_id) {
     thread_test_arg_t *data = (thread_test_arg_t *)arg;
     unsigned long tid = (unsigned long)pthread_self();
-    int node_id = dsm_get_node_id();
     int new_val = 100 + node_id;
     int sauvegarde;
     LOG_THREAD(tid, "Tentative d'ÉCRITURE (val=%d) à %p", new_val, data->addr);
@@ -147,9 +146,8 @@ void *test_concurrent_reads_with_locks(void *arg) {
     return NULL;
 }
 
-void *test_coherence_read_write(void *arg) {
+void *test_coherence_read_write(void *arg, unsigned int node_id) {
     thread_test_arg_t *data = (thread_test_arg_t *)arg;
-    int node_id = dsm_get_node_id();
     int *val_ptr = (int *)data->addr;
 
     // Le Nœud 1 écrit la valeur magique
@@ -225,7 +223,7 @@ void *test_barrier_advanced_thread(void *arg) {
     return NULL;
 }
 
-int test_init(dsm_config *config, int *node_id) {
+int test_init(dsm_config *config, unsigned int *node_id) {
     LOG_TITLE("  TEST COMPLET DSM   ");
     // INITIALISATION
     LOG_SECTION("ÉTAPE 1 : Initialisation du contexte DSM");
@@ -236,7 +234,7 @@ int test_init(dsm_config *config, int *node_id) {
     config->net.node.role = DSM_ROLE_MANAGER;
 
     LOG_INFO("Configuration: 4 nœuds, 2 managers");
-    int ret = dsm_init(config);
+    int ret = dsm_init(config, node_id);
 
     if (ret < 0) {
         LOG_ERROR("Erreur fatale : dsm_init a échoué");
@@ -246,7 +244,6 @@ int test_init(dsm_config *config, int *node_id) {
         return 2;
     }
 
-    *node_id = dsm_get_node_id();
     LOG_SUCCESS("Mode WORKER activé (Node ID: %d)", *node_id);
     // ALLOCATION
     LOG_SECTION("ÉTAPE 2 : Allocation de mémoire partagée");
