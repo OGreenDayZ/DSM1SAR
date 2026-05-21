@@ -337,7 +337,6 @@ int treat_write_req_poss_r(dsm_page_content *page_content,
             return -1;
         }
 
-        page_content->head_req_ctx.missing_acks = 0;
         *req_completed = true;
 
     } else {
@@ -408,7 +407,6 @@ int treat_write_req_poss_rw(dsm_page_content *page_content,
             return -1;
         }
 
-        page_content->head_req_ctx.missing_acks = 0;
         *req_completed = true;
 
     } else {
@@ -435,6 +433,23 @@ int treat_lock_req_poss_init(dsm_page_content *page_content,
     LOG_INFO("Traitement d'un CODE=%d ... du NODE=%d | LOCK_REQ sur PAGE_INIT",
              CODE_WKR_REQ, req_content->header.id);
 
+    dsm_node_content *node_content;
+
+    unsigned int cb_id = req_content->header.id;
+    dsm_node_content *cb_node = NULL;
+
+    dsm_hash_safe_get(&dsm_ctx->nodes_reg, node_content, node, cb_id) {
+        if (node_content->id == cb_id) {
+            cb_node = node_content;
+        }
+    }
+    dsm_hash_safe_get_end(&dsm_ctx->nodes_reg, cb_id);
+
+    if (!cb_node) {
+        LOG_ERROR("Erreur Algo : Noeud callback non trouvé ?!");
+        return -1;
+    }
+
     int inva_ack_count = 0;
     bool cb_is_reader = false;
     dsm_reader_info *pos, *n;
@@ -446,7 +461,7 @@ int treat_lock_req_poss_init(dsm_page_content *page_content,
     pthread_mutex_lock(&page_content->head_req_ctx.lock);
     dsm_safe_list_for_each_entry_safe(&page_content->readers, pos, n, node) {
 
-        if (pos->worker_id == req_content->header.id) {
+        if (pos->worker_id == cb_id) {
             cb_is_reader = true;
 
         } else {
@@ -484,10 +499,30 @@ int treat_lock_req_poss_init(dsm_page_content *page_content,
     }
 
     page_content->mode = PAGE_LOCKED;
-    page_content->owner_id = req_content->header.id;
-    page_content->head_req_ctx.missing_acks = inva_ack_count;
-    if (cb_is_reader) {
-        page_content->head_req_ctx.promotion_only = true;
+    page_content->owner_id = cb_id;
+
+    if (page_content->head_req_ctx.missing_acks == 0) {
+        int ret = 0;
+        pthread_mutex_lock(&cb_node->send_lock);
+        if (cb_is_reader) {
+            ret = send_mgr_req_ack(page_content->page_id, req_content->info.mode,
+                                   PROMOTE_ONLY, NULL, cb_node->tcp_sock);
+        } else {
+            ret = send_mgr_req_ack(page_content->page_id, req_content->info.mode,
+                                   EMPTY_INIT, NULL, cb_node->tcp_sock);
+        }
+        pthread_mutex_unlock(&cb_node->send_lock);
+
+        if (ret < 0) {
+            pthread_mutex_unlock(&page_content->head_req_ctx.lock);
+            return -1;
+        }
+
+    } else {
+        page_content->head_req_ctx.missing_acks = inva_ack_count;
+        if (cb_is_reader) {
+            page_content->head_req_ctx.promotion_only = true;
+        }
     }
 
     pthread_mutex_unlock(&page_content->head_req_ctx.lock);
@@ -583,7 +618,9 @@ int treat_lock_req_poss_r(dsm_page_content *page_content,
     page_content->owner_id = cb_id;
 
     int ret = 0;
-    if (cb_is_reader || cb_id == owner_id) {
+    if (cb_is_reader || cb_id == owner_id) { // Ne peut pas être les deux en même temps
+
+        page_content->head_req_ctx.promotion_only = true;
 
         if (cb_is_reader) {
 
@@ -599,8 +636,19 @@ int treat_lock_req_poss_r(dsm_page_content *page_content,
             }
         }
 
-        page_content->head_req_ctx.missing_acks = inva_ack_count;
-        page_content->head_req_ctx.promotion_only = true;
+        if (page_content->head_req_ctx.missing_acks == 0) {
+            pthread_mutex_lock(&cb_node->send_lock);
+            ret = send_mgr_req_ack(page_content->page_id, req_content->info.mode,
+                                   PROMOTE_ONLY, NULL, cb_node->tcp_sock);
+            pthread_mutex_unlock(&cb_node->send_lock);
+
+            if (ret < 0) {
+                pthread_mutex_unlock(&page_content->head_req_ctx.lock);
+                return -1;
+            }
+        } else {
+            page_content->head_req_ctx.missing_acks = inva_ack_count;
+        }
 
     } else {
 
@@ -677,8 +725,6 @@ int treat_lock_req_poss_rw(dsm_page_content *page_content,
             return -1;
         }
 
-        // *req_completed = true;
-
     } else {
         pthread_mutex_lock(&page_content->head_req_ctx.lock);
 
@@ -692,8 +738,6 @@ int treat_lock_req_poss_rw(dsm_page_content *page_content,
         }
 
         page_content->head_req_ctx.missing_acks = 1;
-
-        // *req_completed = false;
 
         pthread_mutex_unlock(&page_content->head_req_ctx.lock);
     }

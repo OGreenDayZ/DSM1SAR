@@ -312,7 +312,7 @@ static int mgr_drain_reqs(dsm_page_content *page_content) {
     dsm_dq_node *cur;
     while ((cur = dsm_dq_front(&page_content->pending_reqs)) != NULL) {
         dsm_request_content *req_content = req_content_of(cur);
-        bool req_completed;
+        bool req_completed = false;
         switch (req_content->info.mode) {
             case READ_REQ:
                 if (treat_wkr_read_req(page_content, req_content, &req_completed) < 0) {
@@ -347,8 +347,8 @@ static int mgr_drain_reqs(dsm_page_content *page_content) {
          */
         int empty = dsm_dq_pop(&page_content->pending_reqs);
         free(req_content);
+        reset_head_req_ctx(page_content);
         if (empty) {
-            reset_head_req_ctx(page_content);
             break;
         }
     }
