@@ -316,7 +316,6 @@ void dispatch_call_uffd(void *arg) {
 /**
  * @brief Traitement de la reception des données apres une requete.
  *
- * TODO - majda : gerer LOCK et UNLOCK
  *
  * @param msg_ctx
  * @return int
@@ -695,7 +694,7 @@ void dispatch_call_wkr(void *arg) {
 
     switch (code) {
         case CODE_MGR_REQ_ACK:
-            /** @warning : Obsolète, voir handle_socket_event + drain_call_mgr */
+            /** @warning : Obsolète, voir handle_socket_event + drain_call_wkr */
             // if (treat_mgr_req_ack(msg_ctx) < 0) {
             //     LOG_WARNING("Message non traité : CODE=%d", CODE_MGR_REQ_ACK);
             // }
@@ -703,7 +702,7 @@ void dispatch_call_wkr(void *arg) {
             break;
 
         case CODE_MGR_INVA_REQ:
-            /** @warning : Obsolète, voir handle_socket_event + drain_call_mgr */
+            /** @warning : Obsolète, voir handle_socket_event + drain_call_wkr */
             // atomic_fetch_add(&dsm_wkr_ctx->inva_count, 1);
             // if (treat_mgr_inva_req(msg_ctx) < 0) {
             //     LOG_WARNING("Message non traité : CODE=%d", CODE_MGR_INVA_REQ);
@@ -712,7 +711,7 @@ void dispatch_call_wkr(void *arg) {
             break;
 
         case CODE_MGR_DATA_REQ:
-            /** @warning : Obsolète, voir handle_socket_event + drain_call_mgr */
+            /** @warning : Obsolète, voir handle_socket_event + drain_call_wkr */
             // atomic_fetch_add(&dsm_wkr_ctx->data_count, 1);
             // if (treat_mgr_data_req(msg_ctx) < 0) {
             //     LOG_WARNING("Message non traité : CODE=%d", CODE_MGR_DATA_REQ);

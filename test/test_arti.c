@@ -169,8 +169,7 @@ int main() {
     pthread_create(&threads[0], NULL, test_lock_unlock_barrier_thread, &args[0]);
     pthread_join(threads[0], NULL);
     LOG_SUCCESS("Barrière simple avec threads et locks réussie");
-    ;
-
+    
     // BARRIERE AVANCÉE
     LOG_SECTION("Étape 13 : Tests multithread - BARRIÈRE AVANCÉE")
     LOG_INFO("Lancement de 3 threads effectuant des reads simple");

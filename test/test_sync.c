@@ -12,7 +12,7 @@ unsigned long count_data;
 unsigned long count_inva;
 pthread_t threads[4];
 thread_test_arg_t args[4];
-int count_test = 1;
+int count_test = 4;
 int test_ok = 0;
 
 int test_concurrent_write_with_lock(int *shared_data) {
@@ -35,7 +35,8 @@ int test_concurrent_write_with_lock(int *shared_data) {
 
 int test_concurrent_writes_with_lock(int *shared_data) {
     LOG_SECTION("TEST 2 : Tests multithreads - VERROUS EXCLUSIFS AVEC ECRITURE");
-    LOG_INFO("Lancement de 2 threads avec dsm_lock/dsm_unlock et écriture concurrentes");
+    LOG_INFO("Lancement de 2 threads avec dsm_lock/dsm_unlock et écriture concurrentes "
+             "sur shared_data[200]");
     for (int i = 0; i < 2; i++) {
         args[i].addr = &shared_data[200];
         args[i].id = i + 10;
@@ -46,10 +47,51 @@ int test_concurrent_writes_with_lock(int *shared_data) {
         if (args[i].ret < 0)
             return -1;
     }
-    
+
     LOG_SUCCESS("Tests de verrous avec écriture terminés");
     return 0;
 }
+
+int test_concurrent_write_read_with_lock(int *shared_data) {
+    LOG_SECTION(
+        "TEST 3 : Tests multithreads - VERROUS EXCLUSIFS AVEC ECRITURE & LECTURE");
+    LOG_INFO("Lancement de 2 threads - un en lecture avec lock et un en écriture avec "
+             "lock sur shared_data[300]");
+
+    args[0].addr = &shared_data[300];
+    args[0].id = 10;
+    pthread_create(&threads[0], NULL, test_concurrent_writes_with_locks, &args[0]);
+    args[1].addr = &shared_data[300];
+    args[1].id = 1 + 10;
+    pthread_create(&threads[1], NULL, test_concurrent_reads_with_locks, &args[1]);
+
+    for (int i = 0; i < 2; i++) {
+        pthread_join(threads[i], NULL);
+        if (args[i].ret < 0)
+            return -1;
+    }
+    LOG_SUCCESS("Test de verrous avec lecture et écriture concurrentes");
+    return 0;
+}
+
+int test_concurrent_barriere_advanced(int *shared_data) {
+    LOG_SECTION("TEST 4 : Tests multithread - BARRIÈRE AVANCÉE")
+    LOG_INFO("Lancement de 3 threads effectuant des reads simple sur shared_data[100]");
+    for (int i = 0; i < 3; i++) {
+        args[i].addr = shared_data;
+        args[i].id = i;
+        pthread_create(&threads[i], NULL, test_barrier_advanced_thread, &args[i]);
+    }
+
+    for (int i = 0; i < 3; i++) {
+        pthread_join(threads[i], NULL);
+        if (args[i].ret < 0)
+            return -1;
+    }
+    LOG_SUCCESS("Barrière avancée avec threads et locks réussie");
+    return 0;
+}
+
 int main() {
     dsm_config config;
     int node_id;
@@ -67,6 +109,20 @@ int main() {
         goto cleanup;
     else
         test_ok++;
+    if (test_concurrent_writes_with_lock(shared_data) < 0)
+        goto cleanup;
+    else
+        test_ok++;
+    if (test_concurrent_write_read_with_lock(shared_data) < 0)
+        goto cleanup;
+    else
+        test_ok++;
+
+    if (test_concurrent_barriere_advanced(shared_data) < 0)
+        goto cleanup;
+    else
+        test_ok++;
+
     dsm_finalize();
 
     LOG_TITLE("--- Bilan des Statistiques (Nœud %d) ---", dsm_get_node_id());
