@@ -13,41 +13,87 @@ unsigned long count_uffd;
 int count_test = 5;
 int test_ok = 0;
 
-
-void main_test_simple(int *shared_data) {
+int test_lecture_simple(int *shared_data) {
+    LOG_SECTION("--- TEST  1 : Lecture Simple ---");
     args[0].addr = shared_data;
     args[0].id = 1;
+    args[0].ret = 0;
 
-    LOG_SECTION("--- STEP 1 : Lecture Simple ---");
     test_simple_read(&args[0]);
 
-    LOG_SECTION("--- STEP 2 : Écriture Simple ---");
+    if (args[0].ret < 0)
+        return -1;
+
+    LOG_SUCCESS("Lecture simple réussie");
+    return 0;
+}
+
+int test_ecriture_simple(int *shared_data) {
+    LOG_SECTION("--- TEST 2 : Écriture Simple ---");
+    args[0].addr = shared_data;
     args[0].id = 2;
+    args[0].ret = 0;
+
     test_simple_write(&args[0]);
 
-    LOG_SECTION("--- STEP 3 : Verrous Exclusifs ---");
-    pthread_create(&threads[0], NULL, test_lock_unlock, &args[0]);
-    pthread_join(threads[0], NULL);
-    LOG_SUCCESS("Verrous exclusifs réussi");
+    if (args[0].ret < 0)
+        return -1;
 
-    LOG_SECTION("--- STEP 4 : Barrière Temporisée ---");
+    LOG_SUCCESS("Écriture simple réussie");
+    return 0;
+}
+
+int test_verrous_exclusifs(int *shared_data) {
+    LOG_SECTION("--- TEST 3 : Verrous Exclusifs ---");
+    args[0].addr = shared_data;
+    args[0].id = 2;
+    args[0].ret = 0;
+
+    if (pthread_create(&threads[0], NULL, test_lock_unlock, &args[0]) != 0) {
+        LOG_ERROR("Erreur lors de la création du thread");
+        return -1;
+    }
+
+    pthread_join(threads[0], NULL);
+
+    if (args[0].ret < 0)
+        return -1;
+
+    LOG_SUCCESS("Verrous exclusifs réussi");
+    return 0;
+}
+
+int test_barriere_temporisee(int *shared_data) {
+    LOG_SECTION("--- TEST 4 : Barrière Temporisée ---");
     if (dsm_get_node_id() == 2) {
-        printf("[Nœud 2] Attente de 1 seconde avant la barrière...");
+        printf("[Nœud 2] Attente de 1 seconde avant la barrière...\n");
         sleep(1);
     }
-    dsm_barrier();
-    LOG_INFO("[Nœud %d] Barrière franchie", dsm_get_node_id());
-    test_ok++;
-    LOG_SUCCESS("Barriere réussi");
 
-    LOG_SECTION("--- STEP 5 : Cohérence Multi-Nœuds ---");
+    dsm_barrier();
+
+    LOG_INFO("[Nœud %d] Barrière franchie", dsm_get_node_id());
+    LOG_SUCCESS("Barriere réussi");
+    return 0;
+}
+
+int test_coherence_multi_noeuds(int *shared_data) {
+    LOG_SECTION("--- TEST 5 : Cohérence Multi-Nœuds ---");
+    args[0].addr = shared_data;
+    args[0].ret = 0;
+
     test_coherence_read_write(&args[0]);
+
+    if (args[0].ret < 0)
+        return -1;
+
     dsm_barrier();
     LOG_SUCCESS("Test de cohérence réussi");
+    return 0;
 }
 
 int main(int argc, char const *argv[]) {
-    LOG_TITLE(">>> DÉBUT DU TEST DSM <<<");
+    LOG_TITLE(">>> DÉBUT DU TEST  DSM <<<");
 
     dsm_config config;
     dsm_get_default_config(&config);
@@ -82,8 +128,31 @@ int main(int argc, char const *argv[]) {
     }
     LOG_INFO("Page allouée à l'adresse virtuelle : %p", (void *)shared_data);
 
-    // Lancement du scénario
-    main_test_simple(shared_data);
+    // Enchaînement séquentiel rigoureux façon test_sync
+    if (test_lecture_simple(shared_data) < 0)
+        goto cleanup;
+    else
+        test_ok++;
+
+    if (test_ecriture_simple(shared_data) < 0)
+        goto cleanup;
+    else
+        test_ok++;
+
+    if (test_verrous_exclusifs(shared_data) < 0)
+        goto cleanup;
+    else
+        test_ok++;
+
+    if (test_barriere_temporisee(shared_data) < 0)
+        goto cleanup;
+    else
+        test_ok++;
+
+    if (test_coherence_multi_noeuds(shared_data) < 0)
+        goto cleanup;
+    else
+        test_ok++;
 
     dsm_finalize();
 
@@ -92,7 +161,6 @@ int main(int argc, char const *argv[]) {
     unsigned long data_msg_count = 0;
     unsigned long inva_msg_count = 0;
 
-    // Récupération des compteurs via ton API dsm.h
     dsm_get_uffd_count(&count_uffd);
     dsm_get_data_count(&data_msg_count);
     dsm_get_inva_count(&inva_msg_count);
@@ -104,4 +172,8 @@ int main(int argc, char const *argv[]) {
     LOG_TITLE("Tests réussis : %d/%d", test_ok, count_test)
 
     return EXIT_SUCCESS;
+
+cleanup:
+    dsm_finalize();
+    return EXIT_FAILURE;
 }

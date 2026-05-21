@@ -96,7 +96,7 @@
 # 	./$(TEST_USER_ERROR_BIN)
 
 # .PHONY: all clean re debug info warning error max_debug max_info max_warning max_error tests test_user_error
-TARGET = dsm1sar
+# TARGET = dsm1sar
 
 SRC_DIR = src
 TEST_DIR = test
@@ -193,5 +193,17 @@ test-config: $(SRC_WITHOUT_MAIN) $(BUILD_DIR)/test_config.o | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -o $(TEST_USER_ERROR_BIN) $^ -Wl,--wrap=dsm_discover -Wl,--wrap=dsm_daemon_start -Wl,--wrap=pthread_create -Wl,--wrap=pthread_detach $(LIBS)
 	@clear
 	./$(TEST_USER_ERROR_BIN)
+
+test-simple:
+	$(MAKE) tests
+	clear
+	@echo "=== Exécution de test-simple ==="
+	@./$(BUILD_DIR)/test_simple
+
+test-sync:
+	$(MAKE) tests
+	clear
+	@echo "=== Exécution de test-sync ==="
+	@./$(BUILD_DIR)/test_sync
 
 .PHONY: all clean re debug info warning error max_debug max_info max_warning max_error tests test-config

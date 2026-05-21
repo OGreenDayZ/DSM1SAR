@@ -13,5 +13,6 @@ Notre projet est compatible uniquement avec les systemes Linux, car userfaultfd 
 
 ### Commande de tests 
 `make test-config` : exécute la suite de tests validant la robustesse du système face aux configurations invalides et aux échecs de découverte réseau.
-
+`make test-simple` : exécute la suite de tests sur l'enchainement des fonctionnalités de bases de la dsm. 
+`make test-sync` : exécute la suite de tests validant le comportement multithread de la dsm ainsi que des scénarions un peu plus complexes. 
 ​

@@ -12,11 +12,76 @@ unsigned long count_data;
 unsigned long count_inva;
 pthread_t threads[4];
 thread_test_arg_t args[4];
-int count_test = 4;
+int count_test = 8;
 int test_ok = 0;
 
+int test_concurrent_write(int *shared_data) {
+    LOG_SECTION("TEST 1 : Tests multithreads - ÉCRITURES CONCURRENTES");
+
+    LOG_INFO("Lancement de 3 threads en écriture concurrentes sur shared_data[0]");
+    for (int i = 0; i < 3; i++) {
+        args[i].addr = shared_data;
+        args[i].id = i + 10;
+        pthread_create(&threads[i], NULL, test_concurrent_writes, &args[i]);
+    }
+
+    for (int i = 0; i < 3; i++) {
+        pthread_join(threads[i], NULL);
+        if (args[i].ret < 0)
+            return -1;
+    }
+
+    LOG_SUCCESS(BOLD BG_SUCCESS
+                "Écritures concurrentes terminées (Valeur finale : %d)" RESET,
+                shared_data[0]);
+    return 0;
+}
+
+int test_concurrent_read(int *shared_data) {
+    LOG_SECTION("TEST 2 :  Tests multithreads - LECTURES CONCURRENTES");
+
+    LOG_INFO("Lancement de 3 threads en lecture concurrente sur shared_data[0]");
+    for (int i = 0; i < 3; i++) {
+        args[i].addr = shared_data;
+        args[i].id = i;
+        pthread_create(&threads[i], NULL, test_simple_read, &args[i]);
+    }
+
+    for (int i = 0; i < 3; i++) {
+        pthread_join(threads[i], NULL);
+        if (args[i].ret < 0)
+            return -1;
+    }
+    LOG_SUCCESS("Toutes les lectures concurrentes sont terminées");
+    return 0;
+}
+
+int test_locks_multithread(int *shared_data) {
+    if (test_ok == 2) {
+        LOG_SECTION("TEST 3 : Tests multithreads - VERROUS EXCLUSIFS");
+    } else {
+        LOG_SECTION("TEST 4 : Tests multithreads - VERROUS EXCLUSIFS (les noeuds "
+                    "demandent le lock au même moment)");
+    }
+    LOG_INFO("Lancement de 2 threads avec dsm_lock/dsm_unlock sur shared_data[100]");
+    for (int i = 0; i < 2; i++) {
+        args[i].addr = &shared_data[100];
+        args[i].id = i;
+        pthread_create(&threads[i], NULL, test_lock_unlock, &args[i]);
+    }
+
+    for (int i = 0; i < 2; i++) {
+        pthread_join(threads[i], NULL);
+        if (args[i].ret < 0)
+            return -1;
+    }
+
+    LOG_SUCCESS("Tests de verrous terminés");
+    return 0;
+}
+
 int test_concurrent_write_with_lock(int *shared_data) {
-    LOG_SECTION("TEST 1 : Test - VERROUS EXCLUSIFS AVEC ECRITURE ");
+    LOG_SECTION("TEST 5 : Test - VERROUS EXCLUSIFS AVEC ECRITURE ");
     LOG_INFO("Lancement de 2 threads avec dsm_lock/dsm_unlock et écriture concurrentes "
              "sur shared_data[200]");
     args[0].addr = &shared_data[200];
@@ -34,7 +99,7 @@ int test_concurrent_write_with_lock(int *shared_data) {
 }
 
 int test_concurrent_writes_with_lock(int *shared_data) {
-    LOG_SECTION("TEST 2 : Tests multithreads - VERROUS EXCLUSIFS AVEC ECRITURE");
+    LOG_SECTION("TEST 6 : Tests multithreads - VERROUS EXCLUSIFS AVEC ECRITURE");
     LOG_INFO("Lancement de 2 threads avec dsm_lock/dsm_unlock et écriture concurrentes "
              "sur shared_data[200]");
     for (int i = 0; i < 2; i++) {
@@ -54,7 +119,7 @@ int test_concurrent_writes_with_lock(int *shared_data) {
 
 int test_concurrent_write_read_with_lock(int *shared_data) {
     LOG_SECTION(
-        "TEST 3 : Tests multithreads - VERROUS EXCLUSIFS AVEC ECRITURE & LECTURE");
+        "TEST 7 : Tests multithreads - VERROUS EXCLUSIFS AVEC ECRITURE & LECTURE");
     LOG_INFO("Lancement de 2 threads - un en lecture avec lock et un en écriture avec "
              "lock sur shared_data[300]");
 
@@ -75,7 +140,7 @@ int test_concurrent_write_read_with_lock(int *shared_data) {
 }
 
 int test_concurrent_barriere_advanced(int *shared_data) {
-    LOG_SECTION("TEST 4 : Tests multithread - BARRIÈRE AVANCÉE")
+    LOG_SECTION("TEST 8 : Tests multithread - BARRIÈRE AVANCÉE")
     LOG_INFO("Lancement de 3 threads effectuant des reads simple sur shared_data[100]");
     for (int i = 0; i < 3; i++) {
         args[i].addr = shared_data;
@@ -104,6 +169,26 @@ int main() {
         LOG_ERROR("Erreur d'allocation DSM");
         return EXIT_FAILURE;
     }
+    if (test_concurrent_write(shared_data) < 0)
+        goto cleanup;
+    else
+        test_ok++;
+
+    if (test_concurrent_read(shared_data) < 0)
+        goto cleanup;
+    else
+        test_ok++;
+
+    if (test_locks_multithread(shared_data) < 0)
+        goto cleanup;
+    else
+        test_ok++;
+    // Barriere ici pour que les 2 noeuds arrive aux locks en même temps
+    dsm_barrier();
+    if (test_locks_multithread(shared_data) < 0)
+        goto cleanup;
+    else
+        test_ok++;
 
     if (test_concurrent_write_with_lock(shared_data) < 0)
         goto cleanup;
