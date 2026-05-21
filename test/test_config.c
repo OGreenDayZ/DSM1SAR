@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdlib.h>
 
 #include "dsm.h"
 #include "internal.h"
@@ -10,6 +11,9 @@ int mock_daemon_return_value = 0;
 
 int count_discover_called = 0;
 int count_daemon_called = 0;
+
+int count_test = 8;
+int test_ok;
 
 int __wrap_dsm_discover(void) {
     LOG_INFO("[MOCK] dsm_discover appelé.");
@@ -65,7 +69,7 @@ void setup_default_config(dsm_config *config, dsm_node_role role) {
 // 1. Tests des erreurs de validation strictes (Bloquantes)
 // ---------------------------------------------------------
 
-void test_error_nb_pages_zero() {
+int test_error_nb_pages_zero() {
     dsm_config config;
     setup_valid_config(&config);
 
@@ -74,12 +78,16 @@ void test_error_nb_pages_zero() {
 
     int ret = validate_config(&config);
     LOG_INFO("Code de retour : %d (Attendu : %d)", ret, -DSM_ERROR_INIT_ARG_NB_PAGES);
-    assert(ret == -DSM_ERROR_INIT_ARG_NB_PAGES && "Devrait échouer si nb_pages == 0");
+    if (!(ret == -DSM_ERROR_INIT_ARG_NB_PAGES)) {
+        LOG_ERROR("Devrait échouer si nb_pages == 0");
+        return -1;
+    }
 
     LOG_SUCCESS("Validation rejetée correctement pour nb_pages == 0");
+    return 0;
 }
 
-void test_error_page_size_not_power_of_two() {
+int test_error_page_size_not_power_of_two() {
     dsm_config config;
     setup_valid_config(&config);
 
@@ -88,20 +96,26 @@ void test_error_page_size_not_power_of_two() {
     config.pager.page_size = 4000;
     int ret = validate_config(&config);
     LOG_INFO("Code de retour : %d (Attendu : %d)", ret, -DSM_ERROR_INIT_ARG_PAGE_SIZE);
-    assert(ret == -DSM_ERROR_INIT_ARG_PAGE_SIZE &&
-           "Devrait échouer si page_size n'est pas une puissance de 2");
+    if (!(ret == -DSM_ERROR_INIT_ARG_PAGE_SIZE)) {
+        LOG_ERROR("Devrait échouer si page_size n'est pas une puissance de 2");
+        return -1;
+    }
 
     // Cas 2
     LOG_WARN("Injection d'erreur : page_size = 0");
     config.pager.page_size = 0;
     ret = validate_config(&config);
     LOG_INFO("Code de retour : %d (Attendu : %d)", ret, -DSM_ERROR_INIT_ARG_PAGE_SIZE);
-    assert(ret == -DSM_ERROR_INIT_ARG_PAGE_SIZE && "Devrait échouer si page_size == 0");
+    if (!(ret == -DSM_ERROR_INIT_ARG_PAGE_SIZE)) {
+        LOG_ERROR("Devrait échouer si page_size == 0");
+        return -1;
+    }
 
     LOG_SUCCESS("Validation rejetée correctement pour les tailles de pages invalides");
+    return 0;
 }
 
-void test_error_nb_nodes_too_low() {
+int test_error_nb_nodes_too_low() {
     dsm_config config;
     setup_valid_config(&config);
 
@@ -110,12 +124,16 @@ void test_error_nb_nodes_too_low() {
 
     int ret = validate_config(&config);
     LOG_INFO("Code de retour : %d (Attendu : %d)", ret, -DSM_ERROR_INIT_ARG_NB_NODES);
-    assert(ret == -DSM_ERROR_INIT_ARG_NB_NODES && "Devrait échouer si nb_nodes < 2");
+    if (!(ret == -DSM_ERROR_INIT_ARG_NB_NODES)) {
+        LOG_ERROR("Devrait échouer si nb_nodes < 2");
+        return -1;
+    }
 
     LOG_SUCCESS("Validation rejetée correctement pour nb_nodes < 2");
+    return 0;
 }
 
-void test_error_nb_managers_invalid() {
+int test_error_nb_managers_invalid() {
     dsm_config config;
     setup_valid_config(&config);
 
@@ -124,8 +142,10 @@ void test_error_nb_managers_invalid() {
     config.net.system.nb_managers = 0;
     int ret = validate_config(&config);
     LOG_INFO("Code de retour : %d (Attendu : %d)", ret, -DSM_ERROR_INIT_ARG_NB_MANAGERS);
-    assert(ret == -DSM_ERROR_INIT_ARG_NB_MANAGERS &&
-           "Devrait échouer si nb_managers == 0");
+    if (!(ret == -DSM_ERROR_INIT_ARG_NB_MANAGERS)) {
+        LOG_ERROR("Devrait échouer si nb_managers == 0");
+        return -1;
+    }
 
     // Cas 2
     LOG_WARN("Injection d'erreur : nb_managers >= nb_nodes (3 managers pour 3 noeuds)");
@@ -133,18 +153,22 @@ void test_error_nb_managers_invalid() {
     config.net.system.nb_managers = 3;
     ret = validate_config(&config);
     LOG_INFO("Code de retour : %d (Attendu : %d)", ret, -DSM_ERROR_INIT_ARG_NB_MANAGERS);
-    assert(ret == -DSM_ERROR_INIT_ARG_NB_MANAGERS &&
-           "Devrait échouer si nb_managers >= nb_nodes");
+
+    if (!(ret == -DSM_ERROR_INIT_ARG_NB_MANAGERS)) {
+        LOG_ERROR("Devrait échouer si nb_managers >= nb_nodes");
+        return -1;
+    }
 
     LOG_SUCCESS(
         "Validation rejetée correctement pour configurations de managers invalides");
+    return 0;
 }
 
 // ---------------------------------------------------------
 // 2. Tests des auto-corrections silencieuses
 // ---------------------------------------------------------
 
-void test_auto_correction_thread_pool() {
+int test_auto_correction_thread_pool() {
     dsm_config config;
     setup_valid_config(&config);
 
@@ -156,25 +180,34 @@ void test_auto_correction_thread_pool() {
 
     LOG_INFO("Code de retour : %d (Attendu : 0)", ret);
     assert(ret == 0 && "La configuration devrait être valide");
+    if (!(ret == 0)) {
+        LOG_ERROR("La configuration devrait être valide");
+        return -1;
+    }
 
     LOG_INFO("pool_nb_threads corrigé : %lu (Attendu : %lu)",
              config.net.node.pool_nb_threads, DSM_DEFAULT_NB_THREADS);
-    assert(config.net.node.pool_nb_threads == DSM_DEFAULT_NB_THREADS &&
-           "Le pool_nb_threads devrait être corrigé avec la valeur par défaut");
+    if (!(config.net.node.pool_nb_threads == DSM_DEFAULT_NB_THREADS)) {
+        LOG_ERROR("Le pool_nb_threads devrait être corrigé avec la valeur par défaut");
+        return -1;
+    }
 
     LOG_INFO("pool_queue_size corrigé : %lu (Attendu : %d)",
              config.net.node.pool_queue_size, DSM_DEFAULT_QUEUE_SIZE);
-    assert(config.net.node.pool_queue_size == DSM_DEFAULT_QUEUE_SIZE &&
-           "Le pool_queue_size devrait être corrigé avec la valeur par défaut");
 
+    if (!(config.net.node.pool_queue_size == DSM_DEFAULT_QUEUE_SIZE)) {
+        LOG_ERROR("Le pool_queue_size devrait être corrigé avec la valeur par défaut");
+        return -1;
+    }
     LOG_SUCCESS("Auto-correction du thread pool effectuée avec succès");
+    return 0;
 }
 
 // ---------------------------------------------------------
 // 3. Tests des dsm_init
 // ---------------------------------------------------------
 
-void test_dsm_init_manager_success() {
+int test_dsm_init_manager_success() {
     dsm_config config;
     setup_default_config(&config, DSM_ROLE_MANAGER);
     unsigned int node_id = 0;
@@ -183,22 +216,34 @@ void test_dsm_init_manager_success() {
     dsm_node_role role = dsm_init(&config, &node_id);
 
     LOG_INFO("Rôle obtenu : %d (Attendu : %d)", role, DSM_ROLE_MANAGER);
-    assert(role == DSM_ROLE_MANAGER && "Le rôle retourné doit être MANAGER");
+    if (!(role == DSM_ROLE_MANAGER)) {
+        LOG_ERROR("Le rôle retourné doit être MANAGER");
+        return -1;
+    }
 
     LOG_INFO("Appels dsm_discover : %d (Attendu : 1)", count_discover_called);
-    assert(count_discover_called == 1 && "dsm_discover aurait dû être appelé 1 fois");
+    if (!(count_discover_called == 1)) {
+        LOG_ERROR("dsm_discover aurait dû être appelé 1 fois");
+        return -1;
+    }
 
     LOG_INFO("Appels dsm_daemon_start : %d (Attendu : 1)", count_daemon_called);
     assert(count_daemon_called == 1 && "Le daemon du manager aurait dû démarrer");
+    if (!(count_daemon_called == 1)) {
+        LOG_ERROR("Le daemon du manager aurait dû démarrer");
+        return -1;
+    }
+
     if (dsm_ctx != NULL) {
         dsm_safe_map_destroy(&dsm_ctx->nodes_reg);
         free(dsm_ctx);
         dsm_ctx = NULL;
     }
     LOG_SUCCESS("Initialisation du Manager réussie et flux respecté");
+    return 0;
 }
 
-void test_dsm_init_worker_success() {
+int test_dsm_init_worker_success() {
     dsm_config config;
     setup_default_config(&config, DSM_ROLE_WORKER);
     unsigned int node_id = 0;
@@ -207,24 +252,35 @@ void test_dsm_init_worker_success() {
     dsm_node_role role = dsm_init(&config, &node_id);
 
     LOG_INFO("Rôle obtenu : %d (Attendu : %d)", role, DSM_ROLE_WORKER);
-    assert(role == DSM_ROLE_WORKER && "Le rôle retourné doit être WORKER");
+    if (!(role == DSM_ROLE_WORKER)) {
+        LOG_ERROR("Le rôle retourné doit être WORKER");
+        return -1;
+    }
 
     LOG_INFO("Appels dsm_discover : %d (Attendu : 1)", count_discover_called);
-    assert(count_discover_called == 1 && "dsm_discover aurait dû être appelé");
+    if (!(count_discover_called == 1)) {
+        LOG_ERROR("dsm_discover aurait dû être appelé");
+        return -1;
+    }
 
     LOG_INFO("Appels dsm_daemon_start direct : %d (Attendu : 0)", count_daemon_called);
     assert(count_daemon_called == 0 &&
            "Le daemon n'est pas appelé directement par le main thread pour le worker");
-
+    if (!(count_daemon_called == 0)) {
+        LOG_ERROR(
+            "Le daemon n'est pas appelé directement par le main thread pour le worker");
+        return -1;
+    }
     if (dsm_ctx != NULL) {
         dsm_safe_map_destroy(&dsm_ctx->nodes_reg);
         free(dsm_ctx);
         dsm_ctx = NULL;
     }
     LOG_SUCCESS("Initialisation du Worker réussie et flux respecté");
+    return 0;
 }
 
-void test_dsm_init_discover_fails() {
+int test_dsm_init_discover_fails() {
     dsm_config config;
     setup_default_config(&config, DSM_ROLE_MANAGER);
     unsigned int node_id = 0;
@@ -235,15 +291,26 @@ void test_dsm_init_discover_fails() {
     dsm_node_role role = dsm_init(&config, &node_id);
 
     LOG_INFO("Rôle obtenu en cas d'erreur : %d (Attendu : -1)", (int)role);
-    assert((int)role == -1 && "L'init doit échouer si discover échoue");
-    assert(count_discover_called == 1);
-    assert(count_daemon_called == 0 &&
-           "Le daemon ne doit pas démarrer si discover échoue");
-    assert(dsm_ctx == NULL &&
-           "Le contexte dsm_ctx aurait dû être nettoyé (dsm_ctx_cleanup)");
+    if (!((int)role == -1)) {
+        LOG_ERROR("L'init doit échouer si discover échoue");
+        return -1;
+    }
 
+    if (!(count_discover_called == 1)) {
+        return -1;
+    }
+
+    if (!(count_daemon_called == 0)) {
+        LOG_ERROR("Le daemon ne doit pas démarrer si discover échoue");
+        return -1;
+    }
+    if (!(dsm_ctx == NULL)) {
+        LOG_ERROR("Le contexte dsm_ctx aurait dû être nettoyé (dsm_ctx_cleanup)");
+        return -1;
+    }
     LOG_SUCCESS(
         "Échec de dsm_discover géré proprement, sans fuite et sans démarrage de démon");
+    return 0;
 }
 
 // ---------------------------------------------------------
@@ -253,31 +320,60 @@ void test_dsm_init_discover_fails() {
 int main() {
     LOG_TITLE("Démarrage des tests de configuration DSM");
 
-    LOG_SECTION("Nombre de pages à zero");
-    test_error_nb_pages_zero();
+    LOG_SECTION("--- TEST 1 : Nombre de pages à zero ---");
+    if (!test_error_nb_pages_zero())
+        test_ok++;
+    else
+        goto cleanup;
 
-    LOG_SECTION("Taille de la page n'est pas une puissance de 2");
-    test_error_page_size_not_power_of_two();
+    LOG_SECTION("--- TEST 2 : Taille de la page n'est pas une puissance de 2 ---");
+    if (!test_error_page_size_not_power_of_two())
+        test_ok++;
+    else
+        goto cleanup;
 
-    LOG_SECTION("Pas assez de noeuds");
-    test_error_nb_nodes_too_low();
+    LOG_SECTION("--- TEST 3 : Pas assez de noeuds ---");
+    if (!test_error_nb_nodes_too_low())
+        test_ok++;
+    else
+        goto cleanup;
 
-    LOG_SECTION("Nombre de managers invalide");
-    test_error_nb_managers_invalid();
+    LOG_SECTION("--- TEST 4 : Nombre de managers invalide ----");
+    if (!test_error_nb_managers_invalid())
+        test_ok++;
+    else
+        goto cleanup;
 
-    LOG_SECTION("Nombre de thread dans le pool à 0");
-    test_auto_correction_thread_pool();
+    LOG_SECTION("--- TEST 5 : Nombre de thread dans le pool à 0 ----");
+    if (!test_auto_correction_thread_pool())
+        test_ok++;
+    else
+        goto cleanup;
 
-    LOG_SECTION("Manager dsm_init succés");
-    test_dsm_init_manager_success();
+    LOG_SECTION("--- TEST 6 : Manager dsm_init succés ---");
+    if (!test_dsm_init_manager_success())
+        test_ok++;
+    else
+        goto cleanup;
 
-    LOG_SECTION("Worker dsm_init succés");
-    test_dsm_init_worker_success();
+    LOG_SECTION("--- TEST 7 : Worker dsm_init succés ---");
+    if (!test_dsm_init_worker_success())
+        test_ok++;
+    else
+        goto cleanup;
 
-    LOG_SECTION("Discover fail");
-    test_dsm_init_discover_fails();
+    LOG_SECTION("--- TEST 8 : Discover fail ---");
+    if (!test_dsm_init_discover_fails())
+        test_ok++;
+    else
+        goto cleanup;
 
     LOG_TITLE("Fin de la suite de tests");
     LOG_SUCCESS("Tous les tests sont passés avec succès !");
-    return 0;
+    LOG_TITLE("Tests réussis : %d/%d", test_ok, count_test)
+    return EXIT_SUCCESS;
+cleanup:
+    LOG_TITLE("Fin de la suite de tests");
+    LOG_TITLE("Tests réussis : %d/%d", test_ok, count_test)
+    return EXIT_FAILURE;
 }

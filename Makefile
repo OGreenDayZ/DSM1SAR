@@ -18,6 +18,7 @@ TEST_SRCS_NO_MAIN   = $(filter-out $(TEST_SRCS_WITH_MAIN) $(TEST_DIR)/main.c, $(
 TEST_OBJS_WITH_MAIN = $(addprefix $(BUILD_DIR)/, $(notdir $(TEST_SRCS_WITH_MAIN:.c=.o)))
 TEST_UTIL_OBJS      = $(addprefix $(BUILD_DIR)/, $(notdir $(TEST_SRCS_NO_MAIN:.c=.o)))
 
+
 TEST_BINS = $(TEST_OBJS_WITH_MAIN:.o=)
 
 SRC_DIRS = $(shell find $(SRC_DIR) $(LIB_DIR) $(TEST_DIR) -type d 2>/dev/null)
@@ -72,10 +73,10 @@ clean:
 
 re: clean all
 
-test-config: $(SRC_WITHOUT_MAIN) $(BUILD_DIR)/test_config.o | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -o $(TEST_USER_ERROR_BIN) $^ -Wl,--wrap=dsm_discover -Wl,--wrap=dsm_daemon_start -Wl,--wrap=pthread_create -Wl,--wrap=pthread_detach $(LIBS)
+test-config: $(filter-out $(BUILD_DIR)/main.o, $(SRC_OBJS)) $(BUILD_DIR)/test_config.o | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -o $(BUILD_DIR)/test_config $^ -Wl,--wrap=dsm_discover -Wl,--wrap=dsm_daemon_start -Wl,--wrap=pthread_create -Wl,--wrap=pthread_detach $(LIBS)
 	@clear
-	./$(TEST_USER_ERROR_BIN)
+	./$(BUILD_DIR)/test_config
 
 test-simple:
 	$(MAKE) tests
@@ -100,5 +101,11 @@ test-profiling:
 	clear 
 	@echo "=== Exécution de test-profiling ==="
 	@./$(BUILD_DIR)/test_profiling
+
+test-false-sharing:
+	$(MAKE) tests
+	clear 
+	@echo "=== Exécution de test-false-sharing ==="
+	@./$(BUILD_DIR)/test_false_sharing
 
 .PHONY: all clean re debug info warning error max_debug max_info max_warning max_error tests
