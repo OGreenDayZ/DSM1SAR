@@ -31,4 +31,5 @@ int test_init(dsm_config *config, unsigned int *node_id);
 
 void *test_coherence_read_write(void *arg, unsigned int node_id);
 void *test_concurrent_write_with_locks(void *arg);
+void config_choice(int argc, char const *argv[], dsm_config *config, int *node_id_vir); 
 #endif // TEST_FUNCTIONS_H

@@ -267,7 +267,9 @@ void *dsm_alloc(void) {
     map_reqs_entry = malloc(sizeof(dsm_requests_reg_entry));
     map_locks_entry = malloc(sizeof(dsm_locks_reg_entry));
 
-    uintptr_t debut = (uintptr_t)dsm_wkr_ctx->range_start + dsm_wkr_ctx->page_counter;
+    uintptr_t debut = (uintptr_t)dsm_wkr_ctx->range_start +
+                      (dsm_wkr_ctx->page_counter * EFFECTIVE_PAGESIZE);
+    ;
     LOG_INFO("Allocation de %lu octets à l'adresse %p", EFFECTIVE_PAGESIZE,
              (void *)debut);
 

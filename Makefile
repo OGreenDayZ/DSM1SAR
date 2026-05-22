@@ -5,9 +5,10 @@ TEST_DIR = test
 INCLUDE_DIR = include
 BUILD_DIR = build
 
+ARGS =
+
 CC = gcc
 CFLAGS = -Wall -fsanitize=address,leak -fno-omit-frame-pointer -g -I$(INCLUDE_DIR) -I$(SRC_DIR) -I$(TEST_DIR)/util
-
 SRC_SRCS = $(shell find $(SRC_DIR) $(LIB_DIR) -name "*.c" 2>/dev/null)
 SRC_OBJS = $(addprefix $(BUILD_DIR)/, $(notdir $(SRC_SRCS:.c=.o)))
 
@@ -107,5 +108,25 @@ test-false-sharing:
 	clear 
 	@echo "=== Exécution de test-false-sharing ==="
 	@./$(BUILD_DIR)/test_false_sharing
+
+test-matrix: 
+	$(MAKE) tests
+	clear 
+	@echo "=== Exécution de test-matrix ==="
+	@./$(BUILD_DIR)/test_matrix $(ARGS)
+
+help:
+	@echo "Utilisation du projet DSM :"
+	@echo "  make run ARGS='...'"
+	@echo ""
+	@echo "Arguments disponibles pour l'exécutable :"
+	@echo "  -W<id> : Lance le processus en tant que Worker avec l'ID spécifié (ex: -W1)"
+	@echo "  -M     : Lance le processus en tant que Manager"
+	@echo "  -n <N> : Définit le nombre total de nœuds"
+	@echo "  -m <M> : Définit le nombre de managers"
+	@echo ""
+	@echo "Exemples :"
+	@echo "  make run ARGS='-W1 -n 4 -m 1'"
+	@echo "  make run ARGS='-M -n 4 -m 1'"
 
 .PHONY: all clean re debug info warning error max_debug max_info max_warning max_error tests

@@ -375,18 +375,22 @@ int mgr_try_unlock(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
     *out_page_content = find_page_content(req->page_id);
     if (!*out_page_content) {
         LOG_ERROR("Page %u non trouvée pour UNLOCK_REQ ?!", req->page_id);
+        pthread_mutex_unlock(&(*out_page_content)->head_req_ctx.lock);
         return -1;
     }
 
     if ((*out_page_content)->mode != PAGE_LOCKED) {
         LOG_ERROR("UNLOCK_REQ sur une page qui n'est pas LOCKED ?! (page_id=%u, mode=%d)",
                   req->page_id, (*out_page_content)->mode);
+        pthread_mutex_unlock(&(*out_page_content)->head_req_ctx.lock);
         return -1;
     }
+    pthread_mutex_lock(&(*out_page_content)->head_req_ctx.lock);
 
     dsm_dq_node *front = dsm_dq_front(&(*out_page_content)->pending_reqs);
     if (!front) {
         LOG_ERROR("UNLOCK_REQ sur une page sans requête ?!", req->page_id);
+        pthread_mutex_unlock(&(*out_page_content)->head_req_ctx.lock);
         return -1;
     }
 
@@ -396,6 +400,7 @@ int mgr_try_unlock(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
             "UNLOCK_REQ sur une page dont la requête en tête n'est pas un LOCK_REQ ?!"
             "(page_id=%u, front_req_mode=%d)",
             req->page_id, front_req_content->info.mode);
+        pthread_mutex_unlock(&(*out_page_content)->head_req_ctx.lock);
         return -1;
     }
 
@@ -403,6 +408,7 @@ int mgr_try_unlock(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
         LOG_ERROR("UNLOCK_REQ par un worker qui n'est pas celui de la requête en tête ?!"
                   "(page_id=%u, front_req_worker_id=%u, unlock_req_worker_id=%u)",
                   req->page_id, front_req_content->header.id, msg_ctx->header.id);
+        pthread_mutex_unlock(&(*out_page_content)->head_req_ctx.lock);
         return -1;
     }
 
@@ -410,7 +416,7 @@ int mgr_try_unlock(dsm_msg_tcpss_thread_ctx *msg_ctx, dsm_msg_wkr_req *req,
     *is_drainer = !dsm_dq_pop(&(*out_page_content)->pending_reqs);
     free(front_req_content);
     reset_head_req_ctx((*out_page_content));
-
+    pthread_mutex_unlock(&(*out_page_content)->head_req_ctx.lock);
     LOG_INFO("Requête UNLOCK_REQ traitée avec succès (page_id=%u)", req->page_id);
 
     return 0;
@@ -626,10 +632,12 @@ static int treat_wkr_data_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     bool is_drainer = false;
     dsm_page_content *page_content;
     if (inject_data(msg_ctx, data_ack, &page_content, &is_drainer) < 0) {
+        // free(data_ack);
         return -1;
     }
 
     if (is_drainer && mgr_drain_reqs(page_content) < 0) {
+        // free(data_ack);
         return -1;
     }
 

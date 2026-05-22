@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "dsm.h"
@@ -255,4 +256,31 @@ int test_init(dsm_config *config, unsigned int *node_id) {
     }
     LOG_SUCCESS("Page allouée à l'adresse : %p", (void *)shared_data);
     return EXIT_SUCCESS;
+}
+
+void config_choice(int argc, char const *argv[], dsm_config *config, int *node_id_vir) {
+    config->net.system.nb_nodes = -1;
+    config->net.system.nb_managers = -1;
+    *node_id_vir = -1;
+
+    for (int i = 1; i < argc; i++) {
+        if (strncmp(argv[i], "-W", 2) == 0) {
+            // Extrait l'ID du Worker (ex: -W1 -> 1)
+            *node_id_vir = atoi(argv[i] + 2);
+            config->net.node.role = DSM_ROLE_WORKER;
+        } else if (strncmp(argv[i], "-M", 2) == 0) {
+            config->net.node.role = DSM_ROLE_MANAGER;
+        } else if (strcmp(argv[i], "-n") == 0 && i + 1 < argc) {
+            // Option explicite pour le nombre de noeuds : -n 8
+            config->net.system.nb_nodes = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-m") == 0 && i + 1 < argc) {
+            // Option explicite pour le nombre de managers : -m 2
+            config->net.system.nb_managers = atoi(argv[++i]);
+        }
+    }
+
+    if (config->net.system.nb_nodes == -1)
+        config->net.system.nb_nodes = 6;
+    if (config->net.system.nb_managers == -1)
+        config->net.system.nb_managers = 1;
 }

@@ -10,7 +10,6 @@
  */
 #define DSM_DEFAULT_PAGESIZE sysconf(_SC_PAGESIZE)
 #define DSM_DEFAULT_NB_PAGES 16384
-
 /**
  * @brief Type de requête émise par un worker vers le manager.
  *
