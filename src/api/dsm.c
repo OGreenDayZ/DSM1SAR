@@ -222,7 +222,9 @@ dsm_node_role dsm_init(const dsm_config *config, unsigned int *out_node_id) {
     }
 
     dsm_node_role role = dsm_ctx->config.net.node.role;
-
+    if (out_node_id) {
+        *out_node_id = dsm_ctx->node_id;
+    }
     print_nodes_reg();
 
     if (dsm_ctx->config.net.node.role == DSM_ROLE_WORKER) {
@@ -234,9 +236,8 @@ dsm_node_role dsm_init(const dsm_config *config, unsigned int *out_node_id) {
             dsm_ctx_cleanup();
             return -1;
         }
-    }
 
-    else if (role == DSM_ROLE_MANAGER) {
+    } else if (role == DSM_ROLE_MANAGER) {
         LOG_INFO("Manager : Démarrage du daemon de DSM...");
 
         if (dsm_daemon_start() < 0) {
@@ -248,10 +249,6 @@ dsm_node_role dsm_init(const dsm_config *config, unsigned int *out_node_id) {
     } else { // role == DSM_ROLE_UNDEFINED
         dsm_ctx_cleanup();
         return -1;
-    }
-
-    if (out_node_id) {
-        *out_node_id = dsm_ctx->node_id;
     }
 
     return role;
