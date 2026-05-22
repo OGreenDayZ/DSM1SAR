@@ -12,7 +12,7 @@ int test_mesure_surcout(int *shared_data, unsigned int node_id) {
     struct timespec start, end;
     long time_local, time_dsm;
 
-    // 1. Accès RAM Classique
+    // Accés RAM
     int *local_data = malloc(sizeof(int));
     clock_gettime(CLOCK_MONOTONIC, &start);
     local_data[0] = 42;
@@ -22,16 +22,15 @@ int test_mesure_surcout(int *shared_data, unsigned int node_id) {
 
     dsm_barrier();
 
-    // 2. Accès DSM (Forcer un page fault)
+    // Accès DSM
     if (node_id == 1) {
-        shared_data[0] = 42; // Nœud 0 prend l'ownership
+        shared_data[0] = 42;
     }
     dsm_barrier();
 
-    // Le nœud 1 lit, ce qui va déclencher l'UFFD, demander la page au Manager, etc.
     clock_gettime(CLOCK_MONOTONIC, &start);
     volatile int val = shared_data[0];
-    LOG_INFO("Valeur lu sous locks (shared_data[0]) : %d", val);
+    LOG_INFO("Valeur lue (shared_data[0]) : %d", val);
     clock_gettime(CLOCK_MONOTONIC, &end);
 
     time_dsm = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
@@ -171,7 +170,7 @@ int test_surcout_write_locks(int *shared_data, int node_id) {
     LOG_INFO("Temps total AVEC lock : %ld ns", time_with_lock);
     double ratio_dsm_lock =
         (double)time_with_lock / (time_local_pure > 0 ? time_local_pure : 1);
-    LOG_INFO("Surcoût Verrous Réseau vs RAM  : x%.2f", ratio_dsm_lock);
+    LOG_INFO("Surcoût DSM Lock vs RAM  : x%.2f", ratio_dsm_lock);
     long avg_lock_cost = time_with_lock / ITERATIONS;
     LOG_INFO("Coût moyen réseau d'une écriture avec [Lock + Unlock] : %ld ns (%.2f ms)",
              avg_lock_cost, avg_lock_cost / 1e6);
@@ -190,7 +189,7 @@ int main(int argc, char const *argv[]) {
         config.net.system.nb_nodes = atoi(argv[1]);
         config.net.system.nb_managers = atoi(argv[2]);
     } else {
-        config.net.system.nb_nodes = 6;
+        config.net.system.nb_nodes = 4;
         config.net.system.nb_managers = 1;
     }
 

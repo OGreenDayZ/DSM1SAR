@@ -632,12 +632,12 @@ static int treat_wkr_data_ack(dsm_msg_tcpss_thread_ctx *msg_ctx) {
     bool is_drainer = false;
     dsm_page_content *page_content;
     if (inject_data(msg_ctx, data_ack, &page_content, &is_drainer) < 0) {
-        // free(data_ack);
+        free(data_ack);
         return -1;
     }
 
     if (is_drainer && mgr_drain_reqs(page_content) < 0) {
-        // free(data_ack);
+        free(data_ack);
         return -1;
     }
 

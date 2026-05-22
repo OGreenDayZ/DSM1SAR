@@ -547,7 +547,7 @@ int main(int argc, char const *argv[]) {
     /**
      * Tailles de matrices à tester
      */
-    int matrix_sizes[] = {8, 16, 32, 64, 128, 256, 512};
+    int matrix_sizes[] = {8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096};
     int num_sizes = sizeof(matrix_sizes) / sizeof(matrix_sizes[0]);
 
     /**
