@@ -2,11 +2,9 @@
 
 #include <asm-generic/errno-base.h>
 #include <asm-generic/int-ll64.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <linux/userfaultfd.h>
 #include <stdint.h>
-#include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>

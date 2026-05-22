@@ -56,6 +56,8 @@ typedef enum {
     DSM_ERROR_INIT_ARG_PAGE_SIZE,
     DSM_ERROR_INIT_ARG_NB_NODES,
     DSM_ERROR_INIT_ARG_NB_MANAGERS,
+    DSM_ERROR_INIT_ARG_POOL_NB_THREADS,
+    DSM_ERROR_INIT_ARG_POOL_QUEUE_SIZE,
     DSM_ERROR_ALREADY_INIT,
     DSM_ERROR_CONTEXT_ALLOC,
 
@@ -115,6 +117,6 @@ bool dsm_get_inva_count(unsigned long *out);
 bool dsm_reset_uffd_count();
 bool dsm_reset_data_count();
 bool dsm_reset_inva_count();
-int validate_config(dsm_config *config);
+int validate_config(const dsm_config *config);
 
 #endif // DSM1SAR_H

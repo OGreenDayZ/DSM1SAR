@@ -56,12 +56,15 @@ void dsm_get_default_config(dsm_config *config) {
     config->net.node.udp_port = 0;        // #accept
     config->net.node.pool_nb_threads = 0; // #accept
     config->net.node.pool_queue_size = 0; // #accept
+
+    config->net.node.pool_nb_threads = DSM_DEFAULT_NB_THREADS;
+    config->net.node.pool_queue_size = DSM_DEFAULT_QUEUE_SIZE;
 }
 
 static int is_power_of_two(size_t x) {
     return (x != 0) && ((x & (x - 1)) == 0);
 }
-int validate_config(dsm_config *config) {
+int validate_config(const dsm_config *config) {
     if (config->pager.nb_pages == 0) {
         LOG_ERROR("nb_pages doit être > 0");
         return -DSM_ERROR_INIT_ARG_NB_PAGES;
@@ -83,12 +86,14 @@ int validate_config(dsm_config *config) {
         return -DSM_ERROR_INIT_ARG_NB_MANAGERS;
     }
 
-    if (config->net.node.pool_nb_threads == 0) {
-        config->net.node.pool_nb_threads = DSM_DEFAULT_NB_THREADS;
+    if (config->net.node.pool_nb_threads <= 0) {
+        LOG_ERROR("pool_nb_threads doit être > 0");
+        return -DSM_ERROR_INIT_ARG_POOL_NB_THREADS;
     }
 
-    if (config->net.node.pool_queue_size == 0) {
-        config->net.node.pool_queue_size = DSM_DEFAULT_QUEUE_SIZE;
+    if (config->net.node.pool_queue_size <= 0) {
+        LOG_ERROR("pool_queue_size doit être > 0");
+        return -DSM_ERROR_INIT_ARG_POOL_QUEUE_SIZE;
     }
 
     return 0;
