@@ -168,38 +168,48 @@ int test_error_nb_managers_invalid() {
 // 2. Tests des auto-corrections silencieuses
 // ---------------------------------------------------------
 
-int test_auto_correction_thread_pool() {
+int test_error_thread_pool_invalid() {
     dsm_config config;
     setup_valid_config(&config);
 
-    LOG_INFO("Forçage des valeurs du thread pool à 0 pour tester l'auto-correction...");
+    // Cas 1 : pool_nb_threads à 0
+    LOG_WARN("Injection d'erreur : pool_nb_threads = 0");
+    config.net.node.pool_nb_threads = 0;
+    int ret = validate_config(&config);
+    LOG_INFO("Code de retour : %d (Attendu : %d)", ret,
+             -DSM_ERROR_INIT_ARG_POOL_NB_THREADS);
+    if (!(ret == -DSM_ERROR_INIT_ARG_POOL_NB_THREADS)) {
+        LOG_ERROR("Devrait échouer si pool_nb_threads == 0");
+        return -1;
+    }
+
+    // Cas 2 : pool_queue_size à 0
+    setup_valid_config(&config);
+    LOG_WARN("Injection d'erreur : pool_queue_size = 0");
+    config.net.node.pool_queue_size = 0;
+    ret = validate_config(&config);
+    LOG_INFO("Code de retour : %d (Attendu : %d)", ret,
+             -DSM_ERROR_INIT_ARG_POOL_QUEUE_SIZE);
+    if (!(ret == -DSM_ERROR_INIT_ARG_POOL_QUEUE_SIZE)) {
+        LOG_ERROR("Devrait échouer si pool_queue_size == 0");
+        return -1;
+    }
+
+    // Cas 3 : Les deux à 0
+    setup_valid_config(&config);
+    LOG_WARN("Injection d'erreur : pool_nb_threads = 0 et pool_queue_size = 0");
     config.net.node.pool_nb_threads = 0;
     config.net.node.pool_queue_size = 0;
-
-    int ret = validate_config(&config);
-
-    LOG_INFO("Code de retour : %d (Attendu : 0)", ret);
-    assert(ret == 0 && "La configuration devrait être valide");
-    if (!(ret == 0)) {
-        LOG_ERROR("La configuration devrait être valide");
+    ret = validate_config(&config);
+    LOG_INFO("Code de retour : %d (Attendu : %d)", ret,
+             -DSM_ERROR_INIT_ARG_POOL_NB_THREADS);
+    if (!(ret == -DSM_ERROR_INIT_ARG_POOL_NB_THREADS)) {
+        LOG_ERROR("Devrait échouer si les deux paramètres sont à 0");
         return -1;
     }
 
-    LOG_INFO("pool_nb_threads corrigé : %lu (Attendu : %lu)",
-             config.net.node.pool_nb_threads, DSM_DEFAULT_NB_THREADS);
-    if (!(config.net.node.pool_nb_threads == DSM_DEFAULT_NB_THREADS)) {
-        LOG_ERROR("Le pool_nb_threads devrait être corrigé avec la valeur par défaut");
-        return -1;
-    }
-
-    LOG_INFO("pool_queue_size corrigé : %lu (Attendu : %d)",
-             config.net.node.pool_queue_size, DSM_DEFAULT_QUEUE_SIZE);
-
-    if (!(config.net.node.pool_queue_size == DSM_DEFAULT_QUEUE_SIZE)) {
-        LOG_ERROR("Le pool_queue_size devrait être corrigé avec la valeur par défaut");
-        return -1;
-    }
-    LOG_SUCCESS("Auto-correction du thread pool effectuée avec succès");
+    LOG_SUCCESS(
+        "Validation rejetée correctement pour configurations de thread pool invalides");
     return 0;
 }
 
@@ -345,7 +355,7 @@ int main() {
         goto cleanup;
 
     LOG_SECTION("--- TEST 5 : Nombre de thread dans le pool à 0 ----");
-    if (!test_auto_correction_thread_pool())
+    if (!test_error_thread_pool_invalid())
         test_ok++;
     else
         goto cleanup;
