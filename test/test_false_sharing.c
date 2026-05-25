@@ -285,7 +285,7 @@ int main(int argc, char const *argv[]) {
         config.net.system.nb_nodes = atoi(argv[1]);
         config.net.system.nb_managers = atoi(argv[2]);
     } else {
-        config.net.system.nb_nodes = 4;
+        config.net.system.nb_nodes = 6;
         config.net.system.nb_managers = 1;
     }
 

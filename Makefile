@@ -80,37 +80,31 @@ test-config: $(filter-out $(BUILD_DIR)/main.o, $(SRC_OBJS)) $(BUILD_DIR)/test_co
 	./$(BUILD_DIR)/test_config
 
 test-simple:
-	$(MAKE) tests
 	clear
 	@echo "=== Exécution de test-simple ==="
 	@./$(BUILD_DIR)/test_simple
 
 test-sync:
-	$(MAKE) tests
 	clear
 	@echo "=== Exécution de test-sync ==="
 	@./$(BUILD_DIR)/test_sync
 
 test-integrity: 
-	$(MAKE) tests
 	clear 
 	@echo "=== Exécution de test-integrity ==="
 	@./$(BUILD_DIR)/test_integrity
 
 test-profiling: 
-	$(MAKE) tests
 	clear 
 	@echo "=== Exécution de test-profiling ==="
 	@./$(BUILD_DIR)/test_profiling
 
 test-false-sharing:
-	$(MAKE) tests
 	clear 
 	@echo "=== Exécution de test-false-sharing ==="
 	@./$(BUILD_DIR)/test_false_sharing
 
 test-matrix: 
-	$(MAKE) tests
 	clear 
 	@echo "=== Exécution de test-matrix ==="
 	@./$(BUILD_DIR)/test_matrix $(ARGS)
