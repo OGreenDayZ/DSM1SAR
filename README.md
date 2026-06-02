@@ -26,11 +26,11 @@ Elle couvre en détail les aspects suivants :
 Vvoir .PHONY dans le Makefile, `debug info warning error max_debug max_info max_warning max_error`
 
 ### Tests 
-`test-config` : démontre la capacité du système à agir comme un filtre strict.
-`test-simple` : garantit que les opérations basiques de lecture et d'écriture déclenchent correctement les interceptions mémoire. Elle valide également que le rapatriement des pages et le maintien de la cohérence via l'acquisition des verrous distribués s'effectuent sans corruption de données.
-`test-sync` : assure que notre démon réseau isole et gère parfaitement les accès
+- `test-config` : démontre la capacité du système à agir comme un filtre strict.
+- `test-simple` : garantit que les opérations basiques de lecture et d'écriture déclenchent correctement les interceptions mémoire. Elle valide également que le rapatriement des pages et le maintien de la cohérence via l'acquisition des verrous distribués s'effectuent sans corruption de données.
+- `test-sync` : assure que notre démon réseau isole et gère parfaitement les accès
 concurrents locaux.
-`test-integrity` : valide formellement l'absence de concurrence et de mises à jour perdues sur le réseau.
-`test-profiling` : mesure précisément la latence introduite par l'interception des accès mémoire (via userfaultfd) et la résolution réseau associée.
-`test-false-sharing` : validant la gestion du false sharing par la DSM.
-`test-matrix` : évalue les performances de la DSM dans un scénario de calcul intensif, en mesurant les temps d'exécution et la bande passante effective lors de l'accès à des matrices partagées.
+- `test-integrity` : valide formellement l'absence de concurrence et de mises à jour perdues sur le réseau.
+- `test-profiling` : mesure précisément la latence introduite par l'interception des accès mémoire (via userfaultfd) et la résolution réseau associée.
+- `test-false-sharing` : validant la gestion du false sharing par la DSM.
+- `test-matrix` : évalue les performances de la DSM dans un scénario de calcul intensif, en mesurant les temps d'exécution et la bande passante effective lors de l'accès à des matrices partagées.
