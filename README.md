@@ -25,7 +25,7 @@ Elle couvre en détail les aspects suivants :
 - On peut choisir d'afficher les logs de la DSM : 
 Vvoir .PHONY dans le Makefile, `debug info warning error max_debug max_info max_warning max_error`
 
-### Tests 
+## Tests 
 - `test-config` : démontre la capacité du système à agir comme un filtre strict.
 - `test-simple` : garantit que les opérations basiques de lecture et d'écriture déclenchent correctement les interceptions mémoire. Elle valide également que le rapatriement des pages et le maintien de la cohérence via l'acquisition des verrous distribués s'effectuent sans corruption de données.
 - `test-sync` : assure que notre démon réseau isole et gère parfaitement les accès
