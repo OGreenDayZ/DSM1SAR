@@ -1,0 +1,1 @@
+Le dossier `Documentation/generated/` contiendra les .pdf ou autre format généré depuis `Documentation/src`
